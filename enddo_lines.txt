@@ -1,0 +1,73 @@
+294:        END DO
+298:        END DO
+302:        END DO
+306:        END DO
+312:        END DO
+321:        END DO
+330:        END DO
+339:        END DO
+349:        END DO
+359:            END DO
+374:                        END DO !J = 1, LN (COMPUTE THE INCREMENTAL DEFORMATION GRADIENT)
+375:                    END DO
+376:                END DO
+390:                    END DO
+391:                END DO
+422:                            END DO 
+423:                        END DO
+424:                    END DO
+435:                    END DO
+451:                    END DO
+452:                END DO
+467:                END DO
+483:                    END DO
+485:                END DO !J = 1, 6 (COMPUTE THE SMOOTHED GRADIENTS)
+496:                END DO
+550:!                    END DO
+562:!                    END DO
+574:                END DO
+587:                END DO
+601:                            END DO !J = 1, LN (COMPUTE THE INCREMENTAL DEFORMATION GRADIENT)
+602:                        END DO
+603:                    END DO
+619:                        END DO
+621:                    END DO
+644:                            ! END DO !J = 1, LN (COMPUTE THE INCREMENTAL DEFORMATION GRADIENT)
+645:                        ! END DO
+646:                    ! END DO
+657:						! END DO
+658:						! END DO
+677:                    END DO
+678:                END DO
+679:            END DO !J = 1, LN (COMPUTE THE INCREMENTAL DEFORMATION GRADIENT)
+695:					! END DO
+696:				! END DO
+704:			! END DO
+740:!                        END DO
+741:!                    END DO
+742:!                END DO !J = 1, LN (COMPUTE THE INCREMENTAL DEFORMATION GRADIENT)
+783:            END DO
+811:        END DO
+828:        END DO
+841:            END DO
+846:            END DO
+891:!            END DO
+958:                END DO
+959:            END DO
+969:            END DO
+993:        END DO
+1105:            END DO
+1114:            END DO
+1116:        END DO !ASSEMBLE FINT FOR STANDARD NODAL INTEGRATION PART
+1181:!                END DO
+1186:!            END DO
+1218:                END DO
+1220:            END DO
+1225:    END DO !INTEGRATION POINT (NODE) LOOP
+1226:    !$OMP END DO
+1244:        END DO
+1245:    END DO
+1246:    !$OMP END DO
+1262:            END DO
+1307:            END DO !J=1,GNUMP (NEIGHBOR NODES)
+1324:        END DO

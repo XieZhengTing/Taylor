@@ -1,0 +1,3 @@
+主要循環分析完成acc data copyin(input_data) copyout(output_data)
+主要循環分析完成acc update device(updated_data)
+主要循環分析完成acc update host(result_data)

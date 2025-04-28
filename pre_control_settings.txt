@@ -1,0 +1,3 @@
+684:        ITYPE_INT = 0
+686:        CALL LOG_APPEND('ITYPE_INT = 0 (DNI)')
+689:        WRITE(*,*) 'ITYPE_INT = 0 (DNI)'

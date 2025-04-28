@@ -1,0 +1,14 @@
+./FINT.F90:    USE omp_lib
+./FINT.F90-    !
+./FINT.F90-    IMPLICIT NONE
+./FINT.F90-    !
+--
+./FINT_PD.F90:      USE omp_lib
+./FINT_PD.F90-      !
+./FINT_PD.F90-	  IMPLICIT NONE
+./FINT_PD.F90-	  !
+--
+./PRE_OMP.F90:    use omp_lib
+./PRE_OMP.F90-    implicit none
+./PRE_OMP.F90-    
+./PRE_OMP.F90-    INTEGER:: I
