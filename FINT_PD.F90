@@ -271,9 +271,9 @@
 		END DO
 		
         
-                    CALL UDFM_SHAPE_TENSOR(LCOO, RK_DEGREE, RK_PSIZE, RK_CONT, RK_IMPL,GCOO, GVOL, GWIN, GNUMP, LSTACK, LN, GMAXN, GEBC_NODES,SELF_EBC, &
-                       QL, QL_COEF,QL_LEN, &
-                       SHP, INVK) 
+!                    CALL UDFM_SHAPE_TENSOR(LCOO, RK_DEGREE, RK_PSIZE, RK_CONT, RK_IMPL,GCOO, GVOL, GWIN, GNUMP, LSTACK, LN, GMAXN, GEBC_NODES,SELF_EBC, &
+!                       QL, QL_COEF,QL_LEN, &
+!                       SHP, INVK) 
 					   
             
 		        DO J = 1, LN
@@ -393,9 +393,9 @@
 		        !
                 X_0(1:3) = GCOO(1:3,I)
                 X_t(1:3) = GCOO_CUURENT(1:3,I)
-                CALL DFM_SHAPE_TENSOR(X_0,X_t, RK_DEGREE, RK_PSIZE, RK_CONT, GCOO, GVOL, GWIN, GNUMP, LSTACK, LN, GMAXN, LCOO_CUURENT, &
-                   SHP, FMAT)
-
+!                CALL DFM_SHAPE_TENSOR(X_0,X_t, RK_DEGREE, RK_PSIZE, RK_CONT, GCOO, GVOL, GWIN, GNUMP, LSTACK, LN, GMAXN, LCOO_CUURENT, &
+!                   SHP, FMAT)
+!
                    !F = S*invK
                    FMAT = MATMUL(FMAT, INVK)
                    
@@ -414,9 +414,9 @@
             !
             IF (LLAGRANGIAN) THEN
 
-                    CALL UDFM_SHAPE_TENSOR(LCOO, RK_DEGREE, RK_PSIZE, RK_CONT, RK_IMPL,GCOO, GVOL, GWIN, GNUMP, LSTACK, LN, GMAXN, GEBC_NODES,SELF_EBC, &
-                       QL, QL_COEF,QL_LEN, &
-                       SHP, INVK) 
+!                    CALL UDFM_SHAPE_TENSOR(LCOO, RK_DEGREE, RK_PSIZE, RK_CONT, RK_IMPL,GCOO, GVOL, GWIN, GNUMP, LSTACK, LN, GMAXN, GEBC_NODES,SELF_EBC, &
+!                       QL, QL_COEF,QL_LEN, &
+!                       SHP, INVK) 
                 
                        
                        
@@ -459,9 +459,9 @@
                 X_0(1:3) = GCOO(1:3,I)
                 X_t(1:3) = GDINC((I-1)*3+1 : (I-1)*3+3)
                 
-                CALL DFM_SHAPE_TENSOR(X_0,X_t, RK_DEGREE, RK_PSIZE, RK_CONT, GCOO, GVOL, GWIN, GNUMP, LSTACK, LN, GMAXN, LDINC, &
-                   SHP, LMAT)
-                   
+!                CALL DFM_SHAPE_TENSOR(X_0,X_t, RK_DEGREE, RK_PSIZE, RK_CONT, GCOO, GVOL, GWIN, GNUMP, LSTACK, LN, GMAXN, LDINC, &
+!                   SHP, LMAT)
+!                   
                LMAT = MATMUL(LMAT,INVK)    
          
                 !du/dx = du/dX*invF

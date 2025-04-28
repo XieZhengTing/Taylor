@@ -794,12 +794,12 @@
         LSTRESS_PREDICTOR = LSTRESS + MATMUL(ELAS_MAT,STRAIN)
         !
 
-        IF (LMAT_TYPE.EQ.5) THEN
-            CALL HYPERELASTIC(LPROP,LSTRESS,FMAT,LSTRAIN)
-        ELSE
+!        IF (LMAT_TYPE.EQ.5) THEN
+!            CALL HYPERELASTIC(LPROP,LSTRESS,FMAT,LSTRAIN)
+!        ELSE
             CALL CONSTITUTION(LSTRESS_PREDICTOR,LMAT_TYPE, LSTRAIN, STRAIN, LPROP, DLT, FMAT, & !IN
         LSTATE, LSTRESS, L_H_STRESS, L_S_STRESS) !IN/OUT, OUT
-        END IF
+!        END IF
         !
         ! ********** SAVE STATE AND FEILD VARIABLES **********
         !
@@ -930,23 +930,23 @@
             CMAT(2,3) = LAMDA
 
 			NSNI_LIMITER = 1.0d0
-            IF ((LMAT_TYPE.EQ.3).OR.(LMAT_TYPE.EQ.6)) THEN
-			!IF (LMAT_TYPE.EQ.3) THEN
-            !
-            ! DAMAGE MECHANICS INVOLVED, DO NOT USE A "TOTAL" STRESS
-            ! STABILIZATION, INSTEAD, USE THE INCREMENTAL STRESS
-            ! FOR STABILIZATION.
-			!
-			! COMMENT #2: STILL INEFFECTIVE, ZERO-OUT THE STRESS
-			! IN CASE THE DAMAGE GETS TOO BIG, THIS SEEMS TO WORK
-			! OK, BUT THE VALUE IS SENSATIVE A BIT.
-            !
-			IF (LSTATE(4).GT.(0.5d0)) THEN
-                NSNI_LIMITER = 0.0d0
-			ELSE
-                NSNI_LIMITER = (1.0d0-2.0d0*LSTATE(4))
-			END IF
-            END IF
+!            IF ((LMAT_TYPE.EQ.3).OR.(LMAT_TYPE.EQ.6)) THEN
+!			!IF (LMAT_TYPE.EQ.3) THEN
+!            !
+!            ! DAMAGE MECHANICS INVOLVED, DO NOT USE A "TOTAL" STRESS
+!            ! STABILIZATION, INSTEAD, USE THE INCREMENTAL STRESS
+!            ! FOR STABILIZATION.
+!			!
+!			! COMMENT #2: STILL INEFFECTIVE, ZERO-OUT THE STRESS
+!			! IN CASE THE DAMAGE GETS TOO BIG, THIS SEEMS TO WORK
+!			! OK, BUT THE VALUE IS SENSATIVE A BIT.
+!            !
+!			IF (LSTATE(4).GT.(0.5d0)) THEN
+!                NSNI_LIMITER = 0.0d0
+!			ELSE
+!                NSNI_LIMITER = (1.0d0-2.0d0*LSTATE(4))
+!			END IF
+!            END IF
             !
             ! UPDATE THE PSUEDO-STRESSES FOR NSNI
             !
@@ -1036,59 +1036,59 @@ XNORM(1:3) =0.D0
            F_INT_C_TEMP=0.D0
 
            F_INT_C=0.D0
-IF (KCONTACT) THEN
-
-    LOCAL_BODY_ID_2 = MODEL_BODY_ID(JJ)
-    MU1 = LPROP(20) !BODY 1
-    MU_NEW = GPROP(20,JJ) !BODY 2
-        IF(LOCAL_BODY_ID .NE. LOCAL_BODY_ID_2) THEN
-    IF (IKCONTACT.EQ.1) THEN
-        ! NODAL ORIENTATION TO GET THE XNORM
-
-            XNORM(1:3) =0.D0
-            X2(1) = GCOO_CUURENT(1,JJ)
-            X2(2) = GCOO_CUURENT(2,JJ)
-            X2(3) = GCOO_CUURENT(3,JJ)
-            XNORM(1:3) = LCOO_T(1:3) - X2(1:3)
-            TEMP = DSQRT(XNORM(1)**2.0D0 + XNORM(2)**2.0D0 + XNORM(3)**2.0D0)
-        IF(TEMP > 1e-10) THEN
-            XNORM(1:3) = XNORM(1:3) / TEMP
-        ENDIF
-
-
-    ELSEIF (IKCONTACT.EQ.2) THEN
-        ! LEVEL SET TO GET THE XNORM
-
-        TEMP = DSQRT(XNORM(1)**2.0D0 + XNORM(2)**2.0D0 + XNORM(3)**2.0D0)
-        IF(TEMP > 1e-10) THEN
-            XNORM(1:3) = XNORM(1:3) / TEMP
-        ENDIF
-
-    ENDIF
-
-    F_N = FINT3(1) * XNORM(1) + FINT3(2) * XNORM(2) + FINT3(3) * XNORM(3)
-
-    F_T1 = FINT3(1) - XNORM(1) * F_N ! Ft_x
-    F_T2 = FINT3(2) - XNORM(2) * F_N ! Ft_y
-    F_T3 = FINT3(3) - XNORM(3) * F_N ! Ft_z
-
-    ! Length of Ft
-    F_T = DSQRT(F_T1**2.0D0 + F_T2**2.0D0 + F_T3**2.0D0)
-    MU_NEW2 = (MU1+ MU_NEW) * 0.5D0
-
-    IF(F_T .GT. 1E-13) THEN
-        ! minimum of Ft and mu * Fn (Ft <= mu * Fn)
-        F_TT= MIN(DABS(F_N*MU_NEW2),F_T)
-        ! Fn + Ft_modified
-        F_INT_C_TEMP(1) = F_N * XNORM(1) +  F_TT * F_T1 / F_T
-        F_INT_C_TEMP(2) = F_N * XNORM(2) +  F_TT * F_T2 / F_T
-        F_INT_C_TEMP(3) = F_N * XNORM(3) +  F_TT * F_T3 / F_T
-
-    ENDIF
-    !F_INT_C = F_INT_C + F_INT_C_TEMP
-FINT3 = FINT3 + F_INT_C_TEMP
-       ENDIF
-ENDIF
+!IF (KCONTACT) THEN
+!
+!    LOCAL_BODY_ID_2 = MODEL_BODY_ID(JJ)
+!    MU1 = LPROP(20) !BODY 1
+!    MU_NEW = GPROP(20,JJ) !BODY 2
+!        IF(LOCAL_BODY_ID .NE. LOCAL_BODY_ID_2) THEN
+!    IF (IKCONTACT.EQ.1) THEN
+!        ! NODAL ORIENTATION TO GET THE XNORM
+!
+!            XNORM(1:3) =0.D0
+!            X2(1) = GCOO_CUURENT(1,JJ)
+!            X2(2) = GCOO_CUURENT(2,JJ)
+!            X2(3) = GCOO_CUURENT(3,JJ)
+!            XNORM(1:3) = LCOO_T(1:3) - X2(1:3)
+!            TEMP = DSQRT(XNORM(1)**2.0D0 + XNORM(2)**2.0D0 + XNORM(3)**2.0D0)
+!        IF(TEMP > 1e-10) THEN
+!            XNORM(1:3) = XNORM(1:3) / TEMP
+!        ENDIF
+!
+!
+!    ELSEIF (IKCONTACT.EQ.2) THEN
+!        ! LEVEL SET TO GET THE XNORM
+!
+!        TEMP = DSQRT(XNORM(1)**2.0D0 + XNORM(2)**2.0D0 + XNORM(3)**2.0D0)
+!        IF(TEMP > 1e-10) THEN
+!            XNORM(1:3) = XNORM(1:3) / TEMP
+!        ENDIF
+!
+!    ENDIF
+!
+!    F_N = FINT3(1) * XNORM(1) + FINT3(2) * XNORM(2) + FINT3(3) * XNORM(3)
+!
+!    F_T1 = FINT3(1) - XNORM(1) * F_N ! Ft_x
+!    F_T2 = FINT3(2) - XNORM(2) * F_N ! Ft_y
+!    F_T3 = FINT3(3) - XNORM(3) * F_N ! Ft_z
+!
+!    ! Length of Ft
+!    F_T = DSQRT(F_T1**2.0D0 + F_T2**2.0D0 + F_T3**2.0D0)
+!    MU_NEW2 = (MU1+ MU_NEW) * 0.5D0
+!
+!    IF(F_T .GT. 1E-13) THEN
+!        ! minimum of Ft and mu * Fn (Ft <= mu * Fn)
+!        F_TT= MIN(DABS(F_N*MU_NEW2),F_T)
+!        ! Fn + Ft_modified
+!        F_INT_C_TEMP(1) = F_N * XNORM(1) +  F_TT * F_T1 / F_T
+!        F_INT_C_TEMP(2) = F_N * XNORM(2) +  F_TT * F_T2 / F_T
+!        F_INT_C_TEMP(3) = F_N * XNORM(3) +  F_TT * F_T3 / F_T
+!
+!    ENDIF
+!    !F_INT_C = F_INT_C + F_INT_C_TEMP
+!FINT3 = FINT3 + F_INT_C_TEMP
+!       ENDIF
+!ENDIF
 
             
 
@@ -1247,87 +1247,87 @@ ENDIF
     !$OMP END PARALLEL
 
 
-    IF (AUTO_TS) THEN
-        !DO TIME STEP CALCS
-
-        DO I = 1, GNUMP
-
-            LN = GN(I)
-            LSTART = GSTART(I)
-            !
-            ! GET THE NEIGHBOR LIST
-            !
-            DO J = 1, LN
-                LSTACK(J) = GSTACK(LSTART+J-1)
-            END DO
-
-            !FIND THE CHARACTERISTIC DISTANCES
-
-            XI=GCOO_CUURENT(1,I)
-            YI=GCOO_CUURENT(2,I)
-            ZI=GCOO_CUURENT(3,I)
-                    !
-					! USE THE UNDEFORMED CONFIGURATION
-					!
-            XI=GCOO(1,I)
-            YI=GCOO(2,I)
-            ZI=GCOO(3,I)
-
-            FIRST = .TRUE.
-
-			IF (LINIT) THEN
-			
-            DO J = 1, LN
-
-                JJ = LSTACK(J)
-
-                IF (JJ.NE.I) THEN
-
-                    XJ=GCOO_CUURENT(1,JJ)
-                    YJ=GCOO_CUURENT(2,JJ)
-                    ZJ=GCOO_CUURENT(3,JJ)
-                    !
-					! USE THE UNDEFORMED CONFIGURATION
-					!
-                    XJ=GCOO(1,JJ)
-                    YJ=GCOO(2,JJ)
-                    ZJ=GCOO(3,JJ)
-
-                    DIST = DSQRT((XJ-XI)**2 + (YJ-YI)**2 + (ZJ-ZI)**2)
-
-                    IF (FIRST) THEN
-                        GCHAR_DIST(I) = DIST
-                        FIRST = .FALSE.
-                    ELSE
-                        GCHAR_DIST(I) = MIN(GCHAR_DIST(I),DIST)
-                    END IF
-
-                END IF
-
-            END DO !J=1,GNUMP (NEIGHBOR NODES)
-			
-			END IF
-
-            DLT_TEMP = GCHAR_DIST(I) / GMAX_WVEL(I) !* 0.2d0
-
-
-            IF (I.EQ.1) THEN
-                DLT_FINT = DLT_TEMP
-            ELSE
-
-                IF (DLT_TEMP.LT.DLT_FINT) THEN
-                    DLT_FINT = DLT_TEMP
-                END IF
-                DLT_FINT = MIN(DLT_TEMP,DLT_FINT)
-            END IF
-
-        END DO
-
-        DLT_FINT = DLT_FINT*DLT_FAC
-
-
-
-    END IF !CALC TIME STEP
+!    IF (AUTO_TS) THEN
+!        !DO TIME STEP CALCS
+!
+!        DO I = 1, GNUMP
+!
+!            LN = GN(I)
+!            LSTART = GSTART(I)
+!            !
+!            ! GET THE NEIGHBOR LIST
+!            !
+!            DO J = 1, LN
+!                LSTACK(J) = GSTACK(LSTART+J-1)
+!            END DO
+!
+!            !FIND THE CHARACTERISTIC DISTANCES
+!
+!            XI=GCOO_CUURENT(1,I)
+!            YI=GCOO_CUURENT(2,I)
+!            ZI=GCOO_CUURENT(3,I)
+!                    !
+!					! USE THE UNDEFORMED CONFIGURATION
+!					!
+!            XI=GCOO(1,I)
+!            YI=GCOO(2,I)
+!            ZI=GCOO(3,I)
+!
+!            FIRST = .TRUE.
+!
+!			IF (LINIT) THEN
+!			
+!            DO J = 1, LN
+!
+!                JJ = LSTACK(J)
+!
+!                IF (JJ.NE.I) THEN
+!
+!                    XJ=GCOO_CUURENT(1,JJ)
+!                    YJ=GCOO_CUURENT(2,JJ)
+!                    ZJ=GCOO_CUURENT(3,JJ)
+!                    !
+!					! USE THE UNDEFORMED CONFIGURATION
+!					!
+!                    XJ=GCOO(1,JJ)
+!                    YJ=GCOO(2,JJ)
+!                    ZJ=GCOO(3,JJ)
+!
+!                    DIST = DSQRT((XJ-XI)**2 + (YJ-YI)**2 + (ZJ-ZI)**2)
+!
+!                    IF (FIRST) THEN
+!                        GCHAR_DIST(I) = DIST
+!                        FIRST = .FALSE.
+!                    ELSE
+!                        GCHAR_DIST(I) = MIN(GCHAR_DIST(I),DIST)
+!                    END IF
+!
+!                END IF
+!
+!            END DO !J=1,GNUMP (NEIGHBOR NODES)
+!			
+!			END IF
+!
+!            DLT_TEMP = GCHAR_DIST(I) / GMAX_WVEL(I) !* 0.2d0
+!
+!
+!            IF (I.EQ.1) THEN
+!                DLT_FINT = DLT_TEMP
+!            ELSE
+!
+!                IF (DLT_TEMP.LT.DLT_FINT) THEN
+!                    DLT_FINT = DLT_TEMP
+!                END IF
+!                DLT_FINT = MIN(DLT_TEMP,DLT_FINT)
+!            END IF
+!
+!        END DO
+!
+!        DLT_FINT = DLT_FINT*DLT_FAC
+!
+!
+!
+!    END IF !CALC TIME STEP
 
 
     DEALLOCATE(FINT_TEMP)
