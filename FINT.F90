@@ -402,7 +402,6 @@
                 ! DIRECT NODAL INTEGRATION
                 !
                 IF (LLAGRANGIAN) THEN
-
                     CALL RK1(LCOO, RK_DEGREE, RK_PSIZE, RK_CONT, RK_IMPL,GCOO, GWIN, GNUMP, LSTACK, LN, GMAXN, GEBC_NODES,SELF_EBC, &
                         QL, QL_COEF,QL_LEN, &
                         SHP, SHPD,SHSUP)
@@ -562,7 +561,6 @@
 !                    END DO
 !
 !                END IF
-
                 CALL RK1(LCOO_T, RK_DEGREE, RK_PSIZE, RK_CONT, RK_IMPL,GCOO_CUURENT, GWIN, GNUMP, LSTACK, LN, GMAXN, GEBC_NODES,SELF_EBC, &
                     QL, QL_COEF,QL_LEN, &
                     SHP, SHPD_TRASH, SHSUP)

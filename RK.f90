@@ -78,8 +78,8 @@
     ! ALSO, WE NEED TO OUTPUT PHYSICAL DISPLACEMENTS!
     ! #TODO
     !
-    !IF (SELF_EBC) THEN
-    IF (.FALSE.) THEN
+    IF (SELF_EBC) THEN
+
         DO I=1,LN
 
             II = LSTACK(I)
@@ -96,7 +96,7 @@
             END IF
 
         END DO
-        !RETURN
+        RETURN
     END IF
     !
     ! GET THE MOMENT MATRIX
@@ -233,9 +233,9 @@
                 M_FULL(J,K) = M_FULL(J,K) + H_FULL(J,1)*H_FULL(K,1)*PHI(I)
 !                IF (IMPL.EQ.1) THEN
 !                ELSE
-!                    M_X(J,K) = M_X(J,K) + H_X(J,1)*H_FULL(K,1)*PHI(I)+H_FULL(J,1)*H_X(K,1)*PHI(I)+H_FULL(J,1)*H_FULL(K,1)*PHI_X(I)
-!                    M_Y(J,K) = M_Y(J,K) + H_Y(J,1)*H_FULL(K,1)*PHI(I)+H_FULL(J,1)*H_Y(K,1)*PHI(I)+H_FULL(J,1)*H_FULL(K,1)*PHI_Y(I)
-!                    M_Z(J,K) = M_Z(J,K) + H_Z(J,1)*H_FULL(K,1)*PHI(I)+H_FULL(J,1)*H_Z(K,1)*PHI(I)+H_FULL(J,1)*H_FULL(K,1)*PHI_Z(I)
+                    M_X(J,K) = M_X(J,K) + H_X(J,1)*H_FULL(K,1)*PHI(I)+H_FULL(J,1)*H_X(K,1)*PHI(I)+H_FULL(J,1)*H_FULL(K,1)*PHI_X(I)
+                    M_Y(J,K) = M_Y(J,K) + H_Y(J,1)*H_FULL(K,1)*PHI(I)+H_FULL(J,1)*H_Y(K,1)*PHI(I)+H_FULL(J,1)*H_FULL(K,1)*PHI_Y(I)
+                    M_Z(J,K) = M_Z(J,K) + H_Z(J,1)*H_FULL(K,1)*PHI(I)+H_FULL(J,1)*H_Z(K,1)*PHI(I)+H_FULL(J,1)*H_FULL(K,1)*PHI_Z(I)
 !                END IF
 !
             END DO
@@ -313,23 +313,23 @@
 
     B = MATMUL(H0,MINV)
 
-!    IF (IMPL.EQ.1) THEN
-!
-!        H0X = 0.0d0
-!        H0X(1,2) = -1.0d0
-!
-!        H0Y = 0.0d0
-!        H0Y(1,3) = -1.0d0
-!
-!        H0Z = 0.0d0
-!        H0Z(1,4) = -1.0d0
-!
-!        BX = MATMUL(H0X,MINV)
-!        BY = MATMUL(H0Y,MINV)
-!        BZ = MATMUL(H0Z,MINV)
-!
-!    ELSE
-!        MINV_X1 = MATMUL(-MINV,M_X)
+    IF (IMPL.EQ.1) THEN
+
+        H0X = 0.0d0
+        H0X(1,2) = -1.0d0
+
+        H0Y = 0.0d0
+        H0Y(1,3) = -1.0d0
+
+        H0Z = 0.0d0
+        H0Z(1,4) = -1.0d0
+
+        BX = MATMUL(H0X,MINV)
+        BY = MATMUL(H0Y,MINV)
+        BZ = MATMUL(H0Z,MINV)
+
+    ELSE
+        MINV_X1 = MATMUL(-MINV,M_X)
         MINV_Y1 = MATMUL(-MINV,M_Y)
         MINV_Z1 = MATMUL(-MINV,M_Z)
 
@@ -341,7 +341,7 @@
         BY = MATMUL(H0,MINV_Y)
         BZ = MATMUL(H0,MINV_Z)
 
-!    ENDIF
+    ENDIF
 
     DO I=1, LN
 
@@ -381,17 +381,17 @@
 
         SHP(I) = C(1,1)*PHI(I)
 
-!        IF (IMPL.EQ.1) THEN
+        IF (IMPL.EQ.1) THEN
 !
-!            CX = MATMUL(BX,H_FULL)
-!            CY = MATMUL(BY,H_FULL)
-!            CZ = MATMUL(BZ,H_FULL)
+            CX = MATMUL(BX,H_FULL)
+            CY = MATMUL(BY,H_FULL)
+            CZ = MATMUL(BZ,H_FULL)
 !
-!            SHPD(1,I) = CX(1,1)*PHI(I)
+            SHPD(1,I) = CX(1,1)*PHI(I)
             SHPD(2,I) = CY(1,1)*PHI(I)
             SHPD(3,I) = CZ(1,1)*PHI(I)
 
-!        ELSE
+        ELSE
             CX = MATMUL(BX,H_FULL)+MATMUL(B,H_X)
             CY = MATMUL(BY,H_FULL)+MATMUL(B,H_Y)
             CZ = MATMUL(BZ,H_FULL)+MATMUL(B,H_Z)
@@ -399,7 +399,7 @@
             SHPD(1,I) = CX(1,1)*PHI(I)+C(1,1)*PHI_X(I)
             SHPD(2,I) = CY(1,1)*PHI(I)+C(1,1)*PHI_Y(I)
             SHPD(3,I) = CZ(1,1)*PHI(I)+C(1,1)*PHI_Z(I)
-!        ENDIF
+        ENDIF
 
 
     END DO
@@ -567,7 +567,7 @@
 !        H_Z(7,1) = XMXI_OA
 !        H_Z(8,1) = 0.0d0
 !        H_Z(9,1) = YMYI_OA
-        H_Z(10,1) = 2*ZMZI_OA
+!        H_Z(10,1) = 2*ZMZI_OA
 
     END IF
 

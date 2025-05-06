@@ -67,7 +67,7 @@
             ELSE   
                 PHI= 0.0D0
                 PHI_X= 0.0D0
-            ISZERO=.TRUE.
+                ISZERO=.TRUE.
             END IF
 
 !        ELSEIF (ISPLINE.EQ.2) THEN
@@ -128,8 +128,8 @@
         END IF
 
 !        ELSE
-            CALL EXIT_PROGRAM('KERNEL TYPE NOT SUPPORTED',1)
-            PAUSE
+!            CALL EXIT_PROGRAM('KERNEL TYPE NOT SUPPORTED',1)
+!            PAUSE
 !        END IF
         
         !PHI = PHI / AJ
