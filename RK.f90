@@ -12,12 +12,28 @@
     !*     Copyright 2016 Michael C Hillman                 *
     !*                                                      *
     !********************************************************
+MODULE RK_PROCEDURES_MOD
+    USE INVERSE_MOD
+    USE FINT_FUNCTIONS
+    IMPLICIT NONE
+    PRIVATE
+    PUBLIC :: RK1
+    PUBLIC :: FILL_H
+    PUBLIC :: DERIV_H
+    PUBLIC :: UDFM_SHAPE_TENSOR
+    PUBLIC :: DFM_SHAPE_TENSOR
+    PUBLIC :: MLS_KERNEL0
+    PUBLIC :: HUGHES_WINGET 
+    PUBLIC :: D_HUGHES_WINGET 
+    PUBLIC :: ROTATE_TENSOR 
 
+CONTAINS
     SUBROUTINE RK1(X, DEG, MSIZE, CONT, IMPL, GCOO, GWIN, GNUMP, LSTACK, LN, LNMAX, EBCS,SELF_EBC, &
         QL, QL_COEF,QL_LEN,  &
         SHP, SHPD,SHSUP)
-
-    IMPLICIT NONE 
+    !$ACC ROUTINE SEQ
+!    USE INVERSE_MOD
+!    IMPLICIT NONE 
 
     DOUBLE PRECISION, INTENT(IN):: X(3)
     INTEGER, INTENT(IN):: DEG, MSIZE, CONT, GNUMP, LN, LNMAX
@@ -72,14 +88,14 @@
     DOUBLE PRECISION:: XM_QLX,YM_QLY,ZM_QLZ
     DOUBLE PRECISION:: DENOM
     LOGICAL:: ISZERO
-
+    INTEGER :: ierr_inv, ierr_mls
     !
     ! WE NEED TO BE CAREFUL NOT TO EVALUATE THE SINGULAR KERNAL AT THE NODE
     ! ALSO, WE NEED TO OUTPUT PHYSICAL DISPLACEMENTS!
     ! #TODO
     !
-    IF (SELF_EBC) THEN
-
+    !IF (SELF_EBC) THEN
+    IF (.FALSE.) THEN
         DO I=1,LN
 
             II = LSTACK(I)
@@ -96,7 +112,7 @@
             END IF
 
         END DO
-        RETURN
+        !RETURN
     END IF
     !
     ! GET THE MOMENT MATRIX
@@ -137,11 +153,18 @@
  !           DENOM = (GWIN(1,II)*GWIN(2,II)*GWIN(3,II))**(1.D0/3.D0)
             DIA(I) = SQRT(XMXI_OA(I)**2+YMYI_OA(I)**2+ZMZI_OA(I)**2)
 
-            CALL MLS_KERNEL0(DIA(I),GWIN(1,II),CONT,PHI(I),PHIX_X,ISZERO)
+            CALL MLS_KERNEL0(DIA(I),GWIN(1,II),CONT,PHI(I),PHIX_X,ISZERO, ierr_mls)
+            IF (ierr_mls /= 0) THEN
+                ! Handle MLS_KERNEL0 error, e.g., set outputs to error values and skip/return
+                SHP(I) = HUGE(0.0D0)
+                SHPD(:,I) = HUGE(0.0D0)
+                CYCLE ! or RETURN if appropriate
+            END IF
+
             
-!            IF (IMPL.EQ.1) THEN
-!
-!            ELSE
+            IF (IMPL.EQ.1) THEN
+
+            ELSE
                 IF  (DIA(I).LE.(1.0d-13)) THEN
                     
                    ! IF  (YMYI_OA(I).LE.(1.0d-13)) THEN
@@ -165,12 +188,25 @@
             
             PHI_SUM = PHI_SUM + PHI(I)
 
-!        ELSE
+        ELSE
 
 
-            CALL MLS_KERNEL0(ABS(XMXI_OA(I)),GWIN(1,II),CONT,PHIX,PHIX_X,ISZERO)
-            CALL MLS_KERNEL0(ABS(YMYI_OA(I)),GWIN(2,II),CONT,PHIY,PHIY_Y,ISZERO)
-            CALL MLS_KERNEL0(ABS(ZMZI_OA(I)),GWIN(3,II),CONT,PHIZ,PHIZ_Z,ISZERO)
+            CALL MLS_KERNEL0(ABS(XMXI_OA(I)),GWIN(1,II),CONT,PHIX,PHIX_X,ISZERO, ierr_mls)
+            IF (ierr_mls /= 0) THEN
+                ! Handle MLS_KERNEL0 error
+                SHP(I) = HUGE(0.0D0); SHPD(:,I) = HUGE(0.0D0); CYCLE;
+            END IF
+            CALL MLS_KERNEL0(ABS(YMYI_OA(I)),GWIN(2,II),CONT,PHIY,PHIY_Y,ISZERO, ierr_mls)
+            IF (ierr_mls /= 0) THEN
+                ! Handle MLS_KERNEL0 error
+                SHP(I) = HUGE(0.0D0); SHPD(:,I) = HUGE(0.0D0); CYCLE;
+            END IF
+            CALL MLS_KERNEL0(ABS(ZMZI_OA(I)),GWIN(3,II),CONT,PHIZ,PHIZ_Z,ISZERO, ierr_mls)
+            IF (ierr_mls /= 0) THEN
+                ! Handle MLS_KERNEL0 error
+                SHP(I) = HUGE(0.0D0); SHPD(:,I) = HUGE(0.0D0); CYCLE;
+            END IF
+
 
             !DENOM = GWIN(1,II)*GWIN(2,II)*GWIN(3,II)
             PHI(I) = PHIX*PHIY*PHIZ !/DENOM
@@ -178,7 +214,7 @@
 
 
 !            IF (IMPL.EQ.1) THEN
-!
+
 !            ELSE
                 IF (XMXI_OA(I).EQ.0) THEN
                     DRDX = 0.0d0
@@ -227,7 +263,7 @@
 
             END IF
             PHI_SUM = PHI_SUM + PHI(I)
-!        ENDIF
+        ENDIF
         DO J = 1, MSIZE
             DO K = 1, MSIZE
                 M_FULL(J,K) = M_FULL(J,K) + H_FULL(J,1)*H_FULL(K,1)*PHI(I)
@@ -237,7 +273,7 @@
                     M_Y(J,K) = M_Y(J,K) + H_Y(J,1)*H_FULL(K,1)*PHI(I)+H_FULL(J,1)*H_Y(K,1)*PHI(I)+H_FULL(J,1)*H_FULL(K,1)*PHI_Y(I)
                     M_Z(J,K) = M_Z(J,K) + H_Z(J,1)*H_FULL(K,1)*PHI(I)+H_FULL(J,1)*H_Z(K,1)*PHI(I)+H_FULL(J,1)*H_FULL(K,1)*PHI_Z(I)
 !                END IF
-!
+
             END DO
         END DO
         
@@ -248,64 +284,72 @@
     !
     ! GET M* IF QUASI-LINEAR
     !
-!    IF (QL) THEN
-!
-!        J=1
-!        QL_PTS(1,J) = X(1) + QL_LEN
-!        QL_PTS(2,J) = X(2)
-!        QL_PTS(3,J) = X(3)
-!
-!        J=2
-!        QL_PTS(1,J) = X(1) - QL_LEN
-!        QL_PTS(2,J) = X(2)
-!        QL_PTS(3,J) = X(3)
-!
-!        J=3
-!        QL_PTS(1,J) = X(1)
-!        QL_PTS(2,J) = X(2) + QL_LEN
-!        QL_PTS(3,J) = X(3)
-!
-!        J=4
-!        QL_PTS(1,J) = X(1)
-!        QL_PTS(2,J) = X(2) - QL_LEN
-!        QL_PTS(3,J) = X(3)
-!
-!        J=5
-!        QL_PTS(1,J) = X(1)
-!        QL_PTS(2,J) = X(2)
-!        QL_PTS(3,J) = X(3) + QL_LEN
-!
-!        J=6
-!        QL_PTS(1,J) = X(1)
-!        QL_PTS(2,J) = X(2)
-!        QL_PTS(3,J) = X(3) - QL_LEN
-!
-!        DO M = 1, 6
-!
-!            QLX(:) = QL_PTS(:,M)
-!
-!            XM_QLX = X(1)  - QLX(1)
-!            YM_QLY = X(2)  - QLX(2)
-!            ZM_QLZ = X(3)  - QLX(3)
-!
-!            CALL FILL_H(XM_QLX,YM_QLY,ZM_QLZ,MSIZE,DEG,H_FULL)
-!
-!            DO J = 1, MSIZE
-!                DO K = 1, MSIZE
-!                    M_FULL_STAR(J,K) = M_FULL_STAR(J,K) + H_FULL(J,1)*H_FULL(K,1)
-!                END DO
-!            END DO
-!
-!        END DO
-!
-!        M_FULL = M_FULL + M_FULL_STAR * PHI_SUM * QL_COEF
-!
-!    END IF
+    IF (QL) THEN
+
+        J=1
+        QL_PTS(1,J) = X(1) + QL_LEN
+        QL_PTS(2,J) = X(2)
+        QL_PTS(3,J) = X(3)
+
+        J=2
+        QL_PTS(1,J) = X(1) - QL_LEN
+        QL_PTS(2,J) = X(2)
+        QL_PTS(3,J) = X(3)
+
+        J=3
+        QL_PTS(1,J) = X(1)
+        QL_PTS(2,J) = X(2) + QL_LEN
+        QL_PTS(3,J) = X(3)
+
+        J=4
+        QL_PTS(1,J) = X(1)
+        QL_PTS(2,J) = X(2) - QL_LEN
+        QL_PTS(3,J) = X(3)
+
+        J=5
+        QL_PTS(1,J) = X(1)
+        QL_PTS(2,J) = X(2)
+        QL_PTS(3,J) = X(3) + QL_LEN
+
+        J=6
+        QL_PTS(1,J) = X(1)
+        QL_PTS(2,J) = X(2)
+        QL_PTS(3,J) = X(3) - QL_LEN
+
+        DO M = 1, 6
+
+            QLX(:) = QL_PTS(:,M)
+
+            XM_QLX = X(1)  - QLX(1)
+            YM_QLY = X(2)  - QLX(2)
+            ZM_QLZ = X(3)  - QLX(3)
+
+            CALL FILL_H(XM_QLX,YM_QLY,ZM_QLZ,MSIZE,DEG,H_FULL)
+
+            DO J = 1, MSIZE
+                DO K = 1, MSIZE
+                    M_FULL_STAR(J,K) = M_FULL_STAR(J,K) + H_FULL(J,1)*H_FULL(K,1)
+                END DO
+            END DO
+
+        END DO
+
+        M_FULL = M_FULL + M_FULL_STAR * PHI_SUM * QL_COEF
+
+    END IF
 
     IF (MSIZE.EQ.4) THEN
-    CALL M44INV(M_FULL, MINV)
+    CALL M44INV(M_FULL, MINV, ierr_inv) ! 假設 ierr_inv 已宣告為 INTEGER
+    IF (ierr_inv /= 0) THEN 
+        ! 處理錯誤 (e.g., MINV = HUGE(0.0D0); SHP = HUGE(0.0D0); SHPD = HUGE(0.0D0); RETURN)
+        SHP = HUGE(0.0D0); SHPD = HUGE(0.0D0); RETURN;
+    END IF
     ELSE
-    CALL INVERSE(M_FULL, MSIZE, MINV)
+    CALL INVERSE(M_FULL, MSIZE, MINV, ierr_inv) ! 假設 ierr_inv 已宣告為 INTEGER
+    IF (ierr_inv /= 0) THEN 
+        ! 處理錯誤 (e.g., MINV = HUGE(0.0D0); SHP = HUGE(0.0D0); SHPD = HUGE(0.0D0); RETURN)
+        SHP = HUGE(0.0D0); SHPD = HUGE(0.0D0); RETURN;
+    END IF
     END IF
     
     H0 = 0.0d0
@@ -313,22 +357,22 @@
 
     B = MATMUL(H0,MINV)
 
-    IF (IMPL.EQ.1) THEN
+!    IF (IMPL.EQ.1) THEN
 
-        H0X = 0.0d0
-        H0X(1,2) = -1.0d0
+!        H0X = 0.0d0
+!        H0X(1,2) = -1.0d0
 
-        H0Y = 0.0d0
-        H0Y(1,3) = -1.0d0
+!        H0Y = 0.0d0
+!        H0Y(1,3) = -1.0d0
 
-        H0Z = 0.0d0
-        H0Z(1,4) = -1.0d0
+!        H0Z = 0.0d0
+!        H0Z(1,4) = -1.0d0
 
-        BX = MATMUL(H0X,MINV)
-        BY = MATMUL(H0Y,MINV)
-        BZ = MATMUL(H0Z,MINV)
+!        BX = MATMUL(H0X,MINV)
+!        BY = MATMUL(H0Y,MINV)
+!        BZ = MATMUL(H0Z,MINV)
 
-    ELSE
+!    ELSE
         MINV_X1 = MATMUL(-MINV,M_X)
         MINV_Y1 = MATMUL(-MINV,M_Y)
         MINV_Z1 = MATMUL(-MINV,M_Z)
@@ -341,7 +385,7 @@
         BY = MATMUL(H0,MINV_Y)
         BZ = MATMUL(H0,MINV_Z)
 
-    ENDIF
+!    ENDIF
 
     DO I=1, LN
 
@@ -354,44 +398,44 @@
 
         CALL FILL_H(XMXI_OA(I),YMYI_OA(I),ZMZI_OA(I),MSIZE,DEG,H_FULL)
 
-!        IF (QL) THEN
-!
-!            H_FULL_STAR = 0.0d0
-!
-!            DO M = 1, 6
-!
-!                QLX(:) = QL_PTS(:,M)
-!
-!                XM_QLX = X(1)  - QLX(1)
-!                YM_QLY = X(2)  - QLX(2)
-!                ZM_QLZ = X(3)  - QLX(3)
-!
-!                CALL FILL_H(XM_QLX,YM_QLY,ZM_QLZ,MSIZE,DEG,H_FULL_TEMP)
-!
-!                H_FULL_STAR = H_FULL_STAR + H_FULL_TEMP
-!
-!            END DO
-!
-!            H_FULL = H_FULL + H_FULL_STAR * QL_COEF
-!
-!        END IF
+        IF (QL) THEN
+
+            H_FULL_STAR = 0.0d0
+
+            DO M = 1, 6
+
+                QLX(:) = QL_PTS(:,M)
+
+                XM_QLX = X(1)  - QLX(1)
+                YM_QLY = X(2)  - QLX(2)
+                ZM_QLZ = X(3)  - QLX(3)
+
+                CALL FILL_H(XM_QLX,YM_QLY,ZM_QLZ,MSIZE,DEG,H_FULL_TEMP)
+
+                H_FULL_STAR = H_FULL_STAR + H_FULL_TEMP
+
+            END DO
+
+            H_FULL = H_FULL + H_FULL_STAR * QL_COEF
+
+        END IF
 
 
         C = MATMUL(B,H_FULL)
 
         SHP(I) = C(1,1)*PHI(I)
 
-        IF (IMPL.EQ.1) THEN
-!
-            CX = MATMUL(BX,H_FULL)
-            CY = MATMUL(BY,H_FULL)
-            CZ = MATMUL(BZ,H_FULL)
-!
-            SHPD(1,I) = CX(1,1)*PHI(I)
-            SHPD(2,I) = CY(1,1)*PHI(I)
-            SHPD(3,I) = CZ(1,1)*PHI(I)
+!        IF (IMPL.EQ.1) THEN
 
-        ELSE
+!            CX = MATMUL(BX,H_FULL)
+!            CY = MATMUL(BY,H_FULL)
+!            CZ = MATMUL(BZ,H_FULL)
+
+!            SHPD(1,I) = CX(1,1)*PHI(I)
+!            SHPD(2,I) = CY(1,1)*PHI(I)
+!            SHPD(3,I) = CZ(1,1)*PHI(I)
+
+!        ELSE
             CX = MATMUL(BX,H_FULL)+MATMUL(B,H_X)
             CY = MATMUL(BY,H_FULL)+MATMUL(B,H_Y)
             CZ = MATMUL(BZ,H_FULL)+MATMUL(B,H_Z)
@@ -399,7 +443,7 @@
             SHPD(1,I) = CX(1,1)*PHI(I)+C(1,1)*PHI_X(I)
             SHPD(2,I) = CY(1,1)*PHI(I)+C(1,1)*PHI_Y(I)
             SHPD(3,I) = CZ(1,1)*PHI(I)+C(1,1)*PHI_Z(I)
-        ENDIF
+!        ENDIF
 
 
     END DO
@@ -460,7 +504,7 @@
 
 
     SUBROUTINE FILL_H(XMXI_OA,YMYI_OA,ZMZI_OA,MSIZE,DEG,H_FULL)
-
+    !$ACC ROUTINE SEQ
     IMPLICIT NONE
 
     DOUBLE PRECISION, INTENT(IN)::XMXI_OA,YMYI_OA,ZMZI_OA
@@ -468,10 +512,10 @@
     DOUBLE PRECISION, INTENT(OUT)::H_FULL(MSIZE,1)
 
 !    IF (DEG.EQ.0) THEN
-!
+
 !        H_FULL(1,1) = 1.0d0
-!
-    IF (DEG.EQ.1) THEN
+
+    IF (DEG.EQ.1) THEN ! This is the active branch for DEG.EQ.1
 
         H_FULL(1,1) = 1.0d0
         H_FULL(2,1) = XMXI_OA
@@ -479,24 +523,24 @@
         H_FULL(4,1) = ZMZI_OA
 
 !    ELSEIF (DEG.EQ.2) THEN
-!
+
 !        H_FULL(1,1) = 1.0d0
 !        H_FULL(2,1) = XMXI_OA
 !        H_FULL(3,1) = YMYI_OA
 !        H_FULL(4,1) = ZMZI_OA
-!
+
 !        H_FULL(5,1) = XMXI_OA*XMXI_OA
 !        H_FULL(6,1) = YMYI_OA*XMXI_OA
 !        H_FULL(7,1) = ZMZI_OA*XMXI_OA
-!
+
 !        H_FULL(8,1) = YMYI_OA*YMYI_OA
 !        H_FULL(9,1) = YMYI_OA*ZMZI_OA
-!
+
 !        H_FULL(10,1) = ZMZI_OA*ZMZI_OA
-!
+
     END IF
-!
-!    RETURN
+
+    RETURN
     END SUBROUTINE
 
 
@@ -504,7 +548,7 @@
     ! Derivative H function
 
     SUBROUTINE DERIV_H(XMXI_OA,YMYI_OA,ZMZI_OA,MSIZE,DEG,H_X,H_Y,H_Z)
-
+    !$ACC ROUTINE SEQ
     IMPLICIT NONE
 
     DOUBLE PRECISION, INTENT(IN)::XMXI_OA,YMYI_OA,ZMZI_OA
@@ -512,12 +556,12 @@
     DOUBLE PRECISION, INTENT(OUT)::H_X(MSIZE,1),H_Y(MSIZE,1),H_Z(MSIZE,1)
 
 !    IF (DEG.EQ.0) THEN
-!
+
 !        H_X(1,1) = 0.0d0
 !        H_Y(1,1) = 0.0d0
 !        H_Z(1,1) = 0.0d0
-!
-    IF (DEG.EQ.1) THEN
+
+    IF (DEG.EQ.1) THEN ! This is the active branch for DEG.EQ.1
 
         H_X(1,1) = 0.0d0
         H_X(2,1) = 1.0d0
@@ -535,7 +579,7 @@
         H_Z(4,1) = 1.0d0
 
 !    ELSEIF (DEG.EQ.2) THEN
-!
+
 !        H_X(1,1) = 0.0d0
 !        H_X(2,1) = 1.0d0
 !        H_X(3,1) = 0.0d0
@@ -546,7 +590,7 @@
 !        H_X(8,1) = 0.0d0
 !        H_X(9,1) = 0.0d0
 !        H_X(10,1) = 0.0d0
-!
+
 !        H_Y(1,1) = 0.0d0
 !        H_Y(2,1) = 0.0d0
 !        H_Y(3,1) = 1.0d0
@@ -557,7 +601,7 @@
 !        H_Y(8,1) = 2*YMYI_OA
 !        H_Y(9,1) = ZMZI_OA
 !        H_Y(10,1) = 0.0d0
-!
+
 !        H_Z(1,1) = 0.0d0
 !        H_Z(2,1) = 0.0d0
 !        H_Z(3,1) = 0.0d0
@@ -576,232 +620,465 @@
 
 
 
-!    SUBROUTINE UDFM_SHAPE_TENSOR(X, DEG, MSIZE, CONT, IMPL, GCOO, GVOL, GWIN, GNUMP, LSTACK, LN, LNMAX, EBCS,SELF_EBC, &
-!        QL, QL_COEF,QL_LEN,  &
-!        SHP, INVK_MATX)
-!
-!    !
-!    ! THIS SUBROUTINE IS TO FORM THE UNDEFORMED SHAPE TENSOR FOR PERIDYNAMICS AT THE FIRST STEP
-!    !
-!
-!    IMPLICIT NONE
-!
-!    DOUBLE PRECISION, INTENT(IN):: X(3)
-!    INTEGER, INTENT(IN):: DEG, MSIZE, CONT, GNUMP, LN, LNMAX
-!    INTEGER, INTENT(IN):: LSTACK(LNMAX)
-!    LOGICAL, INTENT(IN):: EBCS(GNUMP)
-!    LOGICAL, INTENT(IN):: SELF_EBC
-!
-!    DOUBLE PRECISION, INTENT(IN):: GCOO(3,GNUMP),GWIN(3,GNUMP),GVOL(GNUMP)
-!
-!    LOGICAL, INTENT(IN):: QL
-!    DOUBLE PRECISION, INTENT(IN):: QL_COEF,QL_LEN
-!
-!    DOUBLE PRECISION, INTENT(OUT):: SHP(LNMAX)
-!    DOUBLE PRECISION, INTENT(OUT):: INVK_MATX(MSIZE-1,MSIZE-1)
-!
-!    !LOCAL
-!    DOUBLE PRECISION:: MINV(MSIZE,MSIZE)
-!    DOUBLE PRECISION:: H(MSIZE,1)
-!    DOUBLE PRECISION:: M_FULL(MSIZE,MSIZE)
-!    DOUBLE PRECISION:: M_FULL_STAR(MSIZE,MSIZE)
-!    DOUBLE PRECISION:: B(1,MSIZE),H0(1,MSIZE),C(1,1)
-!    DOUBLE PRECISION:: BX(1,MSIZE),H0X(1,MSIZE),CX(1,1)
-!    DOUBLE PRECISION:: BY(1,MSIZE),H0Y(1,MSIZE),CY(1,1)
-!    DOUBLE PRECISION:: BZ(1,MSIZE),H0Z(1,MSIZE),CZ(1,1)
-!
-!    DOUBLE PRECISION:: H_FULL(MSIZE,1)
-!    DOUBLE PRECISION:: H_FULL_STAR(MSIZE,1)
-!    DOUBLE PRECISION:: H_FULL_TEMP(MSIZE,1)
-!    DOUBLE PRECISION::C_STAR(1,1)
-!
-!    ! FOR DIRECT GRADIENT KC
-!    DOUBLE PRECISION:: H_X(MSIZE,1),H_Y(MSIZE,1),H_Z(MSIZE,1)
-!    DOUBLE PRECISION:: M_X(MSIZE,MSIZE),M_Y(MSIZE,MSIZE),M_Z(MSIZE,MSIZE)
-!    DOUBLE PRECISION:: MINV_X(MSIZE,MSIZE),MINV_Y(MSIZE,MSIZE),MINV_Z(MSIZE,MSIZE)
-!    DOUBLE PRECISION:: MINV_X1(MSIZE,MSIZE),MINV_Y1(MSIZE,MSIZE),MINV_Z1(MSIZE,MSIZE)
-!    DOUBLE PRECISION:: PHI_X(LNMAX), PHI_Y(LNMAX), PHI_Z(LNMAX), PHIX_X, PHIY_Y, PHIZ_Z
-!    DOUBLE PRECISION:: DRDX, DRDY, DRDZ
-!    INTEGER, INTENT(IN):: IMPL
-!    !
-!    INTEGER:: I,II, J, K, M
-!
-!    DOUBLE PRECISION:: PHIX, PHIY, PHIZ
-!    DOUBLE PRECISION:: PHI(LNMAX)
-!    DOUBLE PRECISION:: XMXI_OA(LNMAX)
-!    DOUBLE PRECISION:: YMYI_OA(LNMAX)
-!    DOUBLE PRECISION:: ZMZI_OA(LNMAX)
-!
-!    DOUBLE PRECISION:: TEST
-!
-!    DOUBLE PRECISION:: PHI_SUM,QL_PTS(3,6), QLX(3)
-!    DOUBLE PRECISION:: XM_QLX,YM_QLY,ZM_QLZ
-!    DOUBLE PRECISION:: DENOM
-!
-!    DOUBLE PRECISION:: K_MATX(MSIZE-1,MSIZE-1)
-!    !
-!    LOGICAL:: ISZERO
-!
-!    !
-!    ! KEEP SOME OF THE STATEMENT FOR LATER USE, SUCH AS SINGULAR KERNEL, QL
-!    ! #TODO
-!    !
-!    !IF (SELF_EBC) THEN
-!    IF (.FALSE.) THEN
-!        DO I=1,LN
-!
-!            II = LSTACK(I)
-!
-!            XMXI_OA(I) = (X(1) -  GCOO(1,II)) /GWIN(1,II)
-!            YMYI_OA(I) = (X(2) -  GCOO(2,II)) /GWIN(2,II)
-!            ZMZI_OA(I) = (X(3) -  GCOO(3,II)) /GWIN(3,II)
-!
-!            TEST = DSQRT(XMXI_OA(I)**2 + YMYI_OA(I)**2 + ZMZI_OA(I)**2)
-!            IF (TEST.LT.(1.0d-13)) THEN
-!                SHP(I) = 1.0d0
-!            ELSE
-!                SHP(I) = 0.0d0
-!            END IF
-!
-!        END DO
-!        RETURN
-!    END IF
-!    !
-!    ! GET THE MOMENT MATRIX
-!    !
-!    !  dMx,dMy,dMz KC
-!
-!    PHI_SUM = 0.0d0
-!    M_FULL = 0.0d0
-!    M_FULL_STAR = 0.0d0
-!
-!    M_X = 0.0d0
-!    M_Y = 0.0d0
-!    M_Z = 0.0d0
-!
-!    K_MATX = 0.d0
-!
-!    DO I=1,LN
-!
-!        II = LSTACK(I)
-!
-!        XMXI_OA(I) = -(X(1) -  GCOO(1,II))
-!        YMYI_OA(I) = -(X(2) -  GCOO(2,II))
-!        ZMZI_OA(I) = -(X(3) -  GCOO(3,II))
-!
-!        CALL FILL_H(XMXI_OA(I),YMYI_OA(I),ZMZI_OA(I),MSIZE,DEG,H_FULL)
-!
-!        !CALL DERIV_H(XMXI_OA(I),YMYI_OA(I),ZMZI_OA(I),MSIZE,DEG,H_X,H_Y,H_Z)
-!
-!        XMXI_OA(I) = -(X(1) -  GCOO(1,II)) /GWIN(1,II)
-!        YMYI_OA(I) = -(X(2) -  GCOO(2,II)) /GWIN(2,II)
-!        ZMZI_OA(I) = -(X(3) -  GCOO(3,II)) /GWIN(3,II)
-!
-!        CALL MLS_KERNEL0(ABS(XMXI_OA(I)),GWIN(1,II),CONT,PHIX,PHIX_X,ISZERO)
-!        CALL MLS_KERNEL0(ABS(YMYI_OA(I)),GWIN(2,II),CONT,PHIY,PHIY_Y,ISZERO)
-!        CALL MLS_KERNEL0(ABS(ZMZI_OA(I)),GWIN(3,II),CONT,PHIZ,PHIZ_Z,ISZERO)
-!
-!        !DENOM = GWIN(1,II)*GWIN(2,II)*GWIN(3,II)
-!        PHI(I) = PHIX*PHIY*PHIZ !/DENOM
-!
-!        DO J = 1,MSIZE-1
-!            DO K = 1,MSIZE-1
-!                ! STANDART PERIDYNAMICS, LINEAR BASIS
-!                K_MATX(J,K) = K_MATX(J,K) + H_FULL(1+J,1)*H_FULL(1+K,1)*PHI(I)* GVOL(II)
-!            ENDDO
-!        ENDDO
-!
-!        !
-!        ! STORE INFLUENCE FUNCTION INTO SHP
-!        !
-!        SHP(I) = PHI(I)
-!
-!    END DO
-!
-!
-!    CALL INVERSE(K_MATX, MSIZE-1, INVK_MATX)
-!
-!
-!    RETURN
-!    END SUBROUTINE
+    SUBROUTINE UDFM_SHAPE_TENSOR(X, DEG, MSIZE, CONT, IMPL, GCOO, GVOL, GWIN, GNUMP, LSTACK, LN, LNMAX, EBCS,SELF_EBC, &
+        QL, QL_COEF,QL_LEN,  &
+        SHP, INVK_MATX)
+    !$ACC ROUTINE SEQ
+!    USE INVERSE_MOD
+    !
+    ! THIS SUBROUTINE IS TO FORM THE UNDEFORMED SHAPE TENSOR FOR PERIDYNAMICS AT THE FIRST STEP
+    !
+
+    IMPLICIT NONE
+
+    DOUBLE PRECISION, INTENT(IN):: X(3)
+    INTEGER, INTENT(IN):: DEG, MSIZE, CONT, GNUMP, LN, LNMAX
+    INTEGER, INTENT(IN):: LSTACK(LNMAX)
+    LOGICAL, INTENT(IN):: EBCS(GNUMP)
+    LOGICAL, INTENT(IN):: SELF_EBC
+
+    DOUBLE PRECISION, INTENT(IN):: GCOO(3,GNUMP),GWIN(3,GNUMP),GVOL(GNUMP)
+
+    LOGICAL, INTENT(IN):: QL
+    DOUBLE PRECISION, INTENT(IN):: QL_COEF,QL_LEN
+
+    DOUBLE PRECISION, INTENT(OUT):: SHP(LNMAX)
+    DOUBLE PRECISION, INTENT(OUT):: INVK_MATX(MSIZE-1,MSIZE-1)
+
+    !LOCAL
+    DOUBLE PRECISION:: MINV(MSIZE,MSIZE)
+    DOUBLE PRECISION:: H(MSIZE,1)
+    DOUBLE PRECISION:: M_FULL(MSIZE,MSIZE)
+    DOUBLE PRECISION:: M_FULL_STAR(MSIZE,MSIZE)
+    DOUBLE PRECISION:: B(1,MSIZE),H0(1,MSIZE),C(1,1)
+    DOUBLE PRECISION:: BX(1,MSIZE),H0X(1,MSIZE),CX(1,1)
+    DOUBLE PRECISION:: BY(1,MSIZE),H0Y(1,MSIZE),CY(1,1)
+    DOUBLE PRECISION:: BZ(1,MSIZE),H0Z(1,MSIZE),CZ(1,1)
+
+    DOUBLE PRECISION:: H_FULL(MSIZE,1)
+    DOUBLE PRECISION:: H_FULL_STAR(MSIZE,1)
+    DOUBLE PRECISION:: H_FULL_TEMP(MSIZE,1)
+    DOUBLE PRECISION::C_STAR(1,1)
+
+    ! FOR DIRECT GRADIENT KC
+    DOUBLE PRECISION:: H_X(MSIZE,1),H_Y(MSIZE,1),H_Z(MSIZE,1)
+    DOUBLE PRECISION:: M_X(MSIZE,MSIZE),M_Y(MSIZE,MSIZE),M_Z(MSIZE,MSIZE)
+    DOUBLE PRECISION:: MINV_X(MSIZE,MSIZE),MINV_Y(MSIZE,MSIZE),MINV_Z(MSIZE,MSIZE)
+    DOUBLE PRECISION:: MINV_X1(MSIZE,MSIZE),MINV_Y1(MSIZE,MSIZE),MINV_Z1(MSIZE,MSIZE)
+    DOUBLE PRECISION:: PHI_X(LNMAX), PHI_Y(LNMAX), PHI_Z(LNMAX), PHIX_X, PHIY_Y, PHIZ_Z
+    DOUBLE PRECISION:: DRDX, DRDY, DRDZ
+    INTEGER, INTENT(IN):: IMPL
+    !
+    INTEGER:: I,II, J, K, M
+
+    DOUBLE PRECISION:: PHIX, PHIY, PHIZ
+    DOUBLE PRECISION:: PHI(LNMAX)
+    DOUBLE PRECISION:: XMXI_OA(LNMAX)
+    DOUBLE PRECISION:: YMYI_OA(LNMAX)
+    DOUBLE PRECISION:: ZMZI_OA(LNMAX)
+
+    DOUBLE PRECISION:: TEST
+
+    DOUBLE PRECISION:: PHI_SUM,QL_PTS(3,6), QLX(3)
+    DOUBLE PRECISION:: XM_QLX,YM_QLY,ZM_QLZ
+    DOUBLE PRECISION:: DENOM
+
+    DOUBLE PRECISION:: K_MATX(MSIZE-1,MSIZE-1)
+    !
+    LOGICAL:: ISZERO
+    INTEGER :: ierr_inv, ierr_mls
+    !
+    ! KEEP SOME OF THE STATEMENT FOR LATER USE, SUCH AS SINGULAR KERNEL, QL
+    ! #TODO
+    ierr_inv = 0
+    ierr_mls = 0
+    !IF (SELF_EBC) THEN
+    IF (.FALSE.) THEN
+        DO I=1,LN
+
+            II = LSTACK(I)
+
+            XMXI_OA(I) = (X(1) -  GCOO(1,II)) /GWIN(1,II)
+            YMYI_OA(I) = (X(2) -  GCOO(2,II)) /GWIN(2,II)
+            ZMZI_OA(I) = (X(3) -  GCOO(3,II)) /GWIN(3,II)
+
+            TEST = DSQRT(XMXI_OA(I)**2 + YMYI_OA(I)**2 + ZMZI_OA(I)**2)
+            IF (TEST.LT.(1.0d-13)) THEN
+                SHP(I) = 1.0d0
+            ELSE
+                SHP(I) = 0.0d0
+            END IF
+
+        END DO
+        RETURN
+    END IF
+    !
+    ! GET THE MOMENT MATRIX
+    !
+    !  dMx,dMy,dMz KC
+
+    PHI_SUM = 0.0d0
+    M_FULL = 0.0d0
+    M_FULL_STAR = 0.0d0
+
+    M_X = 0.0d0
+    M_Y = 0.0d0
+    M_Z = 0.0d0
+
+    K_MATX = 0.d0
+
+    DO I=1,LN
+
+        II = LSTACK(I)
+
+        XMXI_OA(I) = -(X(1) -  GCOO(1,II))
+        YMYI_OA(I) = -(X(2) -  GCOO(2,II))
+        ZMZI_OA(I) = -(X(3) -  GCOO(3,II))
+
+        CALL FILL_H(XMXI_OA(I),YMYI_OA(I),ZMZI_OA(I),MSIZE,DEG,H_FULL)
+
+        !CALL DERIV_H(XMXI_OA(I),YMYI_OA(I),ZMZI_OA(I),MSIZE,DEG,H_X,H_Y,H_Z)
+
+        XMXI_OA(I) = -(X(1) -  GCOO(1,II)) /GWIN(1,II)
+        YMYI_OA(I) = -(X(2) -  GCOO(2,II)) /GWIN(2,II)
+        ZMZI_OA(I) = -(X(3) -  GCOO(3,II)) /GWIN(3,II)
+
+        CALL MLS_KERNEL0(ABS(XMXI_OA(I)),GWIN(1,II),CONT,PHIX,PHIX_X,ISZERO, ierr_mls)
+        IF (ierr_mls /= 0) THEN 
+            ! Handle MLS_KERNEL0 error
+            SHP(I) = HUGE(0.0D0); CYCLE;
+        END IF
+        CALL MLS_KERNEL0(ABS(YMYI_OA(I)),GWIN(2,II),CONT,PHIY,PHIY_Y,ISZERO, ierr_mls)
+        IF (ierr_mls /= 0) THEN 
+            ! Handle MLS_KERNEL0 error
+            SHP(I) = HUGE(0.0D0); CYCLE;
+        END IF
+        CALL MLS_KERNEL0(ABS(ZMZI_OA(I)),GWIN(3,II),CONT,PHIZ,PHIZ_Z,ISZERO, ierr_mls)
+        IF (ierr_mls /= 0) THEN 
+            ! Handle MLS_KERNEL0 error
+            SHP(I) = HUGE(0.0D0); CYCLE;
+        END IF
+
+
+        !DENOM = GWIN(1,II)*GWIN(2,II)*GWIN(3,II)
+        PHI(I) = PHIX*PHIY*PHIZ !/DENOM
+
+        DO J = 1,MSIZE-1
+            DO K = 1,MSIZE-1
+                ! STANDART PERIDYNAMICS, LINEAR BASIS
+                K_MATX(J,K) = K_MATX(J,K) + H_FULL(1+J,1)*H_FULL(1+K,1)*PHI(I)* GVOL(II)
+            ENDDO
+        ENDDO
+
+        !
+        ! STORE INFLUENCE FUNCTION INTO SHP
+        !
+        SHP(I) = PHI(I)
+
+    END DO
+
+
+    CALL INVERSE(K_MATX, MSIZE-1, INVK_MATX, ierr_inv)
+    IF (ierr_inv /= 0) THEN 
+        ! 處理 K_MATX 求逆失敗的情況 (e.g., INVK_MATX = HUGE(0.0D0); RETURN)
+        INVK_MATX = HUGE(0.0D0); RETURN;
+    END IF
 
 
 
-!    SUBROUTINE DFM_SHAPE_TENSOR(X_0,X_t, DEG, MSIZE, CONT, GCOO, GVOL, GWIN, GNUMP, LSTACK, LN, LNMAX,  &
-!        LCOO_CUURENT, SHP, S_MATX)
-!
-!    !
-!    ! THIS SUBROUTINE IS TO FORM THE DEFORMED SHAPE TENSOR FOR PERIDYNAMICS AT THE FIRST STEP
-!    !
-!
-!    IMPLICIT NONE
-!
-!    DOUBLE PRECISION, INTENT(IN):: X_0(3),X_t(3)
-!    INTEGER, INTENT(IN):: DEG, MSIZE, CONT, GNUMP, LN, LNMAX
-!    INTEGER, INTENT(IN):: LSTACK(LNMAX)
-!
-!    DOUBLE PRECISION, INTENT(IN):: GCOO(3,GNUMP),GWIN(3,GNUMP),GVOL(GNUMP),LCOO_CUURENT(3,LNMAX)
-!
-!
-!    DOUBLE PRECISION, INTENT(OUT):: SHP(LNMAX)
-!
-!    DOUBLE PRECISION:: H_FULL(MSIZE,1)
-!    DOUBLE PRECISION:: H_FULL_STAR(MSIZE,1)
-!
-!
-!    ! FOR DIRECT GRADIENT KC
-!    DOUBLE PRECISION:: PHI_X(LNMAX), PHI_Y(LNMAX), PHI_Z(LNMAX), PHIX_X, PHIY_Y, PHIZ_Z
-!
-!    !
-!    INTEGER:: I,II, J, K, M
-!
-!    DOUBLE PRECISION:: PHI(LNMAX)
-!    DOUBLE PRECISION:: XMXI_OA(LNMAX)
-!    DOUBLE PRECISION:: YMYI_OA(LNMAX)
-!    DOUBLE PRECISION:: ZMZI_OA(LNMAX)
-!
-!
-!    DOUBLE PRECISION:: S_MATX(MSIZE-1,MSIZE-1)
-!
-!    !
-!    ! GET THE MOMENT MATRIX
-!    !
-!    !  dMx,dMy,dMz KC
-!
-!
-!    H_FULL = 0.0d0
-!    H_FULL_STAR = 0.0d0
-!
-!    S_MATX = 0.d0
-!
-!    DO I=1,LN
-!
-!        II = LSTACK(I)
-!
-!        !TODO: MAKE NORMALIZED
-!        XMXI_OA(I) = GCOO(1,II) - X_0(1)
-!        YMYI_OA(I) = GCOO(2,II) - X_0(2)
-!        ZMZI_OA(I) = GCOO(3,II) - X_0(3)
-!
-!        CALL FILL_H(XMXI_OA(I),YMYI_OA(I),ZMZI_OA(I),MSIZE,DEG,H_FULL)
-!
-!
-!        !TODO: MAKE NORMALIZED
-!        XMXI_OA(I) = LCOO_CUURENT(1,I) - X_t(1)
-!        YMYI_OA(I) = LCOO_CUURENT(2,I) - X_t(2)
-!        ZMZI_OA(I) = LCOO_CUURENT(3,I) - X_t(3)
-!        CALL FILL_H(XMXI_OA(I),YMYI_OA(I),ZMZI_OA(I),MSIZE,DEG,H_FULL_STAR)
-!
-!        PHI(I) = SHP(I)
-!
-!        DO J = 1,MSIZE-1
-!            DO K = 1,MSIZE-1
-!                ! STANDART PERIDYNAMICS, LINEAR BASIS
-!                S_MATX(J,K) = S_MATX(J,K) + H_FULL_STAR(1+J,1)*H_FULL(1+K,1)*PHI(I) * GVOL(II)
-!            ENDDO
-!        ENDDO
-!
-!    END DO
-!
-!    RETURN
-!    END SUBROUTINE
+    RETURN
+    END SUBROUTINE
+
+
+
+    SUBROUTINE DFM_SHAPE_TENSOR(X_0,X_t, DEG, MSIZE, CONT, GCOO, GVOL, GWIN, GNUMP, LSTACK, LN, LNMAX,  &
+        LCOO_CUURENT, SHP, S_MATX)
+    !$ACC ROUTINE SEQ
+    !
+    ! THIS SUBROUTINE IS TO FORM THE DEFORMED SHAPE TENSOR FOR PERIDYNAMICS AT THE FIRST STEP
+    !
+
+    IMPLICIT NONE
+
+    DOUBLE PRECISION, INTENT(IN):: X_0(3),X_t(3)
+    INTEGER, INTENT(IN):: DEG, MSIZE, CONT, GNUMP, LN, LNMAX
+    INTEGER, INTENT(IN):: LSTACK(LNMAX)
+
+    DOUBLE PRECISION, INTENT(IN):: GCOO(3,GNUMP),GWIN(3,GNUMP),GVOL(GNUMP),LCOO_CUURENT(3,LNMAX)
+
+
+    DOUBLE PRECISION, INTENT(OUT):: SHP(LNMAX)
+
+    DOUBLE PRECISION:: H_FULL(MSIZE,1)
+    DOUBLE PRECISION:: H_FULL_STAR(MSIZE,1)
+
+
+    ! FOR DIRECT GRADIENT KC
+    DOUBLE PRECISION:: PHI_X(LNMAX), PHI_Y(LNMAX), PHI_Z(LNMAX), PHIX_X, PHIY_Y, PHIZ_Z
+
+    !
+    INTEGER:: I,II, J, K, M
+
+    DOUBLE PRECISION:: PHI(LNMAX)
+    DOUBLE PRECISION:: XMXI_OA(LNMAX)
+    DOUBLE PRECISION:: YMYI_OA(LNMAX)
+    DOUBLE PRECISION:: ZMZI_OA(LNMAX)
+
+
+    DOUBLE PRECISION:: S_MATX(MSIZE-1,MSIZE-1)
+
+    !
+    ! GET THE MOMENT MATRIX
+    !
+    !  dMx,dMy,dMz KC
+
+
+    H_FULL = 0.0d0
+    H_FULL_STAR = 0.0d0
+
+    S_MATX = 0.d0
+
+    DO I=1,LN
+
+        II = LSTACK(I)
+
+        !TODO: MAKE NORMALIZED
+        XMXI_OA(I) = GCOO(1,II) - X_0(1)
+        YMYI_OA(I) = GCOO(2,II) - X_0(2)
+        ZMZI_OA(I) = GCOO(3,II) - X_0(3)
+
+        CALL FILL_H(XMXI_OA(I),YMYI_OA(I),ZMZI_OA(I),MSIZE,DEG,H_FULL)
+
+
+        !TODO: MAKE NORMALIZED
+        XMXI_OA(I) = LCOO_CUURENT(1,I) - X_t(1)
+        YMYI_OA(I) = LCOO_CUURENT(2,I) - X_t(2)
+        ZMZI_OA(I) = LCOO_CUURENT(3,I) - X_t(3)
+        CALL FILL_H(XMXI_OA(I),YMYI_OA(I),ZMZI_OA(I),MSIZE,DEG,H_FULL_STAR)
+
+        PHI(I) = SHP(I)
+
+        DO J = 1,MSIZE-1
+            DO K = 1,MSIZE-1
+                ! STANDART PERIDYNAMICS, LINEAR BASIS
+                S_MATX(J,K) = S_MATX(J,K) + H_FULL_STAR(1+J,1)*H_FULL(1+K,1)*PHI(I) * GVOL(II)
+            ENDDO
+        ENDDO
+
+    END DO
+
+    RETURN
+    END SUBROUTINE
+    SUBROUTINE MLS_KERNEL0(XN,WIN,CONT,PHI,PHIX,ISZERO, ierr)
+    !$ACC ROUTINE SEQ
+    IMPLICIT NONE
+    DOUBLE PRECISION, INTENT(IN):: XN,WIN
+    INTEGER, INTENT(IN):: CONT
+    DOUBLE PRECISION, INTENT(OUT):: PHI,PHIX
+    LOGICAL, INTENT(OUT):: ISZERO
+    INTEGER, INTENT(OUT) :: ierr
+    ISZERO = .FALSE.
+    ierr = 0
+    IF (CONT.EQ.3) THEN !CUBIC SPLINE
+        IF (XN.LE.1.0D0) THEN
+            PHI = 1.0D0 - 6.0D0*XN**2 + 8.0D0*XN**3 - 3.0D0*XN**4
+            PHIX = -12.0D0*XN + 24.0D0*XN**2 - 12.0D0*XN**3
+        ELSE
+            PHI = 0.0D0
+            PHIX = 0.0D0
+            ISZERO = .TRUE.
+        END IF
+    ELSE
+!        PRINT *, 'MLS KERNEL NOT DEFINED' ! This PRINT/STOP will be an issue on device
+!        STOP                             ! Needs error flag propagation if called on device
+        ierr = 1
+    END IF ! CONT.EQ.3
+    RETURN
+    END SUBROUTINE MLS_KERNEL0
+	  SUBROUTINE HUGHES_WINGET(LMAT, & !IN
+	                           ROT,STRAIN,D) !OUT
+	  !$ACC ROUTINE SEQ
+	  ! FUNCTION OF THIS SUBROUTINE:
+	  !
+	  ! COMPUTE THE ROTATION AND STRAIN TENSORS USING
+	  ! THE SO-CALLED HUGHES-WINGET ALGORITHM
+	  !
+      ! USE FINT_FUNCTIONS ! 已在模組層級 USE
+      ! IMPLICIT NONE ! 已在模組層級定義
+	  !
+	  !GLOBAL IN-OUT
+	  DOUBLE PRECISION, INTENT(IN):: LMAT(3,3)
+	  DOUBLE PRECISION, INTENT(OUT):: ROT(3,3),STRAIN(6)
+      INTEGER :: ierr_inv
+	  !LOCAL VARIABLES
+	  DOUBLE PRECISION:: INV_LMAT(3,3) ! 未被使用
+	  DOUBLE PRECISION:: IDENT(3,3)
+	  DOUBLE PRECISION:: A(3,3),IW(3,3),IW_INV(3,3)
+	  DOUBLE PRECISION:: A_INV(3,3)
+	  DOUBLE PRECISION:: G(3,3)
+	  DOUBLE PRECISION:: G_T(3,3)
+	  DOUBLE PRECISION:: E(3,3),W(3,3)
+      DOUBLE PRECISION:: D(6)
+	  DATA IDENT/ 1.0d0, 0.0d0, 0.0d0, &
+	                  0.0d0, 1.0d0, 0.0d0, &
+	                  0.0d0, 0.0d0, 1.0d0/
+	  !
+	  ! GET A=(I + 0.5*L)^-1
+	  !
+	  A = IDENT + 0.5d0*LMAT
+	  !
+      !CALL INVERSE(A, 3, A_INV)
+	  CALL INV3 (A, A_INV, ierr_inv) ! INV3 來自 INVERSE_MOD
+      IF (ierr_inv /= 0) THEN 
+        ROT = 0.0D0; STRAIN = 0.0D0; D = 0.0D0; RETURN;
+      END IF
+
+
+
+	  !
+	  ! GET G = L*A
+	  !
+	  G = MATMUL(LMAT,A_INV)
+	  G_T=TRANSPOSE(G)
+	  !
+	  ! GET W = 1/2*(G-G^T)
+	  ! GET E = 1/2*(G+G^T)
+	  !
+	  W =    0.5d0*(G - G_T)
+      
+      !ROT = I + (I-0.5D*W)^-1*W
+      IW = IDENT-0.5D0*W
+	  CALL INV3 (IW, IW_INV, ierr_inv)
+      IF (ierr_inv /= 0) THEN 
+        ROT = 0.0D0; STRAIN = 0.0D0; D = 0.0D0; RETURN;
+      END IF
+
+
+      !CALL INVERSE(IW, 3, IW_INV)
+      ROT = IDENT + MATMUL(IW_INV,W)
+      
+      
+	  E = 0.5d0*(G + G_T)
+	  !
+	  STRAIN = TENSOR_2_VTENSOR(E) ! TENSOR_2_VTENSOR 來自 FINT_FUNCTIONS
+      D=STRAIN
+	  !
+      !TIMES FACT 2 FOR THE SHEAR COMPONENTS, TO BE CONSISTANT WITH THE STRAIN DEFINITION
+      !
+      STRAIN(4) = 2.D0*STRAIN(4)
+      STRAIN(5) = 2.D0*STRAIN(5)
+      STRAIN(6) = 2.D0*STRAIN(6)
+      !WRITE(*,*)'FACT 2'
+	  RETURN
+	  END SUBROUTINE HUGHES_WINGET
+	  
+    
+	  SUBROUTINE D_HUGHES_WINGET(LMAT,DLMAT, & !IN
+	                           ROT,DSTRAIN) !OUT
+	  !$ACC ROUTINE SEQ
+	  ! FUNCTION OF THIS SUBROUTINE:
+	  !
+	  ! COMPUTE THE ROTATION AND STRAIN TENSORS USING
+	  ! THE SO-CALLED HUGHES-WINGET ALGORITHM
+	  !
+      ! USE FINT_FUNCTIONS ! 已在模組層級 USE
+      ! IMPLICIT NONE ! 已在模組層級定義
+	  !
+	  !GLOBAL IN-OUT
+	  DOUBLE PRECISION, INTENT(IN):: LMAT(3,3)
+	  DOUBLE PRECISION, INTENT(IN):: DLMAT(3,3)
+	  DOUBLE PRECISION, INTENT(OUT):: ROT(3,3) ! ROT 未被賦值
+	  DOUBLE PRECISION, INTENT(OUT):: DSTRAIN(6)
+      INTEGER :: ierr_inv
+	  !
+	  !LOCAL VARIABLES
+	  DOUBLE PRECISION:: INV_LMAT(3,3) ! 未被使用
+	  DOUBLE PRECISION:: IDENT(3,3)
+	  DOUBLE PRECISION:: A(3,3),DA(3,3) ! IW, IW_INV 在此未使用
+	  DOUBLE PRECISION:: A_INV(3,3), IDA(3,3), TEMP1(3,3), TEMP2(3,3)
+	  DOUBLE PRECISION:: DG(3,3)
+	  DOUBLE PRECISION:: DG_T(3,3)
+	  DOUBLE PRECISION:: DE(3,3)
+	  DATA IDENT/ 1.0d0, 0.0d0, 0.0d0, &
+	                  0.0d0, 1.0d0, 0.0d0, &
+	                  0.0d0, 0.0d0, 1.0d0/
+	  !
+	  ! GET A=(I + 0.5*L)^-1
+	  !
+	  A = IDENT + 0.5d0*LMAT
+	  !
+	  CALL INV3 (A, A_INV, ierr_inv) ! INV3 來自 INVERSE_MOD
+      IF (ierr_inv /= 0) THEN 
+        DSTRAIN = 0.0D0; ROT = 0.0D0; RETURN;
+      END IF
+
+
+      
+      !CALL INVERSE(A, 3, A_INV)
+      
+	  !
+	  ! GET A,i
+	  !
+	  !!DA = 0.5d0*A
+	  DA = 0.5d0*DLMAT
+      
+	  !
+	  ! GET INV(A,i)
+	  !
+	  IDA = MATMUL(-A_INV,DA)
+	  IDA = MATMUL(IDA,A_INV)
+	  !
+	  ! GET TEMP MATS
+	  !
+	  !!TEMP1 = MATMUL(DLMAT,A)
+	  !!TEMP2 = MATMUL(LMAT,DA)
+      
+	  TEMP1 = MATMUL(DLMAT,A_INV)
+	  TEMP2 = MATMUL(LMAT,IDA)
+      
+      
+	  !
+	  ! DG = DL*A + L*DA
+	  !
+	  DG = TEMP1 + TEMP2
+	  DG_T=TRANSPOSE(DG)
+	  !
+	  ! GET DW = 1/2*(DG-DG^T)
+	  ! GET DE = 1/2*(DG+DG^T)
+	  !
+	  DE = 0.5d0*(DG + DG_T)
+	  !!DE = DG + DG_T
+      
+	  !
+	  DSTRAIN = TENSOR_2_VTENSOR(DE) ! TENSOR_2_VTENSOR 來自 FINT_FUNCTIONS
+	  !
+      !TIMES FACT 2 FOR THE SHEAR COMPONENTS, TO BE CONSISTANT WITH THE STRAIN DEFINITION
+      !
+      DSTRAIN(4) = 2.D0*DSTRAIN(4)
+      DSTRAIN(5) = 2.D0*DSTRAIN(5)
+      DSTRAIN(6) = 2.D0*DSTRAIN(6)
+      ! 注意：輸出參數 ROT 在此子常式中並未被賦值。
+      ! 如果不需要輸出 ROT，應從參數列表中移除。
+      ROT = 0.0D0
+	  RETURN
+	  END SUBROUTINE D_HUGHES_WINGET
+
+      SUBROUTINE ROTATE_TENSOR(TRANSFORMATION_MATRIX_6X6, TENSOR_VOIGT_INOUT)
+      !$ACC ROUTINE SEQ
+      ! IMPLICIT NONE ! 已在模組層級定義
+      ! FUNCTION OF THIS SUBROUTINE:
+      ! ROTATE A (VOIGT NOTATION) TENSOR USING A GIVEN 6X6 TRANSFORMATION MATRIX
+      !
+      DOUBLE PRECISION, INTENT(IN)    :: TRANSFORMATION_MATRIX_6X6(6,6)
+      DOUBLE PRECISION, INTENT(INOUT) :: TENSOR_VOIGT_INOUT(6)
+
+      !LOCAL VARIABLES
+      DOUBLE PRECISION :: TEMP_TENSOR_VOIGT(6)
+
+      ! S_rotated_voigt = T_transformation * S_voigt_old
+      TEMP_TENSOR_VOIGT = MATMUL(TRANSFORMATION_MATRIX_6X6, TENSOR_VOIGT_INOUT)
+      TENSOR_VOIGT_INOUT = TEMP_TENSOR_VOIGT
+
+      RETURN
+      END SUBROUTINE ROTATE_TENSOR
+END MODULE RK_PROCEDURES_MOD

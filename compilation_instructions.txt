@@ -1,1 +1,0 @@
-編譯命令: pgfortran -acc -Minfo=accel -o program *.f90

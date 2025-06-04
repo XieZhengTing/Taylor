@@ -70,7 +70,6 @@
 	      CTEMP=TRIM(MODEL_FILE)
 	    END IF
 	  END DO
-    write(*,*) 'MODEL_FILE = ', MODEL_FILE
 	  !
 	  ! CHECK FOR ERRORS IN OPENING THE FILE
 	  !

@@ -14,7 +14,7 @@
 	  !********************************************************
 
     SUBROUTINE GET_VOL1(DVOL,XYZEL)
-      !
+    USE DETERMINANT_MOD
 	  ! FUNCTION OF THIS SUBROUTINE:
 	  !
 	  ! RETRUN THE VOLUME ASSOCATED WITH A SINGLE TET (?)

@@ -14,7 +14,7 @@
 	  !********************************************************
 
     SUBROUTINE GET_VOL(DVOL,XYZEL,T)
-      !
+    USE DETERMINANT_MOD
 	  ! FUNCTION OF THIS SUBROUTINE:
 	  !
 	  ! RETRUN THE VOLUME ASSOCATED WITH A SINGLE HEX (?)

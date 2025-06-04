@@ -1,4 +1,0 @@
-建議添加的OpenACC指令：
-計算密集型區域分析完成acc parallel loop
-計算密集型區域分析完成acc kernels
-計算密集型區域分析完成acc data copy(array)

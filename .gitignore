@@ -3,3 +3,5 @@
 *.vtk
 *.log
 *.out
+/seacas/
+/Trilinos/
