@@ -553,17 +553,19 @@ END IF
 
       ! Comprehensive !$ACC DATA region for CONSTRUCT_FINT call
       ! Consolidate all COPYIN and COPYOUT clauses into a single DATA directive
-      !$ACC DATA COPYIN(GWIN, GVOL, GNUMP, GCOO, GCOO_CUURENT, & ! Line 569 or near
+      ! Wenn HANDELER von MAIN.F90's Datenregion aufgerufen wird, ist diese Datenregion redundant.
+      ! Die Daten werden bereits auf dem Gerät verwaltet.
+      ! !$ACC DATA COPYIN(GWIN, GVOL, GNUMP, GCOO, GCOO_CUURENT, &
+      ! !$ACC             GSM_LEN, GSM_AREA, GSM_VOL, GNSNI_FAC, &
+      ! !$ACC             GGHOST, GPROP, GSTATE, GSTRESS, GSTRAIN, G_H_STRESS, G_S_STRESS, &
+      ! !$ACC             GDINC, GDINC_TOT, GMAT_TYPE, GEBC_NODES, DLT, GSIZE, &
+      ! !$ACC             GN, GSTART, DIM_NN_LIST, GSTACK, GSTACK_SHP, GSTACK_DSHP, GSTACK_DDSHP, &
+      ! !$ACC             GMAXN, GINVK, LINIT, &
+      ! !$ACC             G_X_MOM, G_Y_MOM, G_Z_MOM, MODEL_BODYFORCE, MODEL_BODY_ID) &
+      ! !$ACC COPYOUT(GFINT, GFEXT, GINT_WORK, GSTRAIN_EQ, DLT_FINT, GCHAR_DIST, GMAX_WVEL, &
+      ! !$ACC           LOCAL_DX_STRESS, LOCAL_DY_STRESS, LOCAL_DZ_STRESS, &
+      ! !$ACC           ierr_fint)
 
-      !$ACC             GSM_LEN, GSM_AREA, GSM_VOL, GNSNI_FAC, &
-      !$ACC             GGHOST, GPROP, GSTATE, GSTRESS, GSTRAIN, G_H_STRESS, G_S_STRESS, &
-      !$ACC             GDINC, GDINC_TOT, GMAT_TYPE, GEBC_NODES, DLT, GSIZE, &
-      !$ACC             GN, GSTART, DIM_NN_LIST, GSTACK, GSTACK_SHP, GSTACK_DSHP, GSTACK_DDSHP, &
-      !$ACC             GMAXN, GINVK, LINIT, &
-      !$ACC             G_X_MOM, G_Y_MOM, G_Z_MOM, MODEL_BODYFORCE, MODEL_BODY_ID) & ! End of COPYIN list
-      !$ACC COPYOUT(GFINT, GFEXT, GINT_WORK, GSTRAIN_EQ, DLT_FINT, GCHAR_DIST, GMAX_WVEL, &
-      !$ACC           LOCAL_DX_STRESS, LOCAL_DY_STRESS, LOCAL_DZ_STRESS, &
-      !$ACC           ierr_fint)
       ! Note: GVOL is GNUMP-sized in HANDELER. CONSTRUCT_FINT uses GVOL(I) for I=1,GNUMP.
       ! GSTRAIN_EQ, DLT_FINT, GCHAR_DIST, GMAX_WVEL, LOCAL_*_STRESS are outputs from CONSTRUCT_FINT.
 
@@ -580,7 +582,8 @@ END IF
                           LOCAL_DX_STRESS, LOCAL_DY_STRESS, LOCAL_DZ_STRESS, &
                           G_X_MOM, G_Y_MOM, G_Z_MOM, MODEL_BODYFORCE, GINT_WORK, MODEL_BODY_ID, GSTRAIN_EQ, &
                           ierr_fint)
-      !$ACC END DATA
+          ! !$ACC END DATA
+
 
 
 

@@ -42,7 +42,7 @@
       USE CONSTITUTION_MOD           ! For CONSTITUTION
       USE ESTIMATE_MODULI_MOD        ! For ESTIMATE_MODULI
       ! USE omp_lib ! OpenMP library not needed for OpenACC
-!      !$ACC ROUTINE SEQ
+ !    !$ACC ROUTINE SEQ
       !
 	  IMPLICIT NONE
 	  !

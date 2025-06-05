@@ -801,6 +801,7 @@
         ! Energies and STEPS, TIME_COUNTER are COPYOUT or COPY.
         ! If needed for immediate host logic: !$ACC UPDATE HOST(STEPS, DLOCAL_INT_ENERGY, ...)
 
+        !$ACC UPDATE HOST(DLOCAL_INT_ENERGY, DLOCAL_KIN_ENERGY, DLOCAL_EXT_ENERGY, DLOCAL_TOTAL_ENERGY)
 
         WRITE(121,'(I20,4E20.5)') STEPS, DLOCAL_INT_ENERGY ,DLOCAL_KIN_ENERGY,DLOCAL_EXT_ENERGY,DLOCAL_TOTAL_ENERGY
         !
@@ -840,11 +841,11 @@
             !
             IF (HPC_SCHEME.EQ.1) THEN
                    ! 在呼叫 VTK 輸出副程式前，將裝置上的資料更新回主機
-                   !$ACC UPDATE HOST(exodusStep, LOCAL_COO_CURRENT, LOCAL_DSP_TOT_PHY, LOCAL_VEL_PHY, LOCAL_ACL_PHY, &
-                   !$ACC&                  LOCAL_VEL, LOCAL_ACL, LOCAL_FINT, LOCAL_MASS, LOCAL_CHAR_DIST, LOCAL_WAVE_VEL, &
-                   !$ACC&                  LOCAL_PRFORCE, LOCAL_STRESS, LOCAL_STRAIN, LOCAL_STATE, LOCAL_STRAIN_EQ, &
-                   !$ACC&                  LOCAL_EBC, LOCAL_BODY_ID, LOCAL_MAT_TYPE, LOCAL_COO, LOCAL_VINIT, MODEL_NORM_WIN, &
-                   !$ACC&                  LOCAL_WIN, LOCAL_VOL, LOCAL_PROP, LOCAL_IJKSPC)
+                   !$ACC UPDATE HOST(exodusStep, LOCAL_COO_CURRENT, LOCAL_DSP_TOT_PHY, LOCAL_VEL_PHY, LOCAL_ACL_PHY, & ! REVIEW THIS LIST
+                   !$ACC&                  LOCAL_VEL, LOCAL_ACL, LOCAL_FINT, LOCAL_MASS, LOCAL_CHAR_DIST, LOCAL_WAVE_VEL, & ! REVIEW THIS LIST
+                   !$ACC&                  LOCAL_PRFORCE, LOCAL_STRESS, LOCAL_STRAIN, LOCAL_STATE, LOCAL_STRAIN_EQ, & ! REVIEW THIS LIST
+                   !$ACC&                  LOCAL_EBC, LOCAL_BODY_ID, LOCAL_MAT_TYPE, LOCAL_COO, LOCAL_VINIT, MODEL_NORM_WIN, & ! REVIEW THIS LIST
+                   !$ACC&                  LOCAL_WIN, LOCAL_VOL, LOCAL_PROP, LOCAL_IJKSPC) ! REVIEW THIS LIST
 
                     ! All these variables are part of the main DATA region with COPY or COPYOUT.
                     ! If their most up-to-date values are needed for UNF_OUTPUT_STEP_VTK on host *before*
