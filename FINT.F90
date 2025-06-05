@@ -263,7 +263,8 @@
     INTEGER :: constitution_error_flag
     INTEGER :: call_err_status
     ! For chunking
-    INTEGER, PARAMETER :: CHUNK_SIZE = 200    ! Process CHUNK_SIZE nodes at a time
+    INTEGER, PARAMETER :: CHUNK_SIZE = 1024    ! Process CHUNK_SIZE nodes at a time (Adjust as needed)
+
     INTEGER :: chunk_start, chunk_end, nchunks, c_chunk
 
     !
