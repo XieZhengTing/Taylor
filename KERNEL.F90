@@ -2,7 +2,7 @@
          
        SUBROUTINE MLS_KERNEL0(XSA,AJ,ISPLINE,      & !INPUT
                              PHI,PHI_X,ISZERO)   !OUTPUT
-      !$ACC ROUTINE SEQ                       
+                             
       IMPLICIT NONE
        
       !GLOBAL VARIABLES
@@ -145,7 +145,6 @@
       
       
       SUBROUTINE FACTI(INTEG,FACT_INTEG)
-      !$ACC ROUTINE SEQ
       IMPLICIT NONE
       
       INTEGER::INTEG,FACT_INTEG

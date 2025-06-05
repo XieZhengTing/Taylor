@@ -15,20 +15,19 @@
 
 	  SUBROUTINE HUGHES_WINGET(LMAT, & !IN
 	                           ROT,STRAIN,D) !OUT
-	  !$ACC ROUTINE SEQ
+	  !
 	  ! FUNCTION OF THIS SUBROUTINE:
 	  !
 	  ! COMPUTE THE ROTATION AND STRAIN TENSORS USING
 	  ! THE SO-CALLED HUGHES-WINGET ALGORITHM
 	  !
       USE FINT_FUNCTIONS
-      USE INVERSE_MOD
+      !
 	  IMPLICIT NONE
 	  !
 	  !GLOBAL IN-OUT
 	  DOUBLE PRECISION, INTENT(IN):: LMAT(3,3)
 	  DOUBLE PRECISION, INTENT(OUT):: ROT(3,3),STRAIN(6)
-      INTEGER :: ierr_inv
 	  !
 	  !LOCAL VARIABLES
 	  DOUBLE PRECISION:: INV_LMAT(3,3)
@@ -48,14 +47,7 @@
 	  A = IDENT + 0.5d0*LMAT
 	  !
       !CALL INVERSE(A, 3, A_INV)  
-	  CALL INV3 (A, A_INV, ierr_inv)
-      IF (ierr_inv /= 0) THEN 
-          ROT = 0.0D0
-          STRAIN = 0.0D0
-          D = 0.0D0
-          RETURN 
-      END IF ! Basic error handling
-
+	  CALL INV3 (A, A_INV)
 	  !
 	  ! GET G = L*A
 	  !
@@ -69,14 +61,7 @@
       
       !ROT = I + (I-0.5D*W)^-1*W
       IW = IDENT-0.5D0*W
-	  CALL INV3 (IW, IW_INV, ierr_inv)
-      IF (ierr_inv /= 0) THEN 
-          ROT = 0.0D0
-          STRAIN = 0.0D0
-          D = 0.0D0
-          RETURN
-      END IF ! Basic error handling
-
+	  CALL INV3 (IW, IW_INV)
       !CALL INVERSE(IW, 3, IW_INV)       
       ROT = IDENT + MATMUL(IW_INV,W) 
       
@@ -98,14 +83,13 @@
 
 	  SUBROUTINE D_HUGHES_WINGET(LMAT,DLMAT, & !IN
 	                           ROT,DSTRAIN) !OUT
-	  !$ACC ROUTINE SEQ
+	  !
 	  ! FUNCTION OF THIS SUBROUTINE:
 	  !
 	  ! COMPUTE THE ROTATION AND STRAIN TENSORS USING
 	  ! THE SO-CALLED HUGHES-WINGET ALGORITHM
 	  !
       USE FINT_FUNCTIONS
-      USE INVERSE_MOD
       !
 	  IMPLICIT NONE
 	  !
@@ -113,7 +97,6 @@
 	  DOUBLE PRECISION, INTENT(IN):: LMAT(3,3)
 	  DOUBLE PRECISION, INTENT(IN):: DLMAT(3,3)
 	  DOUBLE PRECISION, INTENT(OUT):: ROT(3,3),DSTRAIN(6)
-      INTEGER :: ierr_inv
 	  !
 	  !LOCAL VARIABLES
 	  DOUBLE PRECISION:: INV_LMAT(3,3)
@@ -131,14 +114,7 @@
 	  !
 	  A = IDENT + 0.5d0*LMAT
 	  !
-	  CALL INV3 (A, A_INV, ierr_inv)
-      IF (ierr_inv /= 0) THEN 
-          DSTRAIN = 0.0D0
-          ROT = 0.0D0
-          RETURN
-      END IF ! Basic error handling
-
- 
+	  CALL INV3 (A, A_INV)
       
       !CALL INVERSE(A, 3, A_INV)
       
@@ -182,9 +158,7 @@
       !
       DSTRAIN(4) = 2.D0*DSTRAIN(4) 
       DSTRAIN(5) = 2.D0*DSTRAIN(5)
-      DSTRAIN(6) = 2.D0*DSTRAIN(6)
-      ROT = 0.0D0 ! Explicitly set ROT as it's an OUT parameter but not calculated
-  
+      DSTRAIN(6) = 2.D0*DSTRAIN(6)   
 	  RETURN
 	  END SUBROUTINE
 	  
