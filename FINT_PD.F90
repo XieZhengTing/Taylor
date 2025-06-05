@@ -22,7 +22,7 @@
                                 GSTACK,  GSTACK_SHP, GSTACK_DSHP,  GSTACK_DDSHP,  GMAXN,  GINVK, LINIT,   &   !FROM HANDLER
                                 FINT,    DLT_FINT,   GCHAR_DIST,   GMAX_WVEL, &
                                 LOCAL_DX_STRESS, LOCAL_DY_STRESS, LOCAL_DZ_STRESS, & !OUTPUT
-                                G_X_MOM, G_Y_MOM, G_Z_MOM,MODEL_BODYFORCE,GINT_WORK,DLT)           
+                                G_X_MOM, G_Y_MOM, G_Z_MOM,MODEL_BODYFORCE,GINT_WORK,DLT,ierr)           
       
       !
 	  ! FUNCTION OF THIS SUBROUTINE:
@@ -35,8 +35,14 @@
       !XX, YY, ZZ, YZ, XZ, XY
 	  !
       USE FINT_FUNCTIONS
-      USE CONTROL
-      USE omp_lib
+      USE CONTROL      
+      USE RK_PROCEDURES_MOD          ! For UDFM_SHAPE_TENSOR, DFM_SHAPE_TENSOR, HUGHES_WINGET, ROTATE_TENSOR, INV3 etc.
+      USE DETERMINANT_MOD            ! For DETERMINANT
+      USE INVERSE_MOD                ! For INVERSE (if used directly, INV3 is likely from here or RK_PROCEDURES_MOD)
+      USE CONSTITUTION_MOD           ! For CONSTITUTION
+      USE ESTIMATE_MODULI_MOD        ! For ESTIMATE_MODULI
+      ! USE omp_lib ! OpenMP library not needed for OpenACC
+!      !$ACC ROUTINE SEQ
       !
 	  IMPLICIT NONE
 	  !
@@ -100,6 +106,7 @@
 	  DOUBLE PRECISION:: FINT(GNUMP*3)
 	  DOUBLE PRECISION:: DLT_FINT
 	  !
+      INTEGER, INTENT(OUT) :: ierr ! Error flag
 	  !********** LOCAL VARIABLES **********
 	  INTEGER:: I,J,K,L,JJ               !INDICIES
 	  DOUBLE PRECISION:: LCOO(3)    !COORDINATE AT A NODE IN INITIAL CONFIGURATION
@@ -147,10 +154,10 @@
 	  DOUBLE PRECISION:: BMAT_T(3,6)
 	  DOUBLE PRECISION:: FINT3(3),FINT3_J(3),INVK(3,3),INVK_J(3,3)
 	  DOUBLE PRECISION:: ROT(6,6) !ROTATION MATRIX
-	  LOGICAL:: LINIT
+	  LOGICAL, INTENT(IN):: LINIT
 	  DOUBLE PRECISION:: FMAT(3,3), IFMAT(3,3),X_0(3),X_t(3), DX_t(3,1), PKSTRESS(3,3), TEMP_STRESS(3,3), DX_t_J(3,1)
-	  DOUBLE PRECISION, ALLOCATABLE:: FINT_TEMP(:,:,:)
-	  DOUBLE PRECISION:: DET      
+	  ! DOUBLE PRECISION, ALLOCATABLE:: FINT_TEMP(:,:,:) ! Replaced by atomic updates
+	  DOUBLE PRECISION:: DET    
       !DOUBLE PRECISION:: FINT_TEMP(20,3,GNUMP)
       INTEGER:: ID_RANK
       
@@ -191,7 +198,8 @@
 	                     DIST, XJ, YJ, ZJ, CHAR_DIST, DLT_TEMP, XI, YI, ZI 
 						 
 	  LOGICAL:: HODIV
-		
+	  INTEGER :: constitution_error_flag
+	  INTEGER :: call_err_status 		
 	  GINT_WORK = 0.0d0
 	  !
 	  !
@@ -200,7 +208,7 @@
 	  !*********************************************************
 	  !******************** EXECUTABLE CODE ********************
 	  !*********************************************************
-	  !
+      ierr = 0 ! Initialize error flag
 	  HODIV=.FALSE.
 	  !
 	  !INITIALIZE FINT
@@ -214,9 +222,10 @@
 	  FINT = 0.0d0
       DET = 1.d0
 	   !REDUCTION(+:FINT)
-	  !
-      ALLOCATE(FINT_TEMP(NCORES_INPUT,3,GNUMP))
-      FINT_TEMP = 0.D0
+	  ! The FINT_TEMP array was used for thread-local accumulation in OpenMP.
+      ! In OpenACC, we will use ATOMIC directives for updating FINT directly.
+      ! ALLOCATE(FINT_TEMP(NCORES_INPUT,3,GNUMP))
+      ! FINT_TEMP = 0.D0
       
 	  
 	  
@@ -229,16 +238,10 @@
 			!WE NEED TO GRAM ALL THE K VALUES BEFORE WE DO ANYTHING
 	  
 	  
-      !$OMP PARALLEL DEFAULT(FIRSTPRIVATE) SHARED( GNUMP, GCOO, GCOO_CUURENT, GWIN, GSM_LEN, GSM_VOL, GSM_AREA, GN, GSTART, &
-      !$OMP                                       DIM_NN_LIST, GSTACK, GSTACK_SHP, GSTACK_DSHP, GSTACK_DDSHP, GINVK, & 
-      !$OMP                                       GCHAR_DIST,GMAX_WVEL, GMAXN, GGHOST, GEBC_NODES, GVOL, GNSNI_FAC, &
-      !$OMP                                       GSTRESS, LOCAL_DX_STRESS, LOCAL_DY_STRESS, LOCAL_DZ_STRESS, &
-      !$OMP                                       GSTRAIN, &
-      !$OMP                                       GSTATE, GPROP, GDINC,GDINC_TOT, GMAT_TYPE, FINT, DLT_FINT, FINT_TEMP)       
-      
-      ID_RANK = OMP_get_thread_num()  !OMPJOE
+      !$ACC PARALLEL LOOP DEFAULT(PRESENT) &
+      !$ACC PRIVATE(LCOO, LCOO_T, VOL, LWIN, LSM_LEN, LN, LSTART, LGHOST, LVOL, LPROP, LMAT_TYPE, SELF_EBC) &
+      !$ACC PRIVATE(LSTACK, SHP, INVK, J)
 
-      !$OMP DO   
 	  DO I = 1, GNUMP
 	    !
 	    !
@@ -284,23 +287,20 @@
 				
 	  END DO !INTEGRATION POINT (NODE) LOOP
       !$OMP END DO
-      !$OMP END PARALLEL	 
+      !$ACC END PARALLEL LOOP	 
 	  
 	  
 	  END IF
 	  
 	  
 	  
-      !$OMP PARALLEL DEFAULT(FIRSTPRIVATE) SHARED( GNUMP, GCOO, GCOO_CUURENT, GWIN, GSM_LEN, GSM_VOL, GSM_AREA, GN, GSTART, &
-      !$OMP                                       DIM_NN_LIST, GSTACK, GSTACK_SHP, GSTACK_DSHP, GSTACK_DDSHP, GINVK, & 
-      !$OMP                                       GCHAR_DIST,GMAX_WVEL, GMAXN, GGHOST, GEBC_NODES, GVOL, GNSNI_FAC, &
-      !$OMP                                       GSTRESS, LOCAL_DX_STRESS, LOCAL_DY_STRESS, LOCAL_DZ_STRESS, &
-      !$OMP                                       GSTRAIN, &
-      !$OMP                                       GSTATE, GPROP, GDINC,GDINC_TOT, GMAT_TYPE, FINT, DLT_FINT, FINT_TEMP)       
-      
-      ID_RANK = OMP_get_thread_num()  !OMPJOE
-
-      !$OMP DO   
+      !$ACC PARALLEL LOOP DEFAULT(PRESENT) &
+      !$ACC PRIVATE(LCOO, LCOO_T, VOL, LWIN, LSM_LEN, LN, LSTART, LGHOST, LVOL, LPROP, LMAT_TYPE, SELF_EBC) &
+      !$ACC PRIVATE(LSTRESS, LSTRAIN, L_H_STRESS, L_S_STRESS, LSTATE, LSTACK, LDINC, LDINC_TOT, LCOO_CUURENT) &
+      !$ACC PRIVATE(SHP, INVK, FMAT, IFMAT, DET, X_0, X_t, LMAT, ROT, STRAIN, D, ELAS_MAT) &
+      !$ACC PRIVATE(LSTRESS_PREDICTOR, STRESS_INC, STRAIN_INC, POISS, YOUNG, BULK, SHEAR, NSNI_FLAG) &
+      !$ACC PRIVATE(SHEAR_TRIAL, BULK_TRIAL, PMOD, DENSITY, MAXMOD, PKSTRESS, DX_t, TEMP_STRESS, INVK_J, DX_t_J, FINT3, FINT3_J) &
+      !$ACC PRIVATE(J, K, JJ, ID_RANK)
 	  DO I = 1, GNUMP
 	    !
 	    !
@@ -400,7 +400,11 @@
                    FMAT = MATMUL(FMAT, INVK)
                    
                 CALL DETERMINANT(FMAT,DET) 
-                CALL INVERSE(FMAT, 3, IFMAT) 
+                CALL INVERSE(FMAT, 3, IFMAT, call_err_status) ! Line 403
+                IF (call_err_status /= 0) THEN
+                    ierr = 4030 + call_err_status ! Specific error code for INVERSE failure in FINT_PD
+                    CYCLE ! Or handle error more gracefully, e.g., set FINT to error values and return
+                END IF
                 
 		    END IF
     		
@@ -490,8 +494,12 @@
 		LSTRESS_PREDICTOR = LSTRESS + MATMUL(ELAS_MAT,STRAIN)
 		!
 
-		CALL CONSTITUTION(LSTRESS_PREDICTOR,LMAT_TYPE, LSTRAIN, STRAIN, LPROP, DLT, FMAT, & !IN
-		                  LSTATE, LSTRESS, L_S_STRESS, L_H_STRESS) !IN/OUT, OUT
+!        INTEGER :: constitution_error_flag
+		CALL CONSTITUTION(LSTRESS_PREDICTOR,LMAT_TYPE, LSTRAIN, STRAIN, LPROP, DLT, FMAT, &
+		                  LSTATE, LSTRESS, L_S_STRESS, L_H_STRESS, constitution_error_flag) !IN/OUT, OUT
+        IF (constitution_error_flag /= 0) ierr = constitution_error_flag ! Propagate error
+                                                                    ! Further error handling might be needed here
+
 		!
 		! ********** SAVE STATE AND FEILD VARIABLES ********** 
 		!
@@ -595,26 +603,32 @@
               FINT3_J(1:3) = DX_t_J(1:3,1)  
 			  
 			  IF (1.eq.0) THEN
-			  WRITE(*,*)
-			  WRITE(*,*) 'INVK_J=', INVK_J
-			  WRITE(*,*)
-			  WRITE(*,*) 'DX_t_J=', DX_t_J
-			  WRITE(*,*)
-			  WRITE(*,*) 'FINT3_J=', FINT3_J
-			  WRITE(*,*)
+			  ! WRITE(*,*)
+			  ! WRITE(*,*) 'INVK_J=', INVK_J
+			  ! WRITE(*,*)
+			  ! WRITE(*,*) 'DX_t_J=', DX_t_J
+			  ! WRITE(*,*)
+			  ! WRITE(*,*) 'FINT3_J=', FINT3_J
+			  ! WRITE(*,*)
 			  END IF
            
 		       DO K = 1, 3
-                 ID_RANK = OMP_get_thread_num()  !OMPJOE
+                 ! ID_RANK = OMP_get_thread_num()  !OMPJOE - Remove this for OpenACC
              
                     !
                     !ASSEMBLE TO JJ
                     !
-                    FINT_TEMP(ID_RANK+1,K,JJ) = FINT_TEMP(ID_RANK+1,K,JJ) - FINT3_J(K)*GVOL(I)*SHP(J)  * GVOL(JJ)
+                    ! FINT_TEMP(ID_RANK+1,K,JJ) = FINT_TEMP(ID_RANK+1,K,JJ) - FINT3_J(K)*GVOL(I)*SHP(J)  * GVOL(JJ)
+                    !$ACC ATOMIC UPDATE
+                    FINT((JJ-1)*3+K) = FINT((JJ-1)*3+K) - FINT3_J(K)*GVOL(I)*SHP(J)  * GVOL(JJ)
+
                     !
                     !ASSEMBLE TO I ITSELF
                     !       
-                    FINT_TEMP(ID_RANK+1,K,I) = FINT_TEMP(ID_RANK+1,K,I) + FINT3(K)*GVOL(JJ)*SHP(J)    *GVOL(I)      
+                    ! FINT_TEMP(ID_RANK+1,K,I) = FINT_TEMP(ID_RANK+1,K,I) + FINT3(K)*GVOL(JJ)*SHP(J)    *GVOL(I)
+                    !$ACC ATOMIC UPDATE
+                    FINT((I-1)*3+K) = FINT((I-1)*3+K) + FINT3(K)*GVOL(JJ)*SHP(J)    *GVOL(I)
+   
              
              
 		       END DO     
@@ -640,16 +654,23 @@
            
 		   
 		       DO K = 1, 3
-                 ID_RANK = OMP_get_thread_num()  !OMPJOE
+                 ! ID_RANK = OMP_get_thread_num()  !OMPJOE - Remove this for OpenACC
+
              
                     !
                     !ASSEMBLE TO JJ
                     !
-                    FINT_TEMP(ID_RANK+1,K,JJ) = FINT_TEMP(ID_RANK+1,K,JJ) - FINT3(K)*GVOL(I)*SHP(J)  * GVOL(JJ)
+                    ! FINT_TEMP(ID_RANK+1,K,JJ) = FINT_TEMP(ID_RANK+1,K,JJ) - FINT3(K)*GVOL(I)*SHP(J)  * GVOL(JJ)
+                    !$ACC ATOMIC UPDATE
+                    FINT((JJ-1)*3+K) = FINT((JJ-1)*3+K) - FINT3(K)*GVOL(I)*SHP(J)  * GVOL(JJ)
+
                     !
                     !ASSEMBLE TO I ITSELF
                     !       
-                    FINT_TEMP(ID_RANK+1,K,I) = FINT_TEMP(ID_RANK+1,K,I) + FINT3(K)*GVOL(JJ)*SHP(J)    *GVOL(I)      
+                    ! FINT_TEMP(ID_RANK+1,K,I) = FINT_TEMP(ID_RANK+1,K,I) + FINT3(K)*GVOL(JJ)*SHP(J)    *GVOL(I)
+                    !$ACC ATOMIC UPDATE
+                    FINT((I-1)*3+K) = FINT((I-1)*3+K) + FINT3(K)*GVOL(JJ)*SHP(J)    *GVOL(I)
+     
              
              
 		       END DO     
@@ -666,22 +687,21 @@
         CONTINUE
 	  
              
-	  END DO !INTEGRATION POINT (NODE) LOOP
-      !$OMP END DO
-      !$OMP END PARALLEL	  
+	  END DO !INTEGRATION POINT (NODE) LOOP      
+      !$ACC END PARALLEL LOOP  
       !
       !FINT_TEMP TO HOLD THE VALUES FOR OPENMP REDUCE(ASSEMBLE,ADD) IN THE END
       !
-      !$OMP PARALLEL PRIVATE(I,K,ID_RANK) SHARED(FINT_TEMP,NCORES_INPUT)
-      !$OMP DO      
-      DO I = 1, GNUMP
-        DO K = 1, 3
-		    FINT((I-1)*3+K) =  SUM(FINT_TEMP(1:NCORES_INPUT,K,I)) 
-        END DO 
-      
-      END DO         
-      !$OMP END DO
-      !$OMP END PARALLEL 
+!      !$OMP PARALLEL PRIVATE(I,K,ID_RANK) SHARED(FINT_TEMP,NCORES_INPUT)
+!      !$OMP DO      
+!      DO I = 1, GNUMP
+!        DO K = 1, 3
+!		    FINT((I-1)*3+K) =  SUM(FINT_TEMP(1:NCORES_INPUT,K,I)) 
+!        END DO 
+!      
+!      END DO         
+!      !$OMP END DO
+!      !$OMP END PARALLEL 
 
 	  
 	  
@@ -754,7 +774,7 @@
       END IF !CALC TIME STEP
       
 	  
-	  DEALLOCATE(FINT_TEMP)
+!	  DEALLOCATE(FINT_TEMP)
 	  RETURN
 	  END SUBROUTINE
 	  

@@ -12,12 +12,28 @@
     !*     Copyright 2016 Michael C Hillman                 *
     !*                                                      *
     !********************************************************
+MODULE RK_PROCEDURES_MOD
+    USE INVERSE_MOD
+    USE FINT_FUNCTIONS
+    IMPLICIT NONE
+    PRIVATE
+    PUBLIC :: RK1
+    PUBLIC :: FILL_H
+    PUBLIC :: DERIV_H
+    PUBLIC :: UDFM_SHAPE_TENSOR
+    PUBLIC :: DFM_SHAPE_TENSOR
+    PUBLIC :: MLS_KERNEL0
+    PUBLIC :: HUGHES_WINGET 
+    PUBLIC :: D_HUGHES_WINGET 
+    PUBLIC :: ROTATE_TENSOR 
 
+CONTAINS
     SUBROUTINE RK1(X, DEG, MSIZE, CONT, IMPL, GCOO, GWIN, GNUMP, LSTACK, LN, LNMAX, EBCS,SELF_EBC, &
         QL, QL_COEF,QL_LEN,  &
         SHP, SHPD,SHSUP)
-
-    IMPLICIT NONE 
+    !$ACC ROUTINE SEQ
+!    USE INVERSE_MOD
+!    IMPLICIT NONE 
 
     DOUBLE PRECISION, INTENT(IN):: X(3)
     INTEGER, INTENT(IN):: DEG, MSIZE, CONT, GNUMP, LN, LNMAX
@@ -72,7 +88,7 @@
     DOUBLE PRECISION:: XM_QLX,YM_QLY,ZM_QLZ
     DOUBLE PRECISION:: DENOM
     LOGICAL:: ISZERO
-
+    INTEGER :: ierr_inv, ierr_mls
     !
     ! WE NEED TO BE CAREFUL NOT TO EVALUATE THE SINGULAR KERNAL AT THE NODE
     ! ALSO, WE NEED TO OUTPUT PHYSICAL DISPLACEMENTS!
@@ -137,7 +153,14 @@
  !           DENOM = (GWIN(1,II)*GWIN(2,II)*GWIN(3,II))**(1.D0/3.D0)
             DIA(I) = SQRT(XMXI_OA(I)**2+YMYI_OA(I)**2+ZMZI_OA(I)**2)
 
-            CALL MLS_KERNEL0(DIA(I),GWIN(1,II),CONT,PHI(I),PHIX_X,ISZERO)
+            CALL MLS_KERNEL0(DIA(I),GWIN(1,II),CONT,PHI(I),PHIX_X,ISZERO, ierr_mls)
+            IF (ierr_mls /= 0) THEN
+                ! Handle MLS_KERNEL0 error, e.g., set outputs to error values and skip/return
+                SHP(I) = HUGE(0.0D0)
+                SHPD(:,I) = HUGE(0.0D0)
+                CYCLE ! or RETURN if appropriate
+            END IF
+
             
             IF (IMPL.EQ.1) THEN
 
@@ -168,9 +191,22 @@
         ELSE
 
 
-            CALL MLS_KERNEL0(ABS(XMXI_OA(I)),GWIN(1,II),CONT,PHIX,PHIX_X,ISZERO)
-            CALL MLS_KERNEL0(ABS(YMYI_OA(I)),GWIN(2,II),CONT,PHIY,PHIY_Y,ISZERO)
-            CALL MLS_KERNEL0(ABS(ZMZI_OA(I)),GWIN(3,II),CONT,PHIZ,PHIZ_Z,ISZERO)
+            CALL MLS_KERNEL0(ABS(XMXI_OA(I)),GWIN(1,II),CONT,PHIX,PHIX_X,ISZERO, ierr_mls)
+            IF (ierr_mls /= 0) THEN
+                ! Handle MLS_KERNEL0 error
+                SHP(I) = HUGE(0.0D0); SHPD(:,I) = HUGE(0.0D0); CYCLE;
+            END IF
+            CALL MLS_KERNEL0(ABS(YMYI_OA(I)),GWIN(2,II),CONT,PHIY,PHIY_Y,ISZERO, ierr_mls)
+            IF (ierr_mls /= 0) THEN
+                ! Handle MLS_KERNEL0 error
+                SHP(I) = HUGE(0.0D0); SHPD(:,I) = HUGE(0.0D0); CYCLE;
+            END IF
+            CALL MLS_KERNEL0(ABS(ZMZI_OA(I)),GWIN(3,II),CONT,PHIZ,PHIZ_Z,ISZERO, ierr_mls)
+            IF (ierr_mls /= 0) THEN
+                ! Handle MLS_KERNEL0 error
+                SHP(I) = HUGE(0.0D0); SHPD(:,I) = HUGE(0.0D0); CYCLE;
+            END IF
+
 
             !DENOM = GWIN(1,II)*GWIN(2,II)*GWIN(3,II)
             PHI(I) = PHIX*PHIY*PHIZ !/DENOM
@@ -303,9 +339,17 @@
     END IF
 
     IF (MSIZE.EQ.4) THEN
-    CALL M44INV(M_FULL, MINV)
+    CALL M44INV(M_FULL, MINV, ierr_inv) ! 假設 ierr_inv 已宣告為 INTEGER
+    IF (ierr_inv /= 0) THEN 
+        ! 處理錯誤 (e.g., MINV = HUGE(0.0D0); SHP = HUGE(0.0D0); SHPD = HUGE(0.0D0); RETURN)
+        SHP = HUGE(0.0D0); SHPD = HUGE(0.0D0); RETURN;
+    END IF
     ELSE
-    CALL INVERSE(M_FULL, MSIZE, MINV)
+    CALL INVERSE(M_FULL, MSIZE, MINV, ierr_inv) ! 假設 ierr_inv 已宣告為 INTEGER
+    IF (ierr_inv /= 0) THEN 
+        ! 處理錯誤 (e.g., MINV = HUGE(0.0D0); SHP = HUGE(0.0D0); SHPD = HUGE(0.0D0); RETURN)
+        SHP = HUGE(0.0D0); SHPD = HUGE(0.0D0); RETURN;
+    END IF
     END IF
     
     H0 = 0.0d0
@@ -460,7 +504,7 @@
 
 
     SUBROUTINE FILL_H(XMXI_OA,YMYI_OA,ZMZI_OA,MSIZE,DEG,H_FULL)
-
+    !$ACC ROUTINE SEQ
     IMPLICIT NONE
 
     DOUBLE PRECISION, INTENT(IN)::XMXI_OA,YMYI_OA,ZMZI_OA
@@ -504,7 +548,7 @@
     ! Derivative H function
 
     SUBROUTINE DERIV_H(XMXI_OA,YMYI_OA,ZMZI_OA,MSIZE,DEG,H_X,H_Y,H_Z)
-
+    !$ACC ROUTINE SEQ
     IMPLICIT NONE
 
     DOUBLE PRECISION, INTENT(IN)::XMXI_OA,YMYI_OA,ZMZI_OA
@@ -579,7 +623,8 @@
     SUBROUTINE UDFM_SHAPE_TENSOR(X, DEG, MSIZE, CONT, IMPL, GCOO, GVOL, GWIN, GNUMP, LSTACK, LN, LNMAX, EBCS,SELF_EBC, &
         QL, QL_COEF,QL_LEN,  &
         SHP, INVK_MATX)
-
+    !$ACC ROUTINE SEQ
+!    USE INVERSE_MOD
     !
     ! THIS SUBROUTINE IS TO FORM THE UNDEFORMED SHAPE TENSOR FOR PERIDYNAMICS AT THE FIRST STEP
     !
@@ -641,11 +686,12 @@
     DOUBLE PRECISION:: K_MATX(MSIZE-1,MSIZE-1)
     !
     LOGICAL:: ISZERO
-
+    INTEGER :: ierr_inv, ierr_mls
     !
     ! KEEP SOME OF THE STATEMENT FOR LATER USE, SUCH AS SINGULAR KERNEL, QL
     ! #TODO
-    !
+    ierr_inv = 0
+    ierr_mls = 0
     !IF (SELF_EBC) THEN
     IF (.FALSE.) THEN
         DO I=1,LN
@@ -697,9 +743,22 @@
         YMYI_OA(I) = -(X(2) -  GCOO(2,II)) /GWIN(2,II)
         ZMZI_OA(I) = -(X(3) -  GCOO(3,II)) /GWIN(3,II)
 
-        CALL MLS_KERNEL0(ABS(XMXI_OA(I)),GWIN(1,II),CONT,PHIX,PHIX_X,ISZERO)
-        CALL MLS_KERNEL0(ABS(YMYI_OA(I)),GWIN(2,II),CONT,PHIY,PHIY_Y,ISZERO)
-        CALL MLS_KERNEL0(ABS(ZMZI_OA(I)),GWIN(3,II),CONT,PHIZ,PHIZ_Z,ISZERO)
+        CALL MLS_KERNEL0(ABS(XMXI_OA(I)),GWIN(1,II),CONT,PHIX,PHIX_X,ISZERO, ierr_mls)
+        IF (ierr_mls /= 0) THEN 
+            ! Handle MLS_KERNEL0 error
+            SHP(I) = HUGE(0.0D0); CYCLE;
+        END IF
+        CALL MLS_KERNEL0(ABS(YMYI_OA(I)),GWIN(2,II),CONT,PHIY,PHIY_Y,ISZERO, ierr_mls)
+        IF (ierr_mls /= 0) THEN 
+            ! Handle MLS_KERNEL0 error
+            SHP(I) = HUGE(0.0D0); CYCLE;
+        END IF
+        CALL MLS_KERNEL0(ABS(ZMZI_OA(I)),GWIN(3,II),CONT,PHIZ,PHIZ_Z,ISZERO, ierr_mls)
+        IF (ierr_mls /= 0) THEN 
+            ! Handle MLS_KERNEL0 error
+            SHP(I) = HUGE(0.0D0); CYCLE;
+        END IF
+
 
         !DENOM = GWIN(1,II)*GWIN(2,II)*GWIN(3,II)
         PHI(I) = PHIX*PHIY*PHIZ !/DENOM
@@ -719,7 +778,12 @@
     END DO
 
 
-    CALL INVERSE(K_MATX, MSIZE-1, INVK_MATX)
+    CALL INVERSE(K_MATX, MSIZE-1, INVK_MATX, ierr_inv)
+    IF (ierr_inv /= 0) THEN 
+        ! 處理 K_MATX 求逆失敗的情況 (e.g., INVK_MATX = HUGE(0.0D0); RETURN)
+        INVK_MATX = HUGE(0.0D0); RETURN;
+    END IF
+
 
 
     RETURN
@@ -729,7 +793,7 @@
 
     SUBROUTINE DFM_SHAPE_TENSOR(X_0,X_t, DEG, MSIZE, CONT, GCOO, GVOL, GWIN, GNUMP, LSTACK, LN, LNMAX,  &
         LCOO_CUURENT, SHP, S_MATX)
-
+    !$ACC ROUTINE SEQ
     !
     ! THIS SUBROUTINE IS TO FORM THE DEFORMED SHAPE TENSOR FOR PERIDYNAMICS AT THE FIRST STEP
     !
@@ -805,3 +869,216 @@
 
     RETURN
     END SUBROUTINE
+    SUBROUTINE MLS_KERNEL0(XN,WIN,CONT,PHI,PHIX,ISZERO, ierr)
+    !$ACC ROUTINE SEQ
+    IMPLICIT NONE
+    DOUBLE PRECISION, INTENT(IN):: XN,WIN
+    INTEGER, INTENT(IN):: CONT
+    DOUBLE PRECISION, INTENT(OUT):: PHI,PHIX
+    LOGICAL, INTENT(OUT):: ISZERO
+    INTEGER, INTENT(OUT) :: ierr
+    ISZERO = .FALSE.
+    ierr = 0
+    IF (CONT.EQ.3) THEN !CUBIC SPLINE
+        IF (XN.LE.1.0D0) THEN
+            PHI = 1.0D0 - 6.0D0*XN**2 + 8.0D0*XN**3 - 3.0D0*XN**4
+            PHIX = -12.0D0*XN + 24.0D0*XN**2 - 12.0D0*XN**3
+        ELSE
+            PHI = 0.0D0
+            PHIX = 0.0D0
+            ISZERO = .TRUE.
+        END IF
+    ELSE
+!        PRINT *, 'MLS KERNEL NOT DEFINED' ! This PRINT/STOP will be an issue on device
+!        STOP                             ! Needs error flag propagation if called on device
+        ierr = 1
+    END IF ! CONT.EQ.3
+    RETURN
+    END SUBROUTINE MLS_KERNEL0
+	  SUBROUTINE HUGHES_WINGET(LMAT, & !IN
+	                           ROT,STRAIN,D) !OUT
+	  !$ACC ROUTINE SEQ
+	  ! FUNCTION OF THIS SUBROUTINE:
+	  !
+	  ! COMPUTE THE ROTATION AND STRAIN TENSORS USING
+	  ! THE SO-CALLED HUGHES-WINGET ALGORITHM
+	  !
+      ! USE FINT_FUNCTIONS ! 已在模組層級 USE
+      ! IMPLICIT NONE ! 已在模組層級定義
+	  !
+	  !GLOBAL IN-OUT
+	  DOUBLE PRECISION, INTENT(IN):: LMAT(3,3)
+	  DOUBLE PRECISION, INTENT(OUT):: ROT(3,3),STRAIN(6)
+      INTEGER :: ierr_inv
+	  !LOCAL VARIABLES
+	  DOUBLE PRECISION:: INV_LMAT(3,3) ! 未被使用
+	  DOUBLE PRECISION:: IDENT(3,3)
+	  DOUBLE PRECISION:: A(3,3),IW(3,3),IW_INV(3,3)
+	  DOUBLE PRECISION:: A_INV(3,3)
+	  DOUBLE PRECISION:: G(3,3)
+	  DOUBLE PRECISION:: G_T(3,3)
+	  DOUBLE PRECISION:: E(3,3),W(3,3)
+      DOUBLE PRECISION:: D(6)
+	  DATA IDENT/ 1.0d0, 0.0d0, 0.0d0, &
+	                  0.0d0, 1.0d0, 0.0d0, &
+	                  0.0d0, 0.0d0, 1.0d0/
+	  !
+	  ! GET A=(I + 0.5*L)^-1
+	  !
+	  A = IDENT + 0.5d0*LMAT
+	  !
+      !CALL INVERSE(A, 3, A_INV)
+	  CALL INV3 (A, A_INV, ierr_inv) ! INV3 來自 INVERSE_MOD
+      IF (ierr_inv /= 0) THEN 
+        ROT = 0.0D0; STRAIN = 0.0D0; D = 0.0D0; RETURN;
+      END IF
+
+
+
+	  !
+	  ! GET G = L*A
+	  !
+	  G = MATMUL(LMAT,A_INV)
+	  G_T=TRANSPOSE(G)
+	  !
+	  ! GET W = 1/2*(G-G^T)
+	  ! GET E = 1/2*(G+G^T)
+	  !
+	  W =    0.5d0*(G - G_T)
+      
+      !ROT = I + (I-0.5D*W)^-1*W
+      IW = IDENT-0.5D0*W
+	  CALL INV3 (IW, IW_INV, ierr_inv)
+      IF (ierr_inv /= 0) THEN 
+        ROT = 0.0D0; STRAIN = 0.0D0; D = 0.0D0; RETURN;
+      END IF
+
+
+      !CALL INVERSE(IW, 3, IW_INV)
+      ROT = IDENT + MATMUL(IW_INV,W)
+      
+      
+	  E = 0.5d0*(G + G_T)
+	  !
+	  STRAIN = TENSOR_2_VTENSOR(E) ! TENSOR_2_VTENSOR 來自 FINT_FUNCTIONS
+      D=STRAIN
+	  !
+      !TIMES FACT 2 FOR THE SHEAR COMPONENTS, TO BE CONSISTANT WITH THE STRAIN DEFINITION
+      !
+      STRAIN(4) = 2.D0*STRAIN(4)
+      STRAIN(5) = 2.D0*STRAIN(5)
+      STRAIN(6) = 2.D0*STRAIN(6)
+      !WRITE(*,*)'FACT 2'
+	  RETURN
+	  END SUBROUTINE HUGHES_WINGET
+	  
+    
+	  SUBROUTINE D_HUGHES_WINGET(LMAT,DLMAT, & !IN
+	                           ROT,DSTRAIN) !OUT
+	  !$ACC ROUTINE SEQ
+	  ! FUNCTION OF THIS SUBROUTINE:
+	  !
+	  ! COMPUTE THE ROTATION AND STRAIN TENSORS USING
+	  ! THE SO-CALLED HUGHES-WINGET ALGORITHM
+	  !
+      ! USE FINT_FUNCTIONS ! 已在模組層級 USE
+      ! IMPLICIT NONE ! 已在模組層級定義
+	  !
+	  !GLOBAL IN-OUT
+	  DOUBLE PRECISION, INTENT(IN):: LMAT(3,3)
+	  DOUBLE PRECISION, INTENT(IN):: DLMAT(3,3)
+	  DOUBLE PRECISION, INTENT(OUT):: ROT(3,3) ! ROT 未被賦值
+	  DOUBLE PRECISION, INTENT(OUT):: DSTRAIN(6)
+      INTEGER :: ierr_inv
+	  !
+	  !LOCAL VARIABLES
+	  DOUBLE PRECISION:: INV_LMAT(3,3) ! 未被使用
+	  DOUBLE PRECISION:: IDENT(3,3)
+	  DOUBLE PRECISION:: A(3,3),DA(3,3) ! IW, IW_INV 在此未使用
+	  DOUBLE PRECISION:: A_INV(3,3), IDA(3,3), TEMP1(3,3), TEMP2(3,3)
+	  DOUBLE PRECISION:: DG(3,3)
+	  DOUBLE PRECISION:: DG_T(3,3)
+	  DOUBLE PRECISION:: DE(3,3)
+	  DATA IDENT/ 1.0d0, 0.0d0, 0.0d0, &
+	                  0.0d0, 1.0d0, 0.0d0, &
+	                  0.0d0, 0.0d0, 1.0d0/
+	  !
+	  ! GET A=(I + 0.5*L)^-1
+	  !
+	  A = IDENT + 0.5d0*LMAT
+	  !
+	  CALL INV3 (A, A_INV, ierr_inv) ! INV3 來自 INVERSE_MOD
+      IF (ierr_inv /= 0) THEN 
+        DSTRAIN = 0.0D0; ROT = 0.0D0; RETURN;
+      END IF
+
+
+      
+      !CALL INVERSE(A, 3, A_INV)
+      
+	  !
+	  ! GET A,i
+	  !
+	  !!DA = 0.5d0*A
+	  DA = 0.5d0*DLMAT
+      
+	  !
+	  ! GET INV(A,i)
+	  !
+	  IDA = MATMUL(-A_INV,DA)
+	  IDA = MATMUL(IDA,A_INV)
+	  !
+	  ! GET TEMP MATS
+	  !
+	  !!TEMP1 = MATMUL(DLMAT,A)
+	  !!TEMP2 = MATMUL(LMAT,DA)
+      
+	  TEMP1 = MATMUL(DLMAT,A_INV)
+	  TEMP2 = MATMUL(LMAT,IDA)
+      
+      
+	  !
+	  ! DG = DL*A + L*DA
+	  !
+	  DG = TEMP1 + TEMP2
+	  DG_T=TRANSPOSE(DG)
+	  !
+	  ! GET DW = 1/2*(DG-DG^T)
+	  ! GET DE = 1/2*(DG+DG^T)
+	  !
+	  DE = 0.5d0*(DG + DG_T)
+	  !!DE = DG + DG_T
+      
+	  !
+	  DSTRAIN = TENSOR_2_VTENSOR(DE) ! TENSOR_2_VTENSOR 來自 FINT_FUNCTIONS
+	  !
+      !TIMES FACT 2 FOR THE SHEAR COMPONENTS, TO BE CONSISTANT WITH THE STRAIN DEFINITION
+      !
+      DSTRAIN(4) = 2.D0*DSTRAIN(4)
+      DSTRAIN(5) = 2.D0*DSTRAIN(5)
+      DSTRAIN(6) = 2.D0*DSTRAIN(6)
+      ! 注意：輸出參數 ROT 在此子常式中並未被賦值。
+      ! 如果不需要輸出 ROT，應從參數列表中移除。
+      ROT = 0.0D0
+	  RETURN
+	  END SUBROUTINE D_HUGHES_WINGET
+
+      SUBROUTINE ROTATE_TENSOR(TRANSFORMATION_MATRIX_6X6, TENSOR_VOIGT_INOUT)
+      !$ACC ROUTINE SEQ
+      ! IMPLICIT NONE ! 已在模組層級定義
+      ! FUNCTION OF THIS SUBROUTINE:
+      ! ROTATE A (VOIGT NOTATION) TENSOR USING A GIVEN 6X6 TRANSFORMATION MATRIX
+      !
+      DOUBLE PRECISION, INTENT(IN)    :: TRANSFORMATION_MATRIX_6X6(6,6)
+      DOUBLE PRECISION, INTENT(INOUT) :: TENSOR_VOIGT_INOUT(6)
+
+      !LOCAL VARIABLES
+      DOUBLE PRECISION :: TEMP_TENSOR_VOIGT(6)
+
+      ! S_rotated_voigt = T_transformation * S_voigt_old
+      TEMP_TENSOR_VOIGT = MATMUL(TRANSFORMATION_MATRIX_6X6, TENSOR_VOIGT_INOUT)
+      TENSOR_VOIGT_INOUT = TEMP_TENSOR_VOIGT
+
+      RETURN
+      END SUBROUTINE ROTATE_TENSOR
+END MODULE RK_PROCEDURES_MOD

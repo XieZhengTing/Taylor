@@ -16,6 +16,19 @@
     
        MODULE CONTROL
       !
+    !$ACC DECLARE COPYIN(RK_DEGREE, RK_CONT, RK_IMPL, ITYPE_INT, RK_PSIZE, RK_DILA, TIME_OUTPUT, &
+     !$ACC& IGRAVITY, QL_COEF, QL_LEN, QL, LFEM_OUTPUT, PERIDYNAMICS, KCONTACT, IKCONTACT, &
+     !$ACC& HPC_SCHEME, NCORES, NCORES_INPUT, MAX_CORES, THIS_CORE_NO, LUSER_OMP_CORES, GHOST_BUFFER, &
+     !$ACC& PDSEARCH, PDSTIME, AUTO_TS, DLT_FAC, TIME_SEARCH, LFINITE_STRAIN, LLAGRANGIAN, &
+     !$ACC& STABILIZATION_CONTROL_COEF, USE_STAB_CONTROL, node_id_OUTPUT, displacement_OUTPUT, &
+     !$ACC& velocity_OUTPUT, acceleration_OUTPUT, fint_OUTPUT, fixity_OUTPUT, bodyid_OUTPUT, &
+     !$ACC& material_type_OUTPUT, initial_coordinate_OUTPUT, init_velocity_OUTPUT, &
+     !$ACC& normalized_window_OUTPUT, nodal_volume_OUTPUT, nodal_mass_OUTPUT, Poissons_ratio_OUTPUT, &
+     !$ACC& Youngs_modulus_OUTPUT, density_OUTPUT, physical_window_OUTPUT, BASIC_OUTPUT, ALL_OUTPUT, &
+     !$ACC& UNF_OUTPUT, characteristic_distance_OUTPUT, max_wave_vel_OUTPUT, pre_disp_force_OUTPUT, &
+     !$ACC& stress_OUTPUT, strain_OUTPUT, eps_OUTPUT, eps_shear_OUTPUT, eps_vol_OUTPUT, dam_OUTPUT, &
+     !$ACC& IJKspace_OUTPUT, SHSUP)
+      !
 	  ! FUNCTION OF THIS LOGIC:
 	  !
 	  ! This module contains the "global" scalar-type parameters read into the control file. It is
@@ -40,7 +53,7 @@
        !METHOD
        LOGICAL:: PERIDYNAMICS
 	   LOGICAL:: KCONTACT
-       INTEGER, SAVE::IKCONTACT
+!       INTEGER, SAVE::IKCONTACT
 	   !
 	   !HPC VARIABLES
 	   !
@@ -49,7 +62,7 @@
        LOGICAL:: LUSER_OMP_CORES
        INTEGER, SAVE:: GHOST_BUFFER
        INTEGER, SAVE:: PDSEARCH   ! IN SEMI LAGLANGIAN, WILL DO SOFT_SEARCH AFTER 'PDSEARCH' TIME STEPS, BY DEFAULT =1
-       DOUBLE PRECISION, SAVE::PDSTIME !PERIODIC SEARCH TIME
+!       DOUBLE PRECISION, SAVE::PDSTIME !PERIODIC SEARCH TIME
        !
 	   ! SIMULATION PARAMETERS
 	   !
@@ -91,9 +104,11 @@
        LOGICAL, SAVE:: eps_shear_OUTPUT       
        LOGICAL, SAVE:: eps_vol_OUTPUT   
        LOGICAL, SAVE:: dam_OUTPUT 
-       LOGICAL, SAVE:: IJKspace_OUTPUT
+!       LOGICAL, SAVE:: IJKspace_OUTPUT
        LOGICAL:: SHSUP    !if ture, then using spherical support, =false by defult, then using box support
-       
+       INTEGER, SAVE::IKCONTACT
+       DOUBLE PRECISION, SAVE::PDSTIME !PERIODIC SEARCH TIME
+       LOGICAL, SAVE:: IJKspace_OUTPUT       
 
 
        END MODULE

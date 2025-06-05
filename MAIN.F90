@@ -120,6 +120,11 @@
     DOUBLE PRECISION:: LOCAL_DLT
 
     LOGICAL:: LINIT_TEMP
+    INTEGER :: ierr_handeler ! Error flag from HANDELER
+    DOUBLE PRECISION :: FEXT_M_AT_ENTRY ! Declare FEXT_M_AT_ENTRY in the main program's declaration block
+
+
+
     !
     !
     !*********************************************************
@@ -287,6 +292,93 @@
     !
     CALL WRITE_OUT('STARTING TIME INTEGRATION')
     !
+    WRITE(*,*)
+    WRITE(*,*) 'DEBUG: MAIN - Array size checks before ACC DATA region:'
+    WRITE(*,*) '  TOTAL_LOCAL_SIZE = ', TOTAL_LOCAL_SIZE
+    WRITE(*,*) '  Expected FEXT/FINT size = ', 3*TOTAL_LOCAL_SIZE
+    
+    IF (ALLOCATED(LOCAL_FEXT)) THEN
+        WRITE(*,*) '  Actual LOCAL_FEXT size = ', SIZE(LOCAL_FEXT)
+        IF (SIZE(LOCAL_FEXT) < 3*TOTAL_LOCAL_SIZE) THEN ! Use < for insufficient size
+            WRITE(*,*) 'FATAL ERROR: MAIN - LOCAL_FEXT size mismatch! Allocated: ', SIZE(LOCAL_FEXT), ' Required: ', 3*TOTAL_LOCAL_SIZE
+            CALL EXIT_PROGRAM('LOCAL_FEXT size error', -33)
+        END IF
+    ELSE
+        WRITE(*,*) 'FATAL ERROR: MAIN - LOCAL_FEXT not allocated before ACC DATA region!'
+        CALL EXIT_PROGRAM('LOCAL_FEXT not allocated', -34)
+    END IF
+    
+    IF (ALLOCATED(LOCAL_FINT)) THEN
+        WRITE(*,*) '  Actual LOCAL_FINT size = ', SIZE(LOCAL_FINT)
+        IF (SIZE(LOCAL_FINT) < 3*TOTAL_LOCAL_SIZE) THEN ! Use < for insufficient size
+            WRITE(*,*) 'FATAL ERROR: MAIN - LOCAL_FINT size mismatch! Allocated: ', SIZE(LOCAL_FINT), ' Required: ', 3*TOTAL_LOCAL_SIZE
+            CALL EXIT_PROGRAM('LOCAL_FINT size error', -35)
+        END IF
+    ELSE
+        WRITE(*,*) 'FATAL ERROR: MAIN - LOCAL_FINT not allocated before ACC DATA region!'
+        CALL EXIT_PROGRAM('LOCAL_FINT not allocated', -36)
+    END IF
+    WRITE(*,*)
+    ! Ensure critical arrays are allocated before entering ACC DATA region
+    IF (.NOT. ALLOCATED(LOCAL_COO)) THEN
+        WRITE(*,*) 'FATAL ERROR: MAIN - LOCAL_COO not allocated before ACC DATA region.'
+        CALL EXIT_PROGRAM('Array LOCAL_COO not allocated', -30)
+    END IF
+    IF (.NOT. ALLOCATED(LOCAL_FINT)) THEN
+        WRITE(*,*) 'FATAL ERROR: MAIN - LOCAL_FINT not allocated before ACC DATA region.'
+        CALL EXIT_PROGRAM('Array LOCAL_FINT not allocated', -31)
+    END IF
+    IF (.NOT. ALLOCATED(LOCAL_FEXT)) THEN
+        WRITE(*,*) 'FATAL ERROR: MAIN - LOCAL_FEXT not allocated before ACC DATA region.'
+        CALL EXIT_PROGRAM('Array LOCAL_FEXT not allocated', -32)
+    END IF
+    ! Add checks for other critical allocatable arrays as needed...
+
+    ! Initialize NMO arrays on host before entering data region
+    LOCAL_FINT_NMO = 0.0D0
+    LOCAL_FEXT_NMO = 0.0D0
+    LOCAL_FINT = 0.0D0
+    LOCAL_FEXT = 0.0D0
+    LOCAL_DLT = 0.0d0 ! Corresponds to DLT_FINT from HANDELER/CONSTRUCT_FINT
+    LOCAL_CHAR_DIST = 0.0d0
+    LOCAL_WAVE_VEL = 0.0d0
+    DLOCAL_INT_ENERGY = 0.0d0
+    DLOCAL_KIN_ENERGY = 0.0d0
+    DLOCAL_EXT_ENERGY = 0.0d0
+    LOCAL_INT_WORK = 0.0d0
+    TOTAL_FORCE = 0.0d0
+
+    !$ACC DATA &
+      ! COPYIN: Host to Device, Device reads, not written back unless explicitly updated
+      !$ACC COPYIN(LOCAL_COO, MODEL_BODYFORCE, MODEL_ELCON, MODEL_NODE_IDS, MODEL_NORM_WIN) &
+      !$ACC COPYIN(LOCAL_SM_LEN, LOCAL_SM_AREA, LOCAL_SM_VOL, LOCAL_WIN, LOCAL_VOL, LOCAL_NSNI_FAC) &
+      !$ACC COPYIN(LOCAL_VINIT, LOCAL_MAT_TYPE, LOCAL_PROP, LOCAL_BODY_ID) &
+      !$ACC COPYIN(LOCAL_X_MOM, LOCAL_Y_MOM, LOCAL_Z_MOM, LOCAL_IJKSPC) &
+      !$ACC COPYIN(LOCAL_XDIST_MAX, LOCAL_YDIST_MAX, LOCAL_ZDIST_MAX) &
+      !$ACC COPYIN(LOCAL_EBC, LOCAL_NONZERO_EBC, LOCAL_GHOST) &
+      !$ACC COPYIN(NCORES_INPUT, HPC_SCHEME, TOTAL_LOCAL_SIZE, MODEL_NUMP, LOCAL_NUMP, GHOST_BUFFER) &
+      !$ACC COPYIN(TIME_END, TIME_OUTPUT, AUTO_TS, LFINITE_STRAIN, LLAGRANGIAN, PERIDYNAMICS, PDSTIME, PDSEARCH, DLT_FAC) &
+      !$ACC COPYIN(FIXITY2_STEPS, FIXITY2_TIME, FIXITY2_NONZERO_EBC) &
+      ! COPY: Host to Device, Device reads/writes, written back at END DATA
+      !$ACC COPY(LOCAL_STATE, LOCAL_STRESS, LOCAL_STRAIN, LOCAL_H_STRESS, LOCAL_S_STRESS) &
+      !$ACC COPY(LOCAL_DX_STRESS, LOCAL_DY_STRESS, LOCAL_DZ_STRESS) &
+      !$ACC COPY(LOCAL_DX_STRAIN, LOCAL_DY_STRAIN, LOCAL_DZ_STRAIN) &
+      !$ACC COPY(LOCAL_ACL, LOCAL_VEL, LOCAL_DSP) &
+      !$ACC COPY(LOCAL_DSP_TOT, LOCAL_DSP_TOT_PHY, LOCAL_COO_CURRENT) &
+      !$ACC COPY(LOCAL_PRFORCE, LOCAL_ACL_PHY, LOCAL_VEL_PHY, LOCAL_DINC_PHY) &
+      !$ACC COPY(LOCAL_MASS, LOCAL_STRAIN_EQ) &
+      !$ACC COPY(LOCAL_EBC_NODES) & ! Modified in STATE_FEILD_INIT, used by HANDELER
+      !$ACC COPY(LOCAL_CHAR_DIST, LOCAL_WAVE_VEL) & ! Output from HANDELER, used by host
+      !$ACC COPY(TIME, DLT, LINIT, LINIT_TIME, LINIT_TEMP, DO_INTERP, TIME_COUNTER, STEPS, TIMER_STEPS, exodusStep) &
+      !$ACC COPY(LOCAL_INT_WORK) & ! Accumulated in CONSTRUCT_FINT, used for DLOCAL_INT_ENERGY
+      ! CREATE: Created on Device, not initialized from Host.
+      ! If needed on host, must be COPYOUT or explicitly UPDATED.
+      !$ACC CREATE(LOCAL_FINT, LOCAL_FEXT, LOCAL_FINT_NMO, LOCAL_FEXT_NMO) &
+      ! COPYOUT: Device computes, written back to Host at END DATA. Host initial value not used.
+      !$ACC COPYOUT(LOCAL_DLT) & ! DLT_FINT from HANDELER
+      !$ACC COPYOUT(DLOCAL_INT_ENERGY, DLOCAL_KIN_ENERGY, DLOCAL_EXT_ENERGY, DLOCAL_TOTAL_ENERGY) &
+      !$ACC COPYOUT(TOTAL_FORCE) ! Accumulated on device, final value needed on host
+
 
     !WRITE(50,'(2A8,2A15,4A15)') 'Out Step','Step','Time','Delta T','Int Engery', 'Kin Energy', 'Ext Energy', 'Tot Energy', 'Est Time Rem'
     !WRITE(*,'(2A8,2A15,4A15)')  'Out Step','Step','Time','Delta T','Int Engery', 'Kin Energy', 'Ext Energy', 'Tot Energy', 'Est Time Rem'
@@ -295,15 +387,12 @@
     WRITE(*,'(2A8,2A15,1A30)')  'Out Step','Step','Time','Delta T', 'Estimated Time Remaining'
     
 	!
-    DLOCAL_INT_ENERGY = 0.0d0
-    DLOCAL_KIN_ENERGY = 0.0d0
-    DLOCAL_EXT_ENERGY = 0.0d0
-    LOCAL_INT_WORK = 0.0d0
-    TOTAL_FORCE(:,:)=0.0d0
+
     !
     DO
         !
-        !
+        !$ACC UPDATE DEVICE(TIME, DLT, LINIT, LINIT_TIME, DO_INTERP, TIME_COUNTER, STEPS, TIMER_STEPS, exodusStep) ! Ensure scalars are up-to-date on device
+
         !
         ! ASSIGN NEW GHOSTS (RIGHT NOW, THIS SUBROUTINE DOES NOTHING)
         !
@@ -318,8 +407,51 @@
 
 
         IF(LINIT) THEN
-            LOCAL_DSP = 0.0d0 !TO GET ZERO FINT, JUST TO GET SHP
+!            !$ACC UPDATE DEVICE(LINIT)
+            LOCAL_DSP = 0.0d0 ! TO GET ZERO FINT, JUST TO GET SHP
+            ! Explicitly initialize FINT and FEXT on the device since they are now CREATE'd
+            !$ACC PARALLEL LOOP DEFAULT(PRESENT)
+            DO I = 1, 3*TOTAL_LOCAL_SIZE
+                LOCAL_FINT(I) = 0.0D0
+                LOCAL_FEXT(I) = 0.0D0
+            END DO
+            !$ACC END PARALLEL LOOP
             DO_INTERP = .FALSE.
+            ! LOCAL_DSP is already on device and modified. DO_INTERP is scalar, will be passed by value.
+
+
+            ! Detailed debug information and parameter checks
+            WRITE(*,*)
+            WRITE(*,*) 'DEBUG: MAIN - Before initial HANDELER call (LINIT=.TRUE.):'
+            WRITE(*,*) '  LINIT              = ', LINIT
+            WRITE(*,*) '  LOCAL_NUMP         = ', LOCAL_NUMP
+            WRITE(*,*) '  TOTAL_LOCAL_SIZE   = ', TOTAL_LOCAL_SIZE
+            IF (ALLOCATED(LOCAL_FINT)) THEN
+                WRITE(*,*) '  ALLOCATED(LOCAL_FINT) = .TRUE., SIZE = ', SIZE(LOCAL_FINT)
+            ELSE
+                WRITE(*,*) '  ALLOCATED(LOCAL_FINT) = .FALSE.'
+            END IF
+            IF (ALLOCATED(LOCAL_FEXT)) THEN
+                WRITE(*,*) '  ALLOCATED(LOCAL_FEXT) = .TRUE., SIZE = ', SIZE(LOCAL_FEXT)
+            ELSE
+                WRITE(*,*) '  ALLOCATED(LOCAL_FEXT) = .FALSE.'
+            END IF
+            WRITE(*,*)
+            ! Critical check before calling HANDELER
+            IF (LOCAL_NUMP <= 0) THEN
+                WRITE(*,*) 'FATAL ERROR: MAIN - LOCAL_NUMP <= 0 before initial HANDELER call. LOCAL_NUMP = ', LOCAL_NUMP
+                CALL EXIT_PROGRAM('Invalid LOCAL_NUMP in MAIN before HANDELER', -20)
+            END IF
+            ! Check FEXT array validity
+            IF (.NOT. ALLOCATED(LOCAL_FEXT)) THEN
+                WRITE(*,*) 'FATAL ERROR: MAIN - LOCAL_FEXT not allocated before HANDELER call.'
+                CALL EXIT_PROGRAM('LOCAL_FEXT allocation error in MAIN', -21)
+            END IF
+            IF (ALLOCATED(LOCAL_FEXT) .AND. (SIZE(LOCAL_FEXT) < 3*TOTAL_LOCAL_SIZE)) THEN ! Assuming FEXT should be 3*TOTAL_LOCAL_SIZE
+                WRITE(*,*) 'FATAL ERROR: MAIN - LOCAL_FEXT size insufficient.'
+                WRITE(*,*) '  Required at least: ', 3*TOTAL_LOCAL_SIZE, ' Available: ', SIZE(LOCAL_FEXT)
+                CALL EXIT_PROGRAM('LOCAL_FEXT size error in MAIN', -22)
+            END IF
             CALL HANDELER(       LOCAL_WIN,      LOCAL_VOL,         LOCAL_NUMP,     LOCAL_COO,      LOCAL_COO_CURRENT,     &
                 LOCAL_SM_LEN,    LOCAL_SM_AREA,  LOCAL_SM_VOL,      LOCAL_NSNI_FAC, LOCAL_GHOST,       &
                 LOCAL_PROP,      LOCAL_STATE,    LOCAL_STRESS,      LOCAL_STRAIN,   LOCAL_H_STRESS,LOCAL_S_STRESS,   LOCAL_DSP, LOCAL_DSP_TOT,        &
@@ -327,10 +459,20 @@
                 LOCAL_FEXT,      LOCAL_CHAR_DIST, LOCAL_WAVE_VEL, LOCAL_EBC_NODES, &
                 DO_INTERP,       LOCAL_DINC_PHY, LOCAL_VEL_PHY, LOCAL_VEL, LOCAL_ACL, LOCAL_ACL_PHY, &
                 LOCAL_DX_STRESS, LOCAL_DY_STRESS, LOCAL_DZ_STRESS, &
-                LOCAL_X_MOM,     LOCAL_Y_MOM,    LOCAL_Z_MOM, &
-                LOCAL_XDIST_MAX, LOCAL_YDIST_MAX, LOCAL_ZDIST_MAX, MODEL_BODYFORCE,DLT, LOCAL_INT_WORK, LOCAL_BODY_ID, LOCAL_STRAIN_EQ, &
-				LOCAL_IJKSPC)
-            !LINIT = .FALSE.  !SET IT TO FALSE AFTER THE SHP/DSHP COMPUTATION
+                LOCAL_X_MOM,     LOCAL_Y_MOM,    LOCAL_Z_MOM,  &
+                LOCAL_XDIST_MAX, LOCAL_YDIST_MAX, LOCAL_ZDIST_MAX,MODEL_BODYFORCE,DLT, LOCAL_INT_WORK, LOCAL_BODY_ID, LOCAL_STRAIN_EQ, &
+				LOCAL_IJKSPC, ierr_handeler)
+
+            ! After host execution of HANDELER (LINIT=.TRUE.), update device with newly computed/allocated SAVE arrays
+
+            ! LOCAL_DLT is now COPYOUT, will be updated at END DATA or via explicit UPDATE HOST if needed sooner.
+
+
+           IF (ierr_handeler .NE. 0) THEN
+                WRITE(*,*) 'FATAL ERROR: MAIN - Error returned from HANDELER during LINIT. ierr_handeler = ', ierr_handeler
+
+                CALL EXIT_PROGRAM('Error during HANDELER initialization', ierr_handeler)
+            END IF
         ENDIF
         !
 
@@ -344,16 +486,31 @@
         !  PREDICTOR
         !
         !CALL PREDICTOR(TOTAL_LOCAL_SIZE,LOCAL_ACL,LOCAL_VEL,LOCAL_DSP,DLT)
-
-        IF (LINIT.AND.(AUTO_TS)) THEN
-            !WE DONT HAVE A TIME STEP ESTIMATE YET
-            LOCAL_DSP = 0.0d0
-        ELSE
-            !PREDICT THE DISPLACEMENT INCREMENT AND VELOCITY FROM THE PREVIOUS ACCELERATION
-            LOCAL_DSP = DLT * LOCAL_VEL + DLT**2 * 0.5d0 * LOCAL_ACL
-            LOCAL_DSP_TOT = LOCAL_DSP_TOT + LOCAL_DSP
-            LOCAL_VEL = LOCAL_VEL + DLT * 0.5d0 * LOCAL_ACL
-        END IF
+!        !$ACC PARALLEL LOOP DEFAULT(PRESENT) PRIVATE(I) COLLAPSE(1) &
+        !$ACC PARALLEL LOOP DEFAULT(PRESENT) PRIVATE(M) &
+        !$ACC IF( (.NOT.LINIT) .OR. (.NOT.AUTO_TS) )
+!        IF (LINIT.AND.(AUTO_TS)) THEN
+!            !WE DONT HAVE A TIME STEP ESTIMATE YET
+!            LOCAL_DSP = 0.0d0
+!        ELSE
+!            !PREDICT THE DISPLACEMENT INCREMENT AND VELOCITY FROM THE PREVIOUS ACCELERATION
+!            LOCAL_DSP = DLT * LOCAL_VEL + DLT**2 * 0.5d0 * LOCAL_ACL
+!            LOCAL_DSP_TOT = LOCAL_DSP_TOT + LOCAL_DSP
+!            LOCAL_VEL = LOCAL_VEL + DLT * 0.5d0 * LOCAL_ACL
+!        END IF
+!         !$ACC END PARALLEL LOOP IF( (.NOT.LINIT) .OR. (.NOT.AUTO_TS) )
+        DO M=1, 3*TOTAL_LOCAL_SIZE ! Loop over all components of vector arrays
+            IF (LINIT.AND.(AUTO_TS)) THEN
+                !WE DONT HAVE A TIME STEP ESTIMATE YET
+                LOCAL_DSP(M) = 0.0d0
+            ELSE
+                !PREDICT THE DISPLACEMENT INCREMENT AND VELOCITY FROM THE PREVIOUS ACCELERATION
+                LOCAL_DSP(M) = DLT * LOCAL_VEL(M) + DLT**2 * 0.5d0 * LOCAL_ACL(M)
+                LOCAL_DSP_TOT(M) = LOCAL_DSP_TOT(M) + LOCAL_DSP(M)
+                LOCAL_VEL(M) = LOCAL_VEL(M) + DLT * 0.5d0 * LOCAL_ACL(M)
+            END IF
+        END DO
+        !$ACC END PARALLEL LOOP ! Removed the IF clause from END PARALLEL LOOP
 
 
         !
@@ -361,6 +518,10 @@
         !
         DO_INTERP = .TRUE.
         LINIT_TEMP = .FALSE.
+        ! HANDELER's DO_INTERP part will run its own !$ACC PARALLEL LOOP
+        ! Ensure inputs to this HANDELER call are correct on host/device
+        ! These are already on device via COPY or modified in previous steps. Scalars passed by value.
+
         CALL HANDELER(      LOCAL_WIN,       LOCAL_VOL,      LOCAL_NUMP,        LOCAL_COO,      LOCAL_COO_CURRENT,     &
             LOCAL_SM_LEN,    LOCAL_SM_AREA,  LOCAL_SM_VOL,      LOCAL_NSNI_FAC, LOCAL_GHOST,       &
             LOCAL_PROP,      LOCAL_STATE,    LOCAL_STRESS,      LOCAL_STRAIN,   LOCAL_H_STRESS, LOCAL_S_STRESS,   LOCAL_DSP,  LOCAL_DSP_TOT,      &
@@ -370,20 +531,24 @@
             LOCAL_DX_STRESS, LOCAL_DY_STRESS, LOCAL_DZ_STRESS, &
             LOCAL_X_MOM,     LOCAL_Y_MOM,    LOCAL_Z_MOM, &
             LOCAL_XDIST_MAX, LOCAL_YDIST_MAX, LOCAL_ZDIST_MAX,MODEL_BODYFORCE,DLT, LOCAL_INT_WORK, LOCAL_BODY_ID, LOCAL_STRAIN_EQ, &
-				LOCAL_IJKSPC)
+			LOCAL_IJKSPC, ierr_handeler)
 
+        ! LOCAL_DINC_PHY is COPY, will be updated at END DATA. If needed sooner: !$ACC UPDATE HOST(LOCAL_DINC_PHY)
 
 
         LOCAL_DSP_TOT_PHY = LOCAL_DSP_TOT_PHY + LOCAL_DINC_PHY
         !
         ! LIKELY HAVE TO UPDATE GHOSTS HERE FOR GHOST SCHEMES, THESE ARRAYS
         ! SHOULD BE DIFFERENT SIZES THEN #TODO
-        !
-        DO I=1,LOCAL_NUMP
+        !$ACC PARALLEL LOOP DEFAULT(PRESENT) PRIVATE(J) COLLAPSE(1)
+        DO I=1,TOTAL_LOCAL_SIZE ! Should this be LOCAL_NUMP or TOTAL_LOCAL_SIZE? Original was LOCAL_NUMP
+
             DO J=1,3
                 LOCAL_COO_CURRENT(J,I) = LOCAL_COO(J,I) + LOCAL_DSP_TOT_PHY((I-1)*3+J)
             END DO
         END DO
+        !$ACC END PARALLEL LOOP
+        ! LOCAL_COO_CURRENT is COPY, changes on device are kept.
 
 
         !TEST HUGHS-WINDET ROTATION ALGORITHM, LATER SHOULD BE REMOVED
@@ -396,13 +561,15 @@
         !
         DO_INTERP = .FALSE.
         LINIT_TEMP = .FALSE.
+!        !$ACC UPDATE DEVICE(DO_INTERP, LINIT_TEMP)
         IF(LINIT) THEN
             LOCAL_FINT_NMO = 0.0d0
             LOCAL_FEXT_NMO = 0.0d0
         ELSE
             LOCAL_FINT_NMO = LOCAL_FINT
             LOCAL_FEXT_NMO = LOCAL_FEXT !NOT USED! NEED TO FILL THIS OUT IN HANDLER
-        END IF
+        END IF        
+        ! Arguments are passed. LOCAL_FINT_NMO, LOCAL_FEXT_NMO are CREATE, modified on device.
 
         CALL HANDELER(      LOCAL_WIN,       LOCAL_VOL,      LOCAL_NUMP,        LOCAL_COO,      LOCAL_COO_CURRENT,     &
             LOCAL_SM_LEN,    LOCAL_SM_AREA,  LOCAL_SM_VOL,      LOCAL_NSNI_FAC, LOCAL_GHOST,       &
@@ -411,9 +578,13 @@
             LOCAL_FEXT,      LOCAL_CHAR_DIST, LOCAL_WAVE_VEL, LOCAL_EBC_NODES, &
             DO_INTERP,       LOCAL_DINC_PHY, LOCAL_VEL_PHY, LOCAL_VEL, LOCAL_ACL, LOCAL_ACL_PHY, &
             LOCAL_DX_STRESS, LOCAL_DY_STRESS, LOCAL_DZ_STRESS, &
-            LOCAL_X_MOM,     LOCAL_Y_MOM,    LOCAL_Z_MOM, &
+            LOCAL_X_MOM,     LOCAL_Y_MOM,    LOCAL_Z_MOM,  &
             LOCAL_XDIST_MAX, LOCAL_YDIST_MAX, LOCAL_ZDIST_MAX,MODEL_BODYFORCE,DLT, LOCAL_INT_WORK, LOCAL_BODY_ID, LOCAL_STRAIN_EQ, &
-				LOCAL_IJKSPC)
+			LOCAL_IJKSPC, ierr_handeler)
+
+        ! After HANDELER, LOCAL_FINT, LOCAL_FEXT, LOCAL_DLT, LOCAL_STATE, LOCAL_STRESS etc. are updated on device.
+        ! If DLT needs to be used on host immediately: !$ACC UPDATE HOST(LOCAL_DLT)
+
 
 
         !
@@ -425,12 +596,21 @@
         !
         CALL ASSEMBLER(LOCAL_NUMP,LOCAL_FINT,HPC_SCHEME)
         !LOCAL_FINT = 0.D0 !TEMP FOR TESTING ROTATION
+
         IF (AUTO_TS) DLT = LOCAL_DLT
-        
-        IF (PDSTIME.NE.0.0D0) PDSEARCH=CEILING(PDSTIME/DLT) 
+
+
+        IF (PDSTIME.NE.0.0D0) PDSEARCH=CEILING(PDSTIME/DLT)
+        ! DLT and PDSEARCH are scalars, passed by value to kernels if needed.
+        ! If they are part of COPY, their device versions are updated.
+
+
+ !       !$ACC PARALLEL LOOP DEFAULT(PRESENT) &
+        !$ACC PARALLEL LOOP DEFAULT(PRESENT) PRIVATE(J,M,I_STEP,STEP_NUM)
+
 
         DO I=1,LOCAL_NUMP
-
+            !$ACC LOOP SEQ ! Explicitly mark inner J loop as sequential for this I
             DO J=1,3
 
                 M = (I-1)*3+J
@@ -443,14 +623,19 @@
                     LOCAL_PRFORCE(J,I) = - LOCAL_FINT(M)
 
                     LOCAL_FEXT(M) = - LOCAL_FINT(M)
+                    !$ACC ATOMIC UPDATE
+                    TOTAL_FORCE(J,LOCAL_BODY_ID(I)) = TOTAL_FORCE(J,LOCAL_BODY_ID(I)) + LOCAL_PRFORCE(J,I)
 
                 ELSEIF (LOCAL_EBC(J,I).EQ.2) THEN !NON-ZERO ESSENTIAL BC
 
+                    STEP_NUM = 0 ! Initialize STEP_NUM before the I_STEP loop
                     ! FIND WHICH TIME_DURATION THE CURRENT TIME FALL INTO
+                    !$ACC LOOP SEQ ! Explicitly mark I_STEP loop as sequential
                     DO I_STEP = 1, FIXITY2_STEPS
-                        IF (FIXITY2_TIME(I_STEP,1) .LT. TIME .AND. TIME .LT. FIXITY2_TIME(I_STEP,2)) THEN
-                            STEP_NUM = I_STEP
-                            EXIT
+                        IF (STEP_NUM == 0) THEN ! Only search if not found yet
+                            IF (FIXITY2_TIME(I_STEP,1) .LT. TIME .AND. TIME .LT. FIXITY2_TIME(I_STEP,2)) THEN
+                                STEP_NUM = I_STEP
+                            END IF
                         END IF
                     END DO
 
@@ -461,7 +646,6 @@
                         LOCAL_VEL(M) = 0.0d0
                     END IF
 
-                    STEP_NUM = 0 ! REINITIALIZE
 
                     LOCAL_ACL(M) = 0.0d0
 
@@ -469,7 +653,58 @@
 
                     LOCAL_FEXT(M) = - LOCAL_FINT(M)
 
-                ELSE   !FREE
+                    !$ACC ATOMIC UPDATE
+                    TOTAL_FORCE(J,LOCAL_BODY_ID(I)) = TOTAL_FORCE(J,LOCAL_BODY_ID(I)) + LOCAL_PRFORCE(J,I)
+                END IF
+            END DO
+        END DO
+        !$ACC END PARALLEL LOOP
+        ! 再處理 FREE 類型的節點的自由度 (LOCAL_EBC(J,I) == 0)
+        !$ACC PARALLEL LOOP DEFAULT(PRESENT) PRIVATE(J,M,MPDC)
+        DO I=1,LOCAL_NUMP
+            !$ACC LOOP SEQ
+            DO J=1,3
+                M = (I-1)*3+J
+                IF (LOCAL_EBC(J,I).EQ.0) THEN ! FREE node degree of freedom
+				    MPDC = LOCAL_PROP(21,I)*LOCAL_MASS(M) !MASS PROPORTIAL DAMPING MATRIX (DIAG)
+                    LOCAL_ACL(M) = (LOCAL_FEXT(M) - LOCAL_FINT(M) - MPDC*LOCAL_VEL(M))/ &
+					(LOCAL_MASS(M)+0.5d0*DLT*MPDC)
+                    LOCAL_VEL(M) = LOCAL_VEL(M) + 0.5d0*DLT*LOCAL_ACL(M)
+                    LOCAL_PRFORCE(J,I) = 0.0d0
+                    !$ACC ATOMIC UPDATE
+                    TOTAL_FORCE(J,LOCAL_BODY_ID(I)) = TOTAL_FORCE(J,LOCAL_BODY_ID(I)) + LOCAL_PRFORCE(J,I)
+                END IF
+            END DO
+        END DO
+        !$ACC END PARALLEL LOOP
+
+        ! Original single loop structure (commented out for reference after applying the split)
+        ! !$ACC PARALLEL LOOP DEFAULT(PRESENT) &
+        ! !$ACC PRIVATE(J,M,I_STEP,STEP_NUM,MPDC, FEXT_M_AT_ENTRY) REDUCTION(+:TOTAL_FORCE)
+        ! DO I=1,LOCAL_NUMP
+        !     !$ACC LOOP SEQ ! Explicitly mark inner J loop as sequential for this I
+        !     DO J=1,3
+        !         M = (I-1)*3+J
+        !         FEXT_M_AT_ENTRY = LOCAL_FEXT(M) ! Store the value of LOCAL_FEXT(M) at the beginning of this (I,J) iteration
+        !         IF (LOCAL_EBC(J,I).EQ.1) THEN
+        !             ...
+        !         ELSEIF (LOCAL_EBC(J,I).EQ.2) THEN !NON-ZERO ESSENTIAL BC
+        !             ...
+        !         ELSE   !FREE
+        !             LOCAL_FEXT(M) = FEXT_M_AT_ENTRY ! Explicitly assign LOCAL_FEXT(M) to its entry value in this branch
+        !             ...
+        !         END IF
+        !     TOTAL_FORCE(J,LOCAL_BODY_ID(I))=TOTAL_FORCE(J,LOCAL_BODY_ID(I))+LOCAL_PRFORCE(J,I)
+        !     END DO
+        ! END DO
+        ! !$ACC END PARALLEL LOOP
+        ! 再處理 FREE 類型的節點的自由度 (LOCAL_EBC(J,I) == 0)
+        !$ACC PARALLEL LOOP DEFAULT(PRESENT) PRIVATE(J,M,MPDC)
+        DO I=1,LOCAL_NUMP
+            !$ACC LOOP SEQ
+            DO J=1,3
+                M = (I-1)*3+J
+                IF (LOCAL_EBC(J,I).EQ.0) THEN ! FREE node degree of freedom
 
 				MPDC = LOCAL_PROP(21,I)*LOCAL_MASS(M) !MASS PROPORTIAL DAMPING MATRIX (DIAG)
 				
@@ -479,13 +714,21 @@
                     LOCAL_VEL(M) = LOCAL_VEL(M) + 0.5d0*DLT*LOCAL_ACL(M)
 
                     LOCAL_PRFORCE(J,I) = 0.0d0
+                    !$ACC ATOMIC UPDATE
+                    TOTAL_FORCE(J,LOCAL_BODY_ID(I)) = TOTAL_FORCE(J,LOCAL_BODY_ID(I)) + LOCAL_PRFORCE(J,I)
 
                 END IF
                             
-            TOTAL_FORCE(J,LOCAL_BODY_ID(I))=TOTAL_FORCE(J,LOCAL_BODY_ID(I))+LOCAL_PRFORCE(J,I)
+!            TOTAL_FORCE(J,LOCAL_BODY_ID(I))=TOTAL_FORCE(J,LOCAL_BODY_ID(I))+LOCAL_PRFORCE(J,I)
 
             END DO
         END DO
+
+        !$ACC END PARALLEL LOOP
+
+
+        ! TIME and TOTAL_FORCE are COPYOUT or COPY, will be updated at END DATA. If needed sooner:
+        ! !$ACC UPDATE HOST(TIME, TOTAL_FORCE)
 
         WRITE(122,'(E15.5,I8,3(E15.5),I8,3(E15.5))') TIME,LOCAL_BODY_ID(1), TOTAL_FORCE(1,LOCAL_BODY_ID(1)), TOTAL_FORCE(2,LOCAL_BODY_ID(1)),TOTAL_FORCE(3,LOCAL_BODY_ID(1)), LOCAL_BODY_ID(LOCAL_NUMP), TOTAL_FORCE(1,LOCAL_BODY_ID(LOCAL_NUMP)),TOTAL_FORCE(2,LOCAL_BODY_ID(LOCAL_NUMP)),TOTAL_FORCE(3,LOCAL_BODY_ID(LOCAL_NUMP))
 
@@ -520,9 +763,10 @@
         ! CALCULATE ENERGIES
         ! NEED TO CALCULATE THE EXTERNAL ENERGY SO THAT THE ENERGIES ADD UP #TODO
         !
-        !
-        DLOCAL_INT_ENERGY = 0.0d0
-        DLOCAL_KIN_ENERGY = 0.0d0
+
+        !$ACC PARALLEL LOOP DEFAULT(PRESENT) PRIVATE(I) &
+        !$ACC REDUCTION(+:DLOCAL_INT_ENERGY, DLOCAL_KIN_ENERGY, DLOCAL_EXT_ENERGY)
+
         DO I=1,TOTAL_LOCAL_NUMP*3
 
             IF (.NOT.LFINITE_STRAIN) THEN
@@ -539,7 +783,7 @@
             DLOCAL_EXT_ENERGY = DLOCAL_EXT_ENERGY + 0.50d0*(LOCAL_FEXT(I)+LOCAL_FEXT_NMO(I))*LOCAL_DSP(I)
 
         END DO
-
+        !$ACC END PARALLEL LOOP
         IF (LFINITE_STRAIN) THEN
             DLOCAL_INT_ENERGY = DLOCAL_INT_ENERGY + LOCAL_INT_WORK
         END IF
@@ -552,10 +796,15 @@
         !
         DLOCAL_TOTAL_ENERGY = DLOCAL_INT_ENERGY + DLOCAL_KIN_ENERGY - DLOCAL_EXT_ENERGY
 
+        ! Energies and STEPS, TIME_COUNTER are COPYOUT or COPY.
+        ! If needed for immediate host logic: !$ACC UPDATE HOST(STEPS, DLOCAL_INT_ENERGY, ...)
+
+
         WRITE(121,'(I20,4E20.5)') STEPS, DLOCAL_INT_ENERGY ,DLOCAL_KIN_ENERGY,DLOCAL_EXT_ENERGY,DLOCAL_TOTAL_ENERGY
         !
-        IF (TIME_COUNTER.GT.TIME_OUTPUT) THEN
-            !
+!        !$ACC UPDATE HOST(TIME_COUNTER)
+        IF (TIME_COUNTER >= TIME_OUTPUT) THEN ! Use >= for safer comparison with floating point
+
             !
             IF (LINIT_TIME) THEN
 
@@ -564,6 +813,8 @@
                     SIM_TIME_LEFT,TIME,TIME_END, &
                     REAL_TIME_REMAINING,LINIT_TIME)
                 LINIT_TIME = .FALSE.
+                ! LINIT_TIME is COPY, device version updated.
+
             END IF
             ! ASSEMBLE LOCAL QUANTATIES INTO GLOBAL FOR OUTPUT, LATER THIS LIKELY
             ! NEEDS TO BE MODIFIED
@@ -586,6 +837,17 @@
             ! CALL THE SUBROUTINE TO OUTPUT TO THE VTK FILE
             !
             IF (HPC_SCHEME.EQ.1) THEN
+                   ! 在呼叫 VTK 輸出副程式前，將裝置上的資料更新回主機
+                   !$ACC UPDATE HOST(exodusStep, LOCAL_COO_CURRENT, LOCAL_DSP_TOT_PHY, LOCAL_VEL_PHY, LOCAL_ACL_PHY, &
+                   !$ACC&                  LOCAL_VEL, LOCAL_ACL, LOCAL_FINT, LOCAL_MASS, LOCAL_CHAR_DIST, LOCAL_WAVE_VEL, &
+                   !$ACC&                  LOCAL_PRFORCE, LOCAL_STRESS, LOCAL_STRAIN, LOCAL_STATE, LOCAL_STRAIN_EQ, &
+                   !$ACC&                  LOCAL_EBC, LOCAL_BODY_ID, LOCAL_MAT_TYPE, LOCAL_COO, LOCAL_VINIT, MODEL_NORM_WIN, &
+                   !$ACC&                  LOCAL_WIN, LOCAL_VOL, LOCAL_PROP, LOCAL_IJKSPC)
+
+                    ! All these variables are part of the main DATA region with COPY or COPYOUT.
+                    ! If their most up-to-date values are needed for UNF_OUTPUT_STEP_VTK on host *before*
+                    ! the main DATA region ends, then explicit UPDATE HOST would be needed here.
+                    ! Otherwise, rely on END DATA synchronization.
 
                 IF (UNF_OUTPUT) THEN
                     call UNF_OUTPUT_STEP_VTK(exodusStep,LOCAL_NUMP,MODEL_NUMEL, MODEL_ELCON, LOCAL_COO_CURRENT,MODEL_NODE_IDS,LOCAL_DSP_TOT_PHY,LOCAL_VEL_PHY, &
@@ -626,7 +888,8 @@
             !    DLOCAL_INT_ENERGY, DLOCAL_KIN_ENERGY, DLOCAL_EXT_ENERGY, DLOCAL_TOTAL_ENERGY,CTIME_ALL
             !WRITE(*,'(2I8,2E15.5,4E15.5,A15)') exodusStep, STEPS, TIME, DLT, &
             !    DLOCAL_INT_ENERGY, DLOCAL_KIN_ENERGY, DLOCAL_EXT_ENERGY, DLOCAL_TOTAL_ENERGY,CTIME_ALL
-            WRITE(50,'(2I8,2E15.5,A30)') exodusStep, STEPS, TIME, DLT, &
+            WRITE(50,'(2I8,2E15.5,A30)') exodusStep, STEPS, TIME, DLT, & ! These are host values
+
                 CTIME_ALL
             WRITE(*,'(2I8,2E15.5,A30)') exodusStep, STEPS, TIME, DLT, &
                 CTIME_ALL
@@ -646,8 +909,9 @@
         !
         STEPS = STEPS + 1
         TIMER_STEPS = TIMER_STEPS + 1
-        !
+
         LINIT = .FALSE.
+        ! All these (TIME, TIME_COUNTER, STEPS, TIMER_STEPS, LINIT, exodusStep) are COPY, device versions updated.
 
 
         WRITE(120,*) TIME
@@ -656,6 +920,7 @@
         IF (TIME.GT.TIME_END) EXIT
         !
     END DO
+    !$ACC END DATA
 
 	!GC
 	DEALLOCATE(MODEL_ELCON)

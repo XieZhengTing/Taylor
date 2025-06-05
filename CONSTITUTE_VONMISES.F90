@@ -15,11 +15,17 @@
 	  
 	  
 	  
-
+    MODULE CONSTITUTE_VONMISES_MOD
+      USE FINT_FUNCTIONS ! 確保 FINT_FUNCTIONS 模組中的函式也適用於 OpenACC
+      IMPLICIT NONE
+      PRIVATE ! 良好的實踐是預設私有
+      PUBLIC :: VON_MISES ! 明確公開 VON_MISES 子常式
+	  
+    CONTAINS
 	  
 
-      SUBROUTINE VON_MISES(STRESS, STRAIN, STRESS_PREDICT, STATE, PROPS)
-	  !
+      SUBROUTINE VON_MISES(STRESS, STRAIN, STRESS_PREDICT, STATE, PROPS, ierr)
+	  !$ACC ROUTINE SEQ
 	  ! FUNCTION OF THIS SUBROUTINE:
 	  !
 	  ! ROTATE A (VOIGT NOTATION) TENSOR USING GIVEN ROTATION MATRIX
@@ -34,7 +40,8 @@
 	  DOUBLE PRECISION, INTENT(IN)::    STRAIN(6)
 	  DOUBLE PRECISION, INTENT(IN)::    STRESS_PREDICT(6)
 	  DOUBLE PRECISION, INTENT(IN)::    PROPS(30)
-	  !
+	  INTEGER, INTENT(OUT) :: ierr ! Error flag: 0 = success, non-zero = error
+
 	  !LOOP INDEX VARIABLES
 	  INTEGER:: I, J, K
 	  !PROPERTY VARIABLES
@@ -51,7 +58,7 @@
 	  DOUBLE PRECISION:: DYLD_FN,XK,XKP,EPST,B,CE
 	  !
 	  !
-	  !
+	  ierr = 0 ! Initialize error flag to success
 	  ! ASSIGN PROPERTY VARIABLES
 	  !
 	  POISS = PROPS(1)
@@ -115,8 +122,8 @@
           IF(I.EQ.20) THEN
              !!WRITE(*,*)"TOO MANY ITERATIONS IN PlASTICITY, EQIT"
              !!PAUSE
-             CALL EXIT_PROGRAM('PLASTICITY MATERIAL MODEL DID NOT CONVERGE',0)
-             STOP
+             ierr = 1 ! Set error flag for non-convergence
+             EXIT ! Exit Newton iteration loop
           ENDIF
       ELSE  !CONVERGED
             !WRITE(*,*)"CONVERGED"
@@ -156,4 +163,4 @@
           
 	  RETURN
 	  END SUBROUTINE
-		
+    END MODULE CONSTITUTE_VONMISES_MOD		
