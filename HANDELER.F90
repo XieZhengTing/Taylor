@@ -160,9 +160,11 @@
                         GDINC_PHY(M) = GDINC_PHY(M) +  SHPT*GDINC(MM)
                         GVEL_PHY(M) = GVEL_PHY(M) +  SHPT*GVEL(MM)
                         GACL_PHY(M) = GACL_PHY(M) +  SHPT*GACL(MM)
-                    END DO 
+                    END DO
                 END DO
+
             END DO
+            !$ACC END PARALLEL LOOP
         ELSE  !PERIDYNAMICS
             GDINC_PHY = GDINC
             GVEL_PHY = GVEL

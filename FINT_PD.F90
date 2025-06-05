@@ -286,7 +286,6 @@
                 GINVK(:,:,I) =  INVK(:,:)
 				
 	  END DO !INTEGRATION POINT (NODE) LOOP
-      !$OMP END DO
       !$ACC END PARALLEL LOOP	 
 	  
 	  
