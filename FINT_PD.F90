@@ -706,13 +706,10 @@
 	  
 	  
 
-    IF (AUTO_TS) THEN
-    !DO TIME STEP CALCS
-    !$ACC PARALLEL LOOP DEFAULT(PRESENT) &
-    !$ACC PRIVATE(LN, LSTART, LSTACK, XI, YI, ZI, FIRST, J, JJ, XJ, YJ, ZJ, DIST, DLT_TEMP) &
-    !$ACC REDUCTION(MIN:DLT_FINT)
-    DO I = 1, GNUMP
-
+      IF (AUTO_TS) THEN
+      !DO TIME STEP CALCS
+	           
+      DO I = 1, GNUMP
 	  
 		LN = GN(I)
 		LSTART = GSTART(I)
@@ -769,7 +766,7 @@
 		       
         END DO
 			   
-      DLT_FINT = DLT_FINT*DLT_FAC
+        DLT_FINT = DLT_FINT*DLT_FAC
 			   
 			   
 	  

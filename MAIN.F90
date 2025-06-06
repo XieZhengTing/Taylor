@@ -534,10 +534,7 @@
 			LOCAL_IJKSPC, ierr_handeler)
 
         ! LOCAL_DINC_PHY is COPY, will be updated at END DATA. If needed sooner: !$ACC UPDATE HOST(LOCAL_DINC_PHY)
-        ! Conditional update if LOCAL_DINC_PHY is needed on host for logic before next device use
-        ! IF (some_host_condition_requiring_LOCAL_DINC_PHY) THEN
-        !    !$ACC UPDATE HOST(LOCAL_DINC_PHY)
-        ! ENDIF
+        !$ACC UPDATE HOST(LOCAL_DINC_PHY)
 
 
         LOCAL_DSP_TOT_PHY = LOCAL_DSP_TOT_PHY + LOCAL_DINC_PHY
