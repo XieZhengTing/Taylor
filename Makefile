@@ -1,4 +1,4 @@
-FC              =    gfortran
+FC              =    nvfortran
 OPLEVEL         =   -O3
 LDFLAGS := -lnetcdff -lexoIIv2for32 -lexodus -lnetcdf
 EXDIR           =   /usr/local
