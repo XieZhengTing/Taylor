@@ -139,33 +139,29 @@
       INTEGER :: temp_gmaxn_device_check ! Declare the temporary variable
       INTEGER(KIND=8) :: temp_dim_long
       
-      IF (DO_INTERP) THEN
-!        !$ACC PARALLEL LOOP DEFAULT(PRESENT) &
-!        !$ACC PRIVATE(LSTART, K, M, J, SHPT, MM)
-		IF(.NOT. PERIDYNAMICS) THEN  !RKPM  
-            !$ACC PARALLEL LOOP DEFAULT(PRESENT) &
-            !$ACC PRIVATE(LSTART, K, M, J, SHPT, MM)
-            DO I=1,GNUMP
-                LSTART = GSTART(I)
-                DO K = 1, 3
-                    M=(I-1)*3+K
-                    GDINC_PHY(M) = 0.0d0
-                    GVEL_PHY(M) = 0.0d0
-                    GACL_PHY(M) = 0.0d0
-                    DO J = 1, GN(I)
-                        SHPT=GSTACK_SHP(LSTART+J-1)
-                        
-                        MM = (GSTACK(LSTART+J-1) - 1)*3 + K
-                        
-                        GDINC_PHY(M) = GDINC_PHY(M) +  SHPT*GDINC(MM)
-                        GVEL_PHY(M) = GVEL_PHY(M) +  SHPT*GVEL(MM)
-                        GACL_PHY(M) = GACL_PHY(M) +  SHPT*GACL(MM)
-                    END DO
+IF (DO_INTERP) THEN
+    IF(.NOT. PERIDYNAMICS) THEN  !RKPM
+        ! OpenMP 版本沒有平行化，但在 GPU 上應該平行化以提升效能
+        !$ACC PARALLEL LOOP DEFAULT(PRESENT) &
+        !$ACC PRIVATE(LSTART, K, M, J, SHPT, MM)
+        DO I=1,GNUMP
+            LSTART = GSTART(I)
+            DO K = 1, 3
+                M=(I-1)*3+K
+                GDINC_PHY(M) = 0.0d0
+                GVEL_PHY(M) = 0.0d0
+                GACL_PHY(M) = 0.0d0
+                DO J = 1, GN(I)
+                    SHPT=GSTACK_SHP(LSTART+J-1)
+                    MM = (GSTACK(LSTART+J-1) - 1)*3 + K
+                    GDINC_PHY(M) = GDINC_PHY(M) +  SHPT*GDINC(MM)
+                    GVEL_PHY(M) = GVEL_PHY(M) +  SHPT*GVEL(MM)
+                    GACL_PHY(M) = GACL_PHY(M) +  SHPT*GACL(MM)
                 END DO
-
             END DO
-            !$ACC END PARALLEL LOOP
-        ELSE  !PERIDYNAMICS
+        END DO
+        !$ACC END PARALLEL LOOP
+    ELSE  !PERIDYNAMICS
             GDINC_PHY = GDINC
             GVEL_PHY = GVEL
             GACL_PHY = GACL
@@ -385,11 +381,16 @@
 
          ENDIF
                 
-         CALL SOFT_SEARCH(GNUMP,GCOO_CUURENT,GN,GSTART,DIM_NN_LIST,GSTACK,GMAXN,GWIN, &
-                            NODES_IN_BIN,MAX_NEIGH,NODELIST_IN_BIN, &
-                            NBINS,NBINSX,NBINSY,NBINSZ,ISPACE,JSPACE,KSPACE, &
-                            GXDIST_MAX, GYDIST_MAX, GZDIST_MAX,GSM_LEN)
-      !$ACC UPDATE DEVICE(GMAXN, GN, GSTART, GSTACK)
+CALL SOFT_SEARCH(GNUMP,GCOO_CUURENT,GN,GSTART,DIM_NN_LIST,GSTACK,GMAXN,GWIN, &
+                   NODES_IN_BIN,MAX_NEIGH,NODELIST_IN_BIN, &
+                   NBINS,NBINSX,NBINSY,NBINSZ,ISPACE,JSPACE,KSPACE, &
+                   GXDIST_MAX, GYDIST_MAX, GZDIST_MAX,GSM_LEN)
+
+! 立即更新所有搜尋結果到 GPU
+!$ACC UPDATE DEVICE(GMAXN, GN, GSTART, GSTACK, GSTACK_SHP, GSTACK_DSHP)
+
+! 如果使用 DECLARE LINK，確保更新生效
+!$ACC WAIT
 
 
       WRITE(*,*) 'DEBUG: HANDELER - After SOFT_SEARCH, Host GMAXN = ', GMAXN
