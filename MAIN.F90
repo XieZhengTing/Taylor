@@ -348,38 +348,23 @@
     LOCAL_INT_WORK = 0.0d0
     TOTAL_FORCE = 0.0d0
 
-    !$ACC DATA &
-      ! COPYIN: Host to Device, Device reads, not written back unless explicitly updated
-      !$ACC COPYIN(LOCAL_COO, MODEL_BODYFORCE, MODEL_ELCON, MODEL_NODE_IDS, MODEL_NORM_WIN) &
-      !$ACC COPYIN(LOCAL_SM_LEN, LOCAL_SM_AREA, LOCAL_SM_VOL, LOCAL_WIN, LOCAL_VOL, LOCAL_NSNI_FAC) &
-      !$ACC COPYIN(LOCAL_VINIT, LOCAL_MAT_TYPE, LOCAL_PROP, LOCAL_BODY_ID) &
-      !$ACC COPYIN(LOCAL_X_MOM, LOCAL_Y_MOM, LOCAL_Z_MOM, LOCAL_IJKSPC) &
-      !$ACC COPYIN(LOCAL_XDIST_MAX, LOCAL_YDIST_MAX, LOCAL_ZDIST_MAX) &
-      !$ACC COPYIN(LOCAL_EBC, LOCAL_NONZERO_EBC, LOCAL_GHOST) &
-      !$ACC COPYIN(NCORES_INPUT, HPC_SCHEME, TOTAL_LOCAL_SIZE, MODEL_NUMP, LOCAL_NUMP, GHOST_BUFFER) &
-      !$ACC COPYIN(TIME_END, TIME_OUTPUT, AUTO_TS, LFINITE_STRAIN, LLAGRANGIAN, PERIDYNAMICS, PDSTIME, PDSEARCH, DLT_FAC) &
-      !$ACC COPYIN(FIXITY2_STEPS, FIXITY2_TIME, FIXITY2_NONZERO_EBC) &
-      ! COPY: Host to Device, Device reads/writes, written back at END DATA
-      !$ACC COPY(LOCAL_STATE, LOCAL_STRESS, LOCAL_STRAIN, LOCAL_H_STRESS, LOCAL_S_STRESS) &
-      !$ACC COPY(LOCAL_DX_STRESS, LOCAL_DY_STRESS, LOCAL_DZ_STRESS) &
-      !$ACC COPY(LOCAL_DX_STRAIN, LOCAL_DY_STRAIN, LOCAL_DZ_STRAIN) &
-      !$ACC COPY(LOCAL_ACL, LOCAL_VEL, LOCAL_DSP) &
-      !$ACC COPY(LOCAL_DSP_TOT, LOCAL_DSP_TOT_PHY, LOCAL_COO_CURRENT) &
-      !$ACC COPY(LOCAL_PRFORCE, LOCAL_ACL_PHY, LOCAL_VEL_PHY, LOCAL_DINC_PHY) &
-      !$ACC COPY(LOCAL_MASS, LOCAL_STRAIN_EQ) &
-      !$ACC COPY(LOCAL_EBC_NODES) & ! Modified in STATE_FEILD_INIT, used by HANDELER
-      !$ACC COPY(LOCAL_CHAR_DIST, LOCAL_WAVE_VEL) & ! Output from HANDELER, used by host
-      !$ACC COPY(TIME, DLT, LINIT, LINIT_TIME, LINIT_TEMP, DO_INTERP, TIME_COUNTER, STEPS, TIMER_STEPS, exodusStep) &
-      !$ACC COPY(LOCAL_INT_WORK) & ! Accumulated in CONSTRUCT_FINT, used for DLOCAL_INT_ENERGY
-      ! CREATE: Created on Device, not initialized from Host.
-      ! If needed on host, must be COPYOUT or explicitly UPDATED.
-      !$ACC CREATE(LOCAL_FINT, LOCAL_FEXT, LOCAL_FINT_NMO, LOCAL_FEXT_NMO) &
-      ! COPYOUT: Device computes, written back to Host at END DATA. Host initial value not used.
-      !$ACC COPYOUT(LOCAL_DLT) & ! DLT_FINT from HANDELER
-      !$ACC COPYOUT(DLOCAL_INT_ENERGY, DLOCAL_KIN_ENERGY, DLOCAL_EXT_ENERGY, DLOCAL_TOTAL_ENERGY) &
-      !$ACC COPYOUT(TOTAL_FORCE) ! Accumulated on device, final value needed on host
-
-
+!$ACC DATA &
+      !$ACC COPYIN(LOCAL_COO, MODEL_BODYFORCE, MODEL_ELCON, MODEL_NODE_IDS, MODEL_NORM_WIN, &
+      !$ACC        LOCAL_SM_LEN, LOCAL_SM_AREA, LOCAL_SM_VOL, LOCAL_WIN, LOCAL_VOL, &
+      !$ACC        LOCAL_NSNI_FAC, LOCAL_VINIT, LOCAL_MAT_TYPE, LOCAL_PROP, LOCAL_BODY_ID, &
+      !$ACC        LOCAL_X_MOM, LOCAL_Y_MOM, LOCAL_Z_MOM, LOCAL_IJKSPC, &
+      !$ACC        LOCAL_XDIST_MAX, LOCAL_YDIST_MAX, LOCAL_ZDIST_MAX, &
+      !$ACC        LOCAL_EBC, LOCAL_NONZERO_EBC, LOCAL_GHOST) &
+      !$ACC COPY(LOCAL_STATE, LOCAL_STRESS, LOCAL_STRAIN, LOCAL_H_STRESS, LOCAL_S_STRESS, &
+      !$ACC      LOCAL_DX_STRESS, LOCAL_DY_STRESS, LOCAL_DZ_STRESS, &
+      !$ACC      LOCAL_ACL, LOCAL_VEL, LOCAL_DSP, LOCAL_DSP_TOT, LOCAL_DSP_TOT_PHY, &
+      !$ACC      LOCAL_COO_CURRENT, LOCAL_PRFORCE, LOCAL_MASS, LOCAL_STRAIN_EQ, &
+      !$ACC      LOCAL_EBC_NODES, LOCAL_CHAR_DIST, LOCAL_WAVE_VEL, &
+      !$ACC      LOCAL_FINT, LOCAL_FEXT, &
+      !$ACC      TIME, DLT, LINIT, LINIT_TIME, DO_INTERP, TIME_COUNTER, STEPS, TIMER_STEPS, exodusStep) &
+      !$ACC CREATE(LOCAL_FINT_NMO, LOCAL_FEXT_NMO, LOCAL_ACL_PHY, LOCAL_VEL_PHY, LOCAL_DINC_PHY) &
+      !$ACC COPYOUT(LOCAL_DLT, DLOCAL_INT_ENERGY, DLOCAL_KIN_ENERGY, DLOCAL_EXT_ENERGY, &
+      !$ACC          DLOCAL_TOTAL_ENERGY, TOTAL_FORCE)
     !WRITE(50,'(2A8,2A15,4A15)') 'Out Step','Step','Time','Delta T','Int Engery', 'Kin Energy', 'Ext Energy', 'Tot Energy', 'Est Time Rem'
     !WRITE(*,'(2A8,2A15,4A15)')  'Out Step','Step','Time','Delta T','Int Engery', 'Kin Energy', 'Ext Energy', 'Tot Energy', 'Est Time Rem'
     !
@@ -534,10 +519,12 @@
 			LOCAL_IJKSPC, ierr_handeler)
 
         ! LOCAL_DINC_PHY is COPY, will be updated at END DATA. If needed sooner: !$ACC UPDATE HOST(LOCAL_DINC_PHY)
-        !$ACC UPDATE HOST(LOCAL_DINC_PHY)
 
-
-        LOCAL_DSP_TOT_PHY = LOCAL_DSP_TOT_PHY + LOCAL_DINC_PHY
+        !$ACC PARALLEL LOOP DEFAULT(PRESENT)
+        DO I = 1, 3*TOTAL_LOCAL_SIZE
+            LOCAL_DSP_TOT_PHY(I) = LOCAL_DSP_TOT_PHY(I) + LOCAL_DINC_PHY(I)
+        END DO
+        !$ACC END PARALLEL LOOP
         !
         ! LIKELY HAVE TO UPDATE GHOSTS HERE FOR GHOST SCHEMES, THESE ARRAYS
         ! SHOULD BE DIFFERENT SIZES THEN #TODO
@@ -606,77 +593,63 @@
         ! If they are part of COPY, their device versions are updated.
 
 
- !       !$ACC PARALLEL LOOP DEFAULT(PRESENT) &
-        !$ACC PARALLEL LOOP DEFAULT(PRESENT) PRIVATE(J,M,I_STEP,STEP_NUM)
-
-
+!$ACC PARALLEL LOOP DEFAULT(PRESENT) &
+        !$ACC PRIVATE(J,M,I_STEP,STEP_NUM,MPDC) &
+        !$ACC GANG WORKER VECTOR_LENGTH(32)
         DO I=1,LOCAL_NUMP
-            !$ACC LOOP SEQ ! Explicitly mark inner J loop as sequential for this I
+            !$ACC LOOP SEQ PRIVATE(M,I_STEP,STEP_NUM,MPDC)
             DO J=1,3
-
                 M = (I-1)*3+J
 
                 IF (LOCAL_EBC(J,I).EQ.1) THEN
-
+                    ! 固定邊界條件
                     LOCAL_VEL(M) = 0.0d0
                     LOCAL_ACL(M) = 0.0d0
-
                     LOCAL_PRFORCE(J,I) = - LOCAL_FINT(M)
-
                     LOCAL_FEXT(M) = - LOCAL_FINT(M)
-                    !$ACC ATOMIC UPDATE
-                    TOTAL_FORCE(J,LOCAL_BODY_ID(I)) = TOTAL_FORCE(J,LOCAL_BODY_ID(I)) + LOCAL_PRFORCE(J,I)
 
-                ELSEIF (LOCAL_EBC(J,I).EQ.2) THEN !NON-ZERO ESSENTIAL BC
-
-                    STEP_NUM = 0 ! Initialize STEP_NUM before the I_STEP loop
-                    ! FIND WHICH TIME_DURATION THE CURRENT TIME FALL INTO
-                    !$ACC LOOP SEQ ! Explicitly mark I_STEP loop as sequential
+                ELSEIF (LOCAL_EBC(J,I).EQ.2) THEN 
+                    ! 非零位移邊界條件
+                    STEP_NUM = 0
+                    ! 找出當前時間所在的時間區間
                     DO I_STEP = 1, FIXITY2_STEPS
-                        IF (STEP_NUM == 0) THEN ! Only search if not found yet
-                            IF (FIXITY2_TIME(I_STEP,1) .LT. TIME .AND. TIME .LT. FIXITY2_TIME(I_STEP,2)) THEN
-                                STEP_NUM = I_STEP
-                            END IF
+                        IF (FIXITY2_TIME(I_STEP,1) .LT. TIME .AND. TIME .LT. FIXITY2_TIME(I_STEP,2)) THEN
+                            STEP_NUM = I_STEP
+                            EXIT
                         END IF
                     END DO
 
-                    ! ASSIGN VELOCITY
+                    ! 指定速度
                     IF (1 .LE. STEP_NUM .AND. STEP_NUM .LE. FIXITY2_STEPS) THEN
                         LOCAL_VEL(M) = FIXITY2_NONZERO_EBC(STEP_NUM,J)/(FIXITY2_TIME(STEP_NUM,2) - FIXITY2_TIME(STEP_NUM,1))
                     ELSE
                         LOCAL_VEL(M) = 0.0d0
                     END IF
 
+                    STEP_NUM = 0 ! 重新初始化
 
                     LOCAL_ACL(M) = 0.0d0
-
                     LOCAL_PRFORCE(J,I) = - LOCAL_FINT(M)
-
                     LOCAL_FEXT(M) = - LOCAL_FINT(M)
 
-                    !$ACC ATOMIC UPDATE
-                    TOTAL_FORCE(J,LOCAL_BODY_ID(I)) = TOTAL_FORCE(J,LOCAL_BODY_ID(I)) + LOCAL_PRFORCE(J,I)
-                END IF
-            END DO
-        END DO
-        !$ACC END PARALLEL LOOP
-        ! 再處理 FREE 類型的節點的自由度 (LOCAL_EBC(J,I) == 0)
-        !$ACC PARALLEL LOOP DEFAULT(PRESENT) PRIVATE(J,M,MPDC)
-        DO I=1,LOCAL_NUMP
-            !$ACC LOOP SEQ
-            DO J=1,3
-                M = (I-1)*3+J
-                IF (LOCAL_EBC(J,I).EQ.0) THEN ! FREE node degree of freedom
-				    MPDC = LOCAL_PROP(21,I)*LOCAL_MASS(M) !MASS PROPORTIAL DAMPING MATRIX (DIAG)
+                ELSE   
+                    ! 自由節點
+                    MPDC = LOCAL_PROP(21,I)*LOCAL_MASS(M) ! 質量比例阻尼
+                    
                     LOCAL_ACL(M) = (LOCAL_FEXT(M) - LOCAL_FINT(M) - MPDC*LOCAL_VEL(M))/ &
-					(LOCAL_MASS(M)+0.5d0*DLT*MPDC)
+                                   (LOCAL_MASS(M)+0.5d0*DLT*MPDC)
+                                   
                     LOCAL_VEL(M) = LOCAL_VEL(M) + 0.5d0*DLT*LOCAL_ACL(M)
+                    
                     LOCAL_PRFORCE(J,I) = 0.0d0
-                    !$ACC ATOMIC UPDATE
-                    TOTAL_FORCE(J,LOCAL_BODY_ID(I)) = TOTAL_FORCE(J,LOCAL_BODY_ID(I)) + LOCAL_PRFORCE(J,I)
                 END IF
-            END DO
-        END DO
+                
+                ! 累加總力（所有邊界條件類型）
+                !$ACC ATOMIC UPDATE
+                TOTAL_FORCE(J,LOCAL_BODY_ID(I)) = TOTAL_FORCE(J,LOCAL_BODY_ID(I)) + LOCAL_PRFORCE(J,I)
+
+            END DO ! J loop
+        END DO ! I loop
         !$ACC END PARALLEL LOOP
 
         ! Original single loop structure (commented out for reference after applying the split)
@@ -729,11 +702,12 @@
 
 
         ! TIME and TOTAL_FORCE are COPYOUT or COPY, will be updated at END DATA. If needed sooner:
-    !$ACC UPDATE HOST(TOTAL_FORCE) ! TIME is updated on host and copied to device at loop start
-    
+    ! 只在需要輸出時才同步
+    IF (MOD(STEPS, 100) == 0) THEN  ! 每 100 步輸出一次
+        !$ACC UPDATE HOST(TOTAL_FORCE)    
 
         WRITE(122,'(E15.5,I8,3(E15.5),I8,3(E15.5))') TIME,LOCAL_BODY_ID(1), TOTAL_FORCE(1,LOCAL_BODY_ID(1)), TOTAL_FORCE(2,LOCAL_BODY_ID(1)),TOTAL_FORCE(3,LOCAL_BODY_ID(1)), LOCAL_BODY_ID(LOCAL_NUMP), TOTAL_FORCE(1,LOCAL_BODY_ID(LOCAL_NUMP)),TOTAL_FORCE(2,LOCAL_BODY_ID(LOCAL_NUMP)),TOTAL_FORCE(3,LOCAL_BODY_ID(LOCAL_NUMP))
-
+    END IF
 
         !
         ! GET THE ACCELERATION FROM EQUATION OF MOTION

@@ -77,8 +77,8 @@
     DOUBLE PRECISION:: GCOO(3,GSIZE_IN)        !COORDINATE FOR EACH NODE
     DOUBLE PRECISION:: GCOO_CUURENT(3,GSIZE_IN) !CUURENT COORDINATE FOR EACH NODE
     DOUBLE PRECISION:: GWIN(3,GNUMP)        !WINDOWS FOR EACH (LOCAL) NODE
-	DOUBLE PRECISION, SAVE, ALLOCATABLE:: GWIN0(:,:) ! Assumed to be (3,GNUMP) if related to GWIN
-
+DOUBLE PRECISION, ALLOCATABLE:: GWIN0(:,:)
+!$ACC DECLARE CREATE(GWIN0)
 	
     DOUBLE PRECISION:: GSM_LEN(6,GNUMP)     !SMOOTHING LENGTHS FOR EACH (LOCAL) NODE
 
@@ -281,14 +281,16 @@
         RETURN
     END IF
 
-    IF (GMAXN_IN <= 0 .OR. GMAXN_IN > DIM_NN_LIST) THEN
+    GMAXN = GMAXN_IN
+    
+    IF (GMAXN <= 0 .OR. GMAXN > DIM_NN_LIST) THEN
         WRITE(*,*) 'WARNING: CONSTRUCT_FINT - GMAXN_IN (', GMAXN_IN, ') is unreasonable or > DIM_NN_LIST. Adjusting to MIN(MAX(1,GMAXN_IN), DIM_NN_LIST).'
-        GMAXN_IN = MIN(MAX(GMAXN_IN,1), DIM_NN_LIST)
+        GMAXN = MIN(MAX(GMAXN,1), DIM_NN_LIST)
     END IF
-    ! Ensure GMAXN_IN does not exceed a practical limit if DIM_NN_LIST is very large
-    IF (GMAXN_IN > 5000) THEN ! Example practical limit for GMAXN_IN
+    ! Ensure GMAXN does not exceed a practical limit if DIM_NN_LIST is very large
+    IF (GMAXN > 5000) THEN ! Example practical limit for GMAXN
         WRITE(*,*) 'WARNING: CONSTRUCT_FINT - GMAXN_IN (', GMAXN_IN, ') > 5000. Limiting to 5000.'
-        GMAXN_IN = 5000
+        GMAXN = 5000
     END IF
 
     IF (GNUMP <= 0) THEN
@@ -332,12 +334,8 @@
     ! For GMAXN, if it's invalid (e.g., 0 due to sync issues), use GNUMP as a fallback.
     ! The actual check for GMAXN > 0 before using LSTACK(GMAXN) is still important,
     ! but this handles the case where GMAXN_IN itself is passed incorrectly.
-    GMAXN = GMAXN_IN  ! Copy input to local variable
 
-    IF (GMAXN <= 0) THEN
-        !WRITE(*,*) 'WARNING: CONSTRUCT_FINT (Device) - Fixing invalid GMAXN from ', GMAXN, ' to ', GNUMP
-        GMAXN = GNUMP 
-    END IF
+
 
     IF (DIM_NN_LIST <= 0) THEN
        !WRITE(*,*) 'WARNING: CONSTRUCT_FINT (Device) - Fixing invalid DIM_NN_LIST from ', DIM_NN_LIST, ' to ', GNUMP * 1000
@@ -368,15 +366,23 @@
 
     DET = 1.d0
     ! Handle GWIN0 allocation outside parallel region
-    IF (LINIT) THEN
-        ALLOCATE(GWIN0(3,GNUMP), STAT=device_error_status_check) ! GWIN0 seems related to local node properties
-        IF (device_error_status_check /= 0) THEN
-            global_device_error_occurred = 100 ! 特定錯誤碼
-            ierr_fint_arg = global_device_error_occurred
-            RETURN
-        END IF
-        GWIN0 = GWIN
+IF (LINIT) THEN
+    ! 先檢查是否已配置
+    IF (ALLOCATED(GWIN0)) THEN
+        !$ACC EXIT DATA DELETE(GWIN0)
+        DEALLOCATE(GWIN0)
     END IF
+    
+    ALLOCATE(GWIN0(3,GNUMP), STAT=device_error_status_check)
+    IF (device_error_status_check /= 0) THEN
+        WRITE(*,*) 'ERROR: Failed to allocate GWIN0, size:', 3*GNUMP*8, 'bytes'
+        ierr_fint_arg = 100
+        RETURN
+    END IF
+    !$ACC ENTER DATA CREATE(GWIN0)
+    !$ACC UPDATE DEVICE(GWIN0)
+    GWIN0 = GWIN
+END IF
 
     !
     !
@@ -387,28 +393,22 @@
 
 		
 		
-    ! Chunking the main loop (Step 4 from request)
-    nchunks = (GNUMP + CHUNK_SIZE - 1) / CHUNK_SIZE
-
-    DO c_chunk = 1, nchunks
-        chunk_start = (c_chunk-1)*CHUNK_SIZE + 1
-        chunk_end   = MIN(c_chunk*CHUNK_SIZE, GNUMP)
-
-        !$ACC PARALLEL LOOP DEFAULT(PRESENT) &
-        !$ACC COPYOUT(global_device_error_occurred, inverse_fallback_count) &
-        !$ACC PRIVATE(LCOO, LCOO_T, VOL, LWIN, LSM_LEN, LN, LSTART, LGHOST, LVOL, LPROP, LMAT_TYPE, LOCAL_BODY_ID, SELF_EBC) &
-        !$ACC PRIVATE(LSTRESS, LSTRAIN, LSTATE, LBOD, LSTACK, LDINC, LDINC_TOT, LCOONE, LCOO_CUURENT) &
-        !$ACC PRIVATE(SHP, SHPD, SHPD_TRASH, SHPDTMP, FMAT, IFMAT, DET, LMAT, STRAIN, D, ELAS_MAT, LSTRESS_PREDICTOR, B_TEMP, B_INV_TEMP) &
-        !$ACC PRIVATE(BMAT, BMAT_T, FINT3, FINT3_EXT, ROT, STRESS_INC, STRAIN_INC, L_H_STRESS, L_S_STRESS) &
-        !$ACC PRIVATE(POISS, YOUNG, BULK, SHEAR, DENSITY, PMOD, MAXMOD, NSNI_FLAG, SHEAR_TRIAL, BULK_TRIAL) &
-        !$ACC PRIVATE(XMAP, YMAP, ZMAP, XLMAT, YLMAT, ZLMAT, DX_STRAIN, DY_STRAIN, DZ_STRAIN) &
-        !$ACC PRIVATE(LDX_STRESS, LDY_STRESS, LDZ_STRESS, CMAT, LAMDA, MU, LAMDA_PLUS_2MU) &
-        !$ACC PRIVATE(XBMAT, XBMAT_T, XFINT3, YBMAT, YBMAT_T, YFINT3, ZBMAT, ZBMAT_T, ZFINT3) &
-        !$ACC PRIVATE(MAG_STAB_FINT, MAG_FINT, NSNI_LIMITER, XNORM, F_INT_C_TEMP, F_INT_C) &
-        !$ACC PRIVATE(LOCAL_BODY_ID_2, MU1, MU_NEW, MU_NEW2, X2, X1, TEMP, F_N, F_T1, F_T2, F_T3, F_TT, F_T, constitution_error_flag) &
-        !$ACC PRIVATE(FGRAV, FBOD, J, K, L, JJ, II, P, KK, call_err_status) &
-        !$ACC REDUCTION(+:GINT_WORK)
-        DO I = chunk_start, chunk_end
+    !$ACC PARALLEL LOOP DEFAULT(PRESENT) &
+    !$ACC GANG WORKER VECTOR_LENGTH(128) &
+    !$ACC COPYOUT(global_device_error_occurred, inverse_fallback_count) &
+    !$ACC PRIVATE(LCOO, LCOO_T, VOL, LWIN, LSM_LEN, LN, LSTART, LGHOST, LVOL, LPROP, LMAT_TYPE, LOCAL_BODY_ID, SELF_EBC) &
+    !$ACC PRIVATE(LSTRESS, LSTRAIN, LSTATE, LBOD, LSTACK, LDINC, LDINC_TOT, LCOONE, LCOO_CUURENT) &
+    !$ACC PRIVATE(SHP, SHPD, SHPD_TRASH, SHPDTMP, FMAT, IFMAT, DET, LMAT, STRAIN, D, ELAS_MAT, LSTRESS_PREDICTOR, B_TEMP, B_INV_TEMP) &
+    !$ACC PRIVATE(BMAT, BMAT_T, FINT3, FINT3_EXT, ROT, STRESS_INC, STRAIN_INC, L_H_STRESS, L_S_STRESS) &
+    !$ACC PRIVATE(POISS, YOUNG, BULK, SHEAR, DENSITY, PMOD, MAXMOD, NSNI_FLAG, SHEAR_TRIAL, BULK_TRIAL) &
+    !$ACC PRIVATE(XMAP, YMAP, ZMAP, XLMAT, YLMAT, ZLMAT, DX_STRAIN, DY_STRAIN, DZ_STRAIN) &
+    !$ACC PRIVATE(LDX_STRESS, LDY_STRESS, LDZ_STRESS, CMAT, LAMDA, MU, LAMDA_PLUS_2MU) &
+    !$ACC PRIVATE(XBMAT, XBMAT_T, XFINT3, YBMAT, YBMAT_T, YFINT3, ZBMAT, ZBMAT_T, ZFINT3) &
+    !$ACC PRIVATE(MAG_STAB_FINT, MAG_FINT, NSNI_LIMITER, XNORM, F_INT_C_TEMP, F_INT_C) &
+    !$ACC PRIVATE(LOCAL_BODY_ID_2, MU1, MU_NEW, MU_NEW2, X2, X1, TEMP, F_N, F_T1, F_T2, F_T3, F_TT, F_T, constitution_error_flag) &
+    !$ACC PRIVATE(FGRAV, FBOD, J, K, L, JJ, II, P, KK, call_err_status) &
+    !$ACC REDUCTION(+:GINT_WORK)
+    DO I = 1, GNUMP
         !
         ! Initialize call_err_status for each node I inside the parallel loop
         call_err_status = 0
@@ -1501,17 +1501,19 @@ XNORM(1:3) =0.D0
                 MAG_FINT = MAG_FINT + FINT3(K)**2
             END DO
 
+! 使用私有陣列減少原子操作競爭
             DO K = 1, 3
-                ! ID_RANK = OMP_get_thread_num()  !OMPJOE
-                ! FINT_TEMP(ID_RANK+1,K,JJ) = FINT_TEMP(ID_RANK+1,K,JJ) + FINT3(K)*VOL*DET
-                ! FEXT_TEMP(ID_RANK+1,K,JJ) = FEXT_TEMP(ID_RANK+1,K,JJ) + FINT3_EXT(K)*VOL*DET
-                !$ACC ATOMIC UPDATE  ! FINT/FEXT are (GSIZE_IN*3)
-
-                FINT((JJ-1)*3+K) = FINT((JJ-1)*3+K) + FINT3(K)*VOL*DET ! 確保 FINT 也正確處理
-
                 !$ACC ATOMIC UPDATE
-                FEXT((JJ-1)*3+K) = FEXT((JJ-1)*3+K) + FINT3_EXT(K)*VOL*DET
+                FINT((JJ-1)*3+K) = FINT((JJ-1)*3+K) + FINT3(K)*VOL*DET
             END DO
+            
+            ! FEXT 通常競爭較少，可分開處理
+            IF (ABS(FINT3_EXT(1)) + ABS(FINT3_EXT(2)) + ABS(FINT3_EXT(3)) > 1.0D-20) THEN
+                DO K = 1, 3
+                    !$ACC ATOMIC UPDATE
+                    FEXT((JJ-1)*3+K) = FEXT((JJ-1)*3+K) + FINT3_EXT(K)*VOL*DET
+                END DO
+            END IF
 
         END DO !ASSEMBLE FINT FOR STANDARD NODAL INTEGRATION PART
 
@@ -1626,7 +1628,7 @@ XNORM(1:3) =0.D0
     !$ACC END PARALLEL LOOP
 
     !$ACC WAIT  ! Wait for the current chunk to complete
-    END DO ! End of chunking loop (c_chunk)
+!    END DO ! End of chunking loop (c_chunk)
 
 
     ! Assign the accumulated device error to the output error flag
@@ -1647,9 +1649,59 @@ XNORM(1:3) =0.D0
     !
     !FINT_TEMP TO HOLD THE VALUES FOR OPENMP REDUCE(ASSEMBLE,ADD) IN THE END
     !
-    ! IF (AUTO_TS) THEN
-        ! ... (original commented out time step calculation code) ...
-    ! END IF !CALC TIME STEP
+IF (AUTO_TS) THEN
+        !DO TIME STEP CALCS
+        !$ACC PARALLEL LOOP DEFAULT(PRESENT) &
+        !$ACC PRIVATE(LN, LSTART, LSTACK, XI, YI, ZI, XJ, YJ, ZJ, DIST, FIRST, J, JJ) &
+        !$ACC REDUCTION(MIN:DLT_FINT)
+        DO I = 1, GNUMP
+            LN = GN(I)
+            LSTART = GSTART(I)
+            
+            !$ACC LOOP SEQ PRIVATE(J)
+            DO J = 1, LN
+                LSTACK(J) = GSTACK(LSTART+J-1)
+            END DO
+            
+            XI=GCOO(1,I)
+            YI=GCOO(2,I)
+            ZI=GCOO(3,I)
+            
+            FIRST = .TRUE.
+            
+            IF (LINIT) THEN
+                !$ACC LOOP SEQ PRIVATE(JJ, XJ, YJ, ZJ, DIST)
+                DO J = 1, LN
+                    JJ = LSTACK(J)
+                    IF (JJ.NE.I) THEN
+                        XJ=GCOO(1,JJ)
+                        YJ=GCOO(2,JJ)
+                        ZJ=GCOO(3,JJ)
+                        
+                        DIST = DSQRT((XJ-XI)**2 + (YJ-YI)**2 + (ZJ-ZI)**2)
+                        
+                        IF (FIRST) THEN
+                            GCHAR_DIST(I) = DIST
+                            FIRST = .FALSE.
+                        ELSE
+                            GCHAR_DIST(I) = MIN(GCHAR_DIST(I),DIST)
+                        END IF
+                    END IF
+                END DO
+            END IF
+            
+            DLT_TEMP = GCHAR_DIST(I) / GMAX_WVEL(I)
+            
+            IF (I.EQ.1) THEN
+                DLT_FINT = DLT_TEMP
+            ELSE
+                DLT_FINT = MIN(DLT_TEMP,DLT_FINT)
+            END IF
+        END DO
+        !$ACC END PARALLEL LOOP
+        
+        DLT_FINT = DLT_FINT*DLT_FAC
+    END IF !CALC TIME STEP
 
     IF (ALLOCATED(fint_temp)) THEN
         DEALLOCATE(fint_temp, STAT=device_error_status_check)
@@ -1670,7 +1722,30 @@ XNORM(1:3) =0.D0
         IF (device_error_status_check /= 0) PRINT *, "Error deallocating GWIN0 in CONSTRUCT_FINT"
 
     END IF
+! 在 RETURN 之前
+IF (ALLOCATED(GWIN0)) THEN
+    !$ACC EXIT DATA DELETE(GWIN0)
+    DEALLOCATE(GWIN0, STAT=device_error_status_check)
+    IF (device_error_status_check /= 0) THEN
+        WRITE(*,*) "Warning: Error deallocating GWIN0"
+    END IF
+END IF
 
+! 對其他臨時配置的陣列也做相同處理
+IF (ALLOCATED(fint_temp)) THEN
+    !$ACC EXIT DATA DELETE(fint_temp)
+    DEALLOCATE(fint_temp, STAT=device_error_status_check)
+END IF
+
+IF (ALLOCATED(fext_temp)) THEN
+    !$ACC EXIT DATA DELETE(fext_temp)
+    DEALLOCATE(fext_temp, STAT=device_error_status_check)
+END IF
+
+IF (ALLOCATED(gint_work_temp)) THEN
+    !$ACC EXIT DATA DELETE(gint_work_temp)
+    DEALLOCATE(gint_work_temp, STAT=device_error_status_check)
+END IF
     RETURN
     END SUBROUTINE
 !            DO J = 1, LN
