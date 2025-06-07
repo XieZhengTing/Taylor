@@ -263,7 +263,11 @@ IF (DO_INTERP) THEN
 	  
 
 	  CNT_SEARCH = 0.0d0
-
+      ! 宣告搜尋控制變數
+      LOGICAL :: NEED_SEARCH
+      LOGICAL :: NEED_BIN_UPDATE
+      NEED_SEARCH = .FALSE.
+      NEED_BIN_UPDATE = .FALSE.
 
       !!!
       !!! BUCKET_SEARCH
@@ -356,41 +360,93 @@ IF (DO_INTERP) THEN
 
 
          END IF !(LINIT) 
+         ! 決定是否需要進行鄰居搜尋
+         ! 三種情況需要搜尋：
+         ! 1. 初始化時（LINIT = .TRUE.）
+         ! 2. 非拉格朗日方法且達到搜尋間隔
+         ! 3. 強制更新（未來擴充用）
          
-		 
-		 
-
-         IF (SEARCHCOUNT.LT.PDSEARCH) THEN              
-             SEARCHCOUNT=SEARCHCOUNT+1
-
-         ELSE             
-         CALL GET_BINS(GNUMP,GCOO_CUURENT,NODES_IN_BIN,MAX_NEIGH,NODELIST_IN_BIN, &
-                       NBINS,NBINSX,NBINSY,NBINSZ,ISPACE,JSPACE,KSPACE,XMIN,YMIN,ZMIN,XBIN,YBIN,ZBIN)
-         ! If ISPACE, JSPACE, etc. are used in device kernels within HANDELER after GET_BINS:
-         ! !$ACC UPDATE DEVICE(ISPACE, JSPACE, KSPACE, NODES_IN_BIN, NODELIST_IN_BIN) 
-
-
-         DO I=1,GNUMP
-         GIJKSPC(1,I) = ISPACE(I)
-         GIJKSPC(2,I) = JSPACE(I)
-         GIJKSPC(3,I) = KSPACE(I)
-		 END DO
-		 
-         SEARCHCOUNT=1
-
-
-         ENDIF
+         IF (LINIT) THEN
+             ! === 情況 1：初始化必須搜尋 ===
+             NEED_SEARCH = .TRUE.
+             NEED_BIN_UPDATE = .TRUE.  ! 初始化時也要更新 bin
+             WRITE(*,*) 'DEBUG: HANDELER - Initial search required (LINIT=.TRUE.)'
+             
+         ELSEIF (.NOT.LLAGRANGIAN) THEN
+             ! === 情況 2：歐拉或 ALE 方法 ===
+             ! 檢查是否達到搜尋間隔
+             IF (SEARCHCOUNT.GE.PDSEARCH) THEN
+                 NEED_SEARCH = .TRUE.
+                 NEED_BIN_UPDATE = .TRUE.  ! 達到間隔時更新 bin
+                 SEARCHCOUNT = 1
+                 WRITE(*,*) 'DEBUG: HANDELER - Periodic search triggered, SEARCHCOUNT reset to 1'
+             ELSE
+                 ! 還沒到搜尋時間，計數器加一
+                 SEARCHCOUNT = SEARCHCOUNT + 1
+                 NEED_SEARCH = .FALSE.
+             END IF
+             
+         ELSE
+             ! === 情況 3：拉格朗日方法（初始化後不需要搜尋）===
+             NEED_SEARCH = .FALSE.
+             WRITE(*,*) 'DEBUG: HANDELER - Lagrangian method, no search needed'
+         END IF
+         ! ==== 修改區塊結束 ====
+         
+         ! ==== 新增區塊開始：條件式搜尋執行 ====
+         IF (NEED_SEARCH) THEN
+             WRITE(*,*) 'DEBUG: HANDELER - Executing search...'
+             
+             ! --- Step 1: 如果不是初始化，需要同步座標資料 ---
+             IF (.NOT.LINIT) THEN
+                 ! 將當前座標從 GPU 傳回 CPU（因為 SOFT_SEARCH 在 CPU 執行）
+                 !$ACC UPDATE HOST(GCOO_CUURENT)
+                 WRITE(*,*) 'DEBUG: HANDELER - Updated coordinates from GPU to CPU'
+             END IF
+             
+             ! --- Step 2: 更新空間分割（binning）---
+             IF (NEED_BIN_UPDATE) THEN
+                 CALL GET_BINS(GNUMP,GCOO_CUURENT,NODES_IN_BIN,MAX_NEIGH,NODELIST_IN_BIN, &
+                               NBINS,NBINSX,NBINSY,NBINSZ,ISPACE,JSPACE,KSPACE,XMIN,YMIN,ZMIN,XBIN,YBIN,ZBIN)
+                 
+                 ! 更新每個節點的 bin 索引
+                 DO I=1,GNUMP
+                     GIJKSPC(1,I) = ISPACE(I)
+                     GIJKSPC(2,I) = JSPACE(I)
+                     GIJKSPC(3,I) = KSPACE(I)
+                 END DO
+                 
+                 WRITE(*,*) 'DEBUG: HANDELER - Bins updated'
+             END IF
+            
+             ! --- Step 3: 執行鄰居搜尋 ---
+             CALL SOFT_SEARCH(GNUMP,GCOO_CUURENT,GN,GSTART,DIM_NN_LIST,GSTACK,GMAXN,GWIN, &
+                              NODES_IN_BIN,MAX_NEIGH,NODELIST_IN_BIN, &
+                              NBINS,NBINSX,NBINSY,NBINSZ,ISPACE,JSPACE,KSPACE, &
+                              GXDIST_MAX, GYDIST_MAX, GZDIST_MAX,GSM_LEN)
+             
+             WRITE(*,*) 'DEBUG: HANDELER - SOFT_SEARCH completed, GMAXN = ', GMAXN
+             
+            ! --- Step 4: 選擇性更新搜尋結果到 GPU ---
+             ! 只更新必要的陣列，減少資料傳輸
+             !$ACC UPDATE DEVICE(GN, GSTART, GSTACK)
+             
+             ! 初始化時需要額外更新 GMAXN
+             IF (LINIT) THEN
+                 !$ACC UPDATE DEVICE(GMAXN)
+             END IF
+            
+             ! --- Step 5: 如果不是初始化，將座標傳回 GPU ---
+             IF (.NOT.LINIT) THEN
+                 !$ACC UPDATE DEVICE(GCOO_CUURENT)
+                 WRITE(*,*) 'DEBUG: HANDELER - Updated coordinates back to GPU'
+             END IF       
                 
-CALL SOFT_SEARCH(GNUMP,GCOO_CUURENT,GN,GSTART,DIM_NN_LIST,GSTACK,GMAXN,GWIN, &
-                   NODES_IN_BIN,MAX_NEIGH,NODELIST_IN_BIN, &
-                   NBINS,NBINSX,NBINSY,NBINSZ,ISPACE,JSPACE,KSPACE, &
-                   GXDIST_MAX, GYDIST_MAX, GZDIST_MAX,GSM_LEN)
+         ELSE
+             ! 不需要搜尋時的處理
+             WRITE(*,*) 'DEBUG: HANDELER - Skipping search, SEARCHCOUNT = ', SEARCHCOUNT
+         END IF
 
-! 立即更新所有搜尋結果到 GPU
-!$ACC UPDATE DEVICE(GMAXN, GN, GSTART, GSTACK, GSTACK_SHP, GSTACK_DSHP)
-
-! 如果使用 DECLARE LINK，確保更新生效
-!$ACC WAIT
 
 
       WRITE(*,*) 'DEBUG: HANDELER - After SOFT_SEARCH, Host GMAXN = ', GMAXN

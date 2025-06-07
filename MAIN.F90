@@ -362,7 +362,8 @@
       !$ACC      LOCAL_COO_CURRENT, LOCAL_PRFORCE, LOCAL_MASS, LOCAL_STRAIN_EQ, &
       !$ACC      LOCAL_EBC_NODES, LOCAL_CHAR_DIST, LOCAL_WAVE_VEL, &
       !$ACC      LOCAL_FINT, LOCAL_FEXT, &
-      !$ACC      TIME, DLT, LINIT, LINIT_TIME, DO_INTERP, TIME_COUNTER, STEPS, TIMER_STEPS, exodusStep) &
+      !$ACC      TIME, DLT, LINIT, LINIT_TIME, DO_INTERP, TIME_COUNTER, STEPS, TIMER_STEPS, exodusStep, &
+      !$ACC      DLOCAL_INT_ENERGY, DLOCAL_KIN_ENERGY, DLOCAL_EXT_ENERGY, DLOCAL_TOTAL_ENERGY) &
       !$ACC CREATE(LOCAL_FINT_NMO, LOCAL_FEXT_NMO, LOCAL_ACL_PHY, LOCAL_VEL_PHY, LOCAL_DINC_PHY) &
       !$ACC COPYOUT(LOCAL_DLT, TOTAL_FORCE)
     !WRITE(50,'(2A8,2A15,4A15)') 'Out Step','Step','Time','Delta T','Int Engery', 'Kin Energy', 'Ext Energy', 'Tot Energy', 'Est Time Rem'
@@ -391,17 +392,18 @@
         !
 
 
-        IF(LINIT) THEN
-!            !$ACC UPDATE DEVICE(LINIT)
-            LOCAL_DSP = 0.0d0 ! TO GET ZERO FINT, JUST TO GET SHP
-            ! Explicitly initialize FINT and FEXT on the device since they are now CREATE'd
-            !$ACC PARALLEL LOOP DEFAULT(PRESENT)
-            DO I = 1, 3*TOTAL_LOCAL_SIZE
-                LOCAL_FINT(I) = 0.0D0
-                LOCAL_FEXT(I) = 0.0D0
-            END DO
-            !$ACC END PARALLEL LOOP
-            DO_INTERP = .FALSE.
+IF(LINIT) THEN
+    ! 在 Host 上初始化
+    LOCAL_DSP = 0.0d0 ! TO GET ZERO FINT, JUST TO GET SHP
+    LOCAL_FINT = 0.0d0
+    LOCAL_FEXT = 0.0d0
+    DO_INTERP = .FALSE.
+    
+    ! 更新到 Device
+    !$ACC UPDATE DEVICE(LOCAL_DSP, LOCAL_FINT, LOCAL_FEXT, DO_INTERP)
+    
+    ! 確保 LINIT 在 Device 上也是正確的
+    !$ACC UPDATE DEVICE(LINIT)
             ! LOCAL_DSP is already on device and modified. DO_INTERP is scalar, will be passed by value.
 
 
@@ -585,72 +587,94 @@
         CALL ASSEMBLER(LOCAL_NUMP,LOCAL_FINT,HPC_SCHEME)
         !LOCAL_FINT = 0.D0 !TEMP FOR TESTING ROTATION
 
-        IF (AUTO_TS) DLT = LOCAL_DLT
+IF (AUTO_TS) THEN
+    ! 需要從 Device 取得 LOCAL_DLT 的值
+    !$ACC UPDATE HOST(LOCAL_DLT)
+    DLT = LOCAL_DLT
+    ! 更新 DLT 到 Device
+    !$ACC UPDATE DEVICE(DLT)
+END IF
 
-
-        IF (PDSTIME.NE.0.0D0) PDSEARCH=CEILING(PDSTIME/DLT)
+IF (PDSTIME.NE.0.0D0) THEN
+    PDSEARCH=CEILING(PDSTIME/DLT)
+    ! 更新 PDSEARCH 到 Device（如果在 Device 上使用）
+    !$ACC UPDATE DEVICE(PDSEARCH)
+END IF
         ! DLT and PDSEARCH are scalars, passed by value to kernels if needed.
         ! If they are part of COPY, their device versions are updated.
 
 
+! 初始化 TOTAL_FORCE
+!$ACC PARALLEL LOOP DEFAULT(PRESENT)
+DO I = 1, 3
+    DO J = 1, 2  ! 假設有 2 個 body
+        TOTAL_FORCE(I,J) = 0.0d0
+    END DO
+END DO
+!$ACC END PARALLEL LOOP
+
 !$ACC PARALLEL LOOP DEFAULT(PRESENT) &
-        !$ACC PRIVATE(J,M,I_STEP,STEP_NUM,MPDC) &
-        !$ACC GANG WORKER VECTOR_LENGTH(32)
-        DO I=1,LOCAL_NUMP
-            !$ACC LOOP SEQ PRIVATE(M,I_STEP,STEP_NUM,MPDC)
-            DO J=1,3
-                M = (I-1)*3+J
+!$ACC PRIVATE(J,M,I_STEP,STEP_NUM,MPDC) &
+!$ACC GANG WORKER VECTOR_LENGTH(32)
+DO I=1,LOCAL_NUMP
+    !$ACC LOOP SEQ PRIVATE(M,I_STEP,STEP_NUM,MPDC)
+    DO J=1,3
+        M = (I-1)*3+J
 
-                IF (LOCAL_EBC(J,I).EQ.1) THEN
-                    ! 固定邊界條件
-                    LOCAL_VEL(M) = 0.0d0
-                    LOCAL_ACL(M) = 0.0d0
-                    LOCAL_PRFORCE(J,I) = - LOCAL_FINT(M)
-                    LOCAL_FEXT(M) = - LOCAL_FINT(M)
+        IF (LOCAL_EBC(J,I).EQ.1) THEN
+            ! 固定邊界條件
+            LOCAL_VEL(M) = 0.0d0
+            LOCAL_ACL(M) = 0.0d0
+            LOCAL_PRFORCE(J,I) = - LOCAL_FINT(M)
+            LOCAL_FEXT(M) = - LOCAL_FINT(M)
 
-                ELSEIF (LOCAL_EBC(J,I).EQ.2) THEN 
-                    ! 非零位移邊界條件
-                    STEP_NUM = 0
-                    ! 找出當前時間所在的時間區間
-                    DO I_STEP = 1, FIXITY2_STEPS
-                        IF (FIXITY2_TIME(I_STEP,1) .LT. TIME .AND. TIME .LT. FIXITY2_TIME(I_STEP,2)) THEN
-                            STEP_NUM = I_STEP
-                            EXIT
-                        END IF
-                    END DO
-
-                    ! 指定速度
-                    IF (1 .LE. STEP_NUM .AND. STEP_NUM .LE. FIXITY2_STEPS) THEN
-                        LOCAL_VEL(M) = FIXITY2_NONZERO_EBC(STEP_NUM,J)/(FIXITY2_TIME(STEP_NUM,2) - FIXITY2_TIME(STEP_NUM,1))
-                    ELSE
-                        LOCAL_VEL(M) = 0.0d0
-                    END IF
-
-                    STEP_NUM = 0 ! 重新初始化
-
-                    LOCAL_ACL(M) = 0.0d0
-                    LOCAL_PRFORCE(J,I) = - LOCAL_FINT(M)
-                    LOCAL_FEXT(M) = - LOCAL_FINT(M)
-
-                ELSE   
-                    ! 自由節點
-                    MPDC = LOCAL_PROP(21,I)*LOCAL_MASS(M) ! 質量比例阻尼
-                    
-                    LOCAL_ACL(M) = (LOCAL_FEXT(M) - LOCAL_FINT(M) - MPDC*LOCAL_VEL(M))/ &
-                                   (LOCAL_MASS(M)+0.5d0*DLT*MPDC)
-                                   
-                    LOCAL_VEL(M) = LOCAL_VEL(M) + 0.5d0*DLT*LOCAL_ACL(M)
-                    
-                    LOCAL_PRFORCE(J,I) = 0.0d0
+        ELSEIF (LOCAL_EBC(J,I).EQ.2) THEN 
+            ! 非零位移邊界條件
+            STEP_NUM = 0
+            ! 找出當前時間所在的時間區間
+            DO I_STEP = 1, FIXITY2_STEPS
+                IF (FIXITY2_TIME(I_STEP,1) .LT. TIME .AND. TIME .LT. FIXITY2_TIME(I_STEP,2)) THEN
+                    STEP_NUM = I_STEP
+                    EXIT
                 END IF
-                
-                ! 累加總力（所有邊界條件類型）
-                !$ACC ATOMIC UPDATE
-                TOTAL_FORCE(J,LOCAL_BODY_ID(I)) = TOTAL_FORCE(J,LOCAL_BODY_ID(I)) + LOCAL_PRFORCE(J,I)
+            END DO
 
-            END DO ! J loop
-        END DO ! I loop
-        !$ACC END PARALLEL LOOP
+            ! 指定速度
+            IF (1 .LE. STEP_NUM .AND. STEP_NUM .LE. FIXITY2_STEPS) THEN
+                LOCAL_VEL(M) = FIXITY2_NONZERO_EBC(STEP_NUM,J)/(FIXITY2_TIME(STEP_NUM,2) - FIXITY2_TIME(STEP_NUM,1))
+            ELSE
+                LOCAL_VEL(M) = 0.0d0
+            END IF
+
+            STEP_NUM = 0 ! 重新初始化
+
+            LOCAL_ACL(M) = 0.0d0
+            LOCAL_PRFORCE(J,I) = - LOCAL_FINT(M)
+            LOCAL_FEXT(M) = - LOCAL_FINT(M)
+
+        ELSE   
+            ! 自由節點
+            MPDC = LOCAL_PROP(21,I)*LOCAL_MASS(M) ! 質量比例阻尼
+            
+            LOCAL_ACL(M) = (LOCAL_FEXT(M) - LOCAL_FINT(M) - MPDC*LOCAL_VEL(M))/ &
+                           (LOCAL_MASS(M)+0.5d0*DLT*MPDC)
+                           
+            LOCAL_VEL(M) = LOCAL_VEL(M) + 0.5d0*DLT*LOCAL_ACL(M)
+            
+            LOCAL_PRFORCE(J,I) = 0.0d0
+        END IF
+    END DO
+END DO
+!$ACC END PARALLEL LOOP
+
+! 單獨計算 TOTAL_FORCE，避免 race condition
+!$ACC PARALLEL LOOP DEFAULT(PRESENT) REDUCTION(+:TOTAL_FORCE)
+DO I=1,LOCAL_NUMP
+    DO J=1,3
+        TOTAL_FORCE(J,LOCAL_BODY_ID(I)) = TOTAL_FORCE(J,LOCAL_BODY_ID(I)) + LOCAL_PRFORCE(J,I)
+    END DO
+END DO
+!$ACC END PARALLEL LOOP
 
         ! Original single loop structure (commented out for reference after applying the split)
         ! !$ACC PARALLEL LOOP DEFAULT(PRESENT) &
@@ -740,26 +764,34 @@ IF (MOD(STEPS, 100) == 0) THEN  ! 每 100 步輸出一次
         ! NEED TO CALCULATE THE EXTERNAL ENERGY SO THAT THE ENERGIES ADD UP #TODO
         !
 
-        !$ACC PARALLEL LOOP DEFAULT(PRESENT) PRIVATE(I) &
-        !$ACC REDUCTION(+:DLOCAL_INT_ENERGY, DLOCAL_KIN_ENERGY, DLOCAL_EXT_ENERGY)
+! 初始化能量變數
+DLOCAL_INT_ENERGY = 0.0d0
+DLOCAL_KIN_ENERGY = 0.0d0
+DLOCAL_EXT_ENERGY = 0.0d0
 
-        DO I=1,TOTAL_LOCAL_NUMP*3
+!$ACC UPDATE DEVICE(DLOCAL_INT_ENERGY, DLOCAL_KIN_ENERGY, DLOCAL_EXT_ENERGY)
 
-            IF (.NOT.LFINITE_STRAIN) THEN
-                DLOCAL_INT_ENERGY = DLOCAL_INT_ENERGY + 0.50d0*(LOCAL_FINT(I))*LOCAL_DSP_TOT(I)
-            END IF
+!$ACC PARALLEL LOOP DEFAULT(PRESENT) PRIVATE(I) &
+!$ACC REDUCTION(+:DLOCAL_INT_ENERGY, DLOCAL_KIN_ENERGY, DLOCAL_EXT_ENERGY)
+DO I=1,TOTAL_LOCAL_NUMP*3
+    IF (.NOT.LFINITE_STRAIN) THEN
+        DLOCAL_INT_ENERGY = DLOCAL_INT_ENERGY + 0.50d0*(LOCAL_FINT(I))*LOCAL_DSP_TOT(I)
+    END IF
+    DLOCAL_KIN_ENERGY = DLOCAL_KIN_ENERGY + 0.50d0*LOCAL_MASS(I)*LOCAL_VEL(I)**2
+    DLOCAL_EXT_ENERGY = DLOCAL_EXT_ENERGY + 0.50d0*(LOCAL_FEXT(I)+LOCAL_FEXT_NMO(I))*LOCAL_DSP(I)
+END DO
+!$ACC END PARALLEL LOOP
 
-            !THE BELOW IS ONE FORMULA IN BELYSCHKO'S BOOK
-            !DLOCAL_INT_ENERGY = DLOCAL_INT_ENERGY + 0.50d0*(LOCAL_FINT(I)+LOCAL_FINT_NMO(I))*LOCAL_DSP(I)
+! 取得計算結果
+!$ACC UPDATE HOST(DLOCAL_INT_ENERGY, DLOCAL_KIN_ENERGY, DLOCAL_EXT_ENERGY)
 
-            !THE BELOW IS ONE FORMULA IN BELYSCHKO'S BOOK
-            !DLOCAL_INT_ENERGY = DLOCAL_INT_ENERGY + 0.50d0*DLT*(LOCAL_FINT(I)+LOCAL_FINT_NMO(I))*LOCAL_VEL(I)
+IF (LFINITE_STRAIN) THEN
+    ! 需要從 Device 取得 LOCAL_INT_WORK
+    !$ACC UPDATE HOST(LOCAL_INT_WORK)
+    DLOCAL_INT_ENERGY = DLOCAL_INT_ENERGY + LOCAL_INT_WORK
+END IF
 
-            DLOCAL_KIN_ENERGY = DLOCAL_KIN_ENERGY + 0.50d0*LOCAL_MASS(I)*LOCAL_VEL(I)**2
-            DLOCAL_EXT_ENERGY = DLOCAL_EXT_ENERGY + 0.50d0*(LOCAL_FEXT(I)+LOCAL_FEXT_NMO(I))*LOCAL_DSP(I)
-
-        END DO
-        !$ACC END PARALLEL LOOP
+DLOCAL_TOTAL_ENERGY = DLOCAL_INT_ENERGY + DLOCAL_KIN_ENERGY - DLOCAL_EXT_ENERGY
         IF (LFINITE_STRAIN) THEN
             DLOCAL_INT_ENERGY = DLOCAL_INT_ENERGY + LOCAL_INT_WORK
         END IF
@@ -814,14 +846,18 @@ IF (MOD(STEPS, 100) == 0) THEN  ! 每 100 步輸出一次
             ! CALL THE SUBROUTINE TO OUTPUT TO THE VTK FILE
             !
 IF (HPC_SCHEME.EQ.1) THEN
-    ! 只同步 VTK 輸出真正需要的資料
+    ! 同步所有 VTK 輸出需要的資料，確保資料完整性
     !$ACC UPDATE HOST(exodusStep, LOCAL_COO_CURRENT, LOCAL_DSP_TOT_PHY, LOCAL_VEL, &
-    !$ACC&            LOCAL_STRESS, LOCAL_STRAIN, LOCAL_FINT, LOCAL_STRAIN_EQ)
+    !$ACC&            LOCAL_VEL_PHY, LOCAL_ACL, LOCAL_ACL_PHY, &
+    !$ACC&            LOCAL_STRESS, LOCAL_STRAIN, LOCAL_STATE, LOCAL_FINT, &
+    !$ACC&            LOCAL_STRAIN_EQ, LOCAL_PRFORCE, &
+    !$ACC&            LOCAL_CHAR_DIST, LOCAL_WAVE_VEL, &
+    !$ACC&            LOCAL_EBC, LOCAL_BODY_ID, LOCAL_MAT_TYPE, &
+    !$ACC&            LOCAL_WIN, LOCAL_VOL, LOCAL_MASS, LOCAL_PROP, &
+    !$ACC&            LOCAL_IJKSPC)
     
-    ! 如果需要更詳細的輸出，再同步其他資料
-    IF (DETAILED_OUTPUT) THEN
-        !$ACC UPDATE HOST(LOCAL_ACL, LOCAL_PRFORCE, LOCAL_STATE, LOCAL_CHAR_DIST, LOCAL_WAVE_VEL)
-    END IF
+    ! 等待所有 GPU 操作完成，確保資料一致性
+    !$ACC WAIT
     
     IF (UNF_OUTPUT) THEN
         call UNF_OUTPUT_STEP_VTK(exodusStep,LOCAL_NUMP,MODEL_NUMEL, MODEL_ELCON, LOCAL_COO_CURRENT,MODEL_NODE_IDS,LOCAL_DSP_TOT_PHY,LOCAL_VEL_PHY, &

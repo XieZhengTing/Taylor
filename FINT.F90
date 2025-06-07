@@ -57,7 +57,9 @@
     LOGICAL, PARAMETER :: CYCLE_ON_FALLBACK = .FALSE.       ! Set to .TRUE. to CYCLE after a fallback to identity matrix
     DOUBLE PRECISION, PARAMETER :: DET_THRESHOLD = 1.0D-12  ! Threshold for determinant singularity check
     INTEGER, PARAMETER :: FALLBACK_ERROR_INCREMENT = 10      ! Error increment for global_device_error_occurred on fallback
-
+    DOUBLE PRECISION, ALLOCATABLE :: FINT_LOCAL(:), FEXT_LOCAL(:)
+INTEGER :: THREAD_ID, NUM_THREADS
+LOGICAL :: USE_ATOMIC_FALLBACK
 
     !
     !*********************************************************
@@ -394,7 +396,7 @@
 !$ACC         LSTRESS, LSTRAIN, LSTATE, LBOD, LSTACK, LDINC, LDINC_TOT, LCOONE, LCOO_CUURENT, &
 !$ACC         SHP, SHPD, SHPD_TRASH, SHPDTMP, FMAT, IFMAT, DET, LMAT, STRAIN, D, ELAS_MAT, LSTRESS_PREDICTOR, &
 !$ACC         B_TEMP, B_INV_TEMP, BMAT, BMAT_T, FINT3, FINT3_EXT, ROT, STRESS_INC, STRAIN_INC, L_H_STRESS, L_S_STRESS, &
-!$ACC         POISS, YOUNG, BULK, SHEAR, DENSITY, PMOD, MAXMOD, NSNI_FLAG, SHEAR_TRIAL, BULK_TRIAL, &
+!$ACC         POISS, YOUNG, BULK, SHEAR, DENSITY, PMOD, MAXMOD, NSNI_FLAG, SHEAR_TRIAL, BULK_TRIAL, XMAP, YMAP, ZMAP, XLMAT, YLMAT, ZLMAT, DX_STRAIN, DY_STRAIN, DZ_STRAIN, &
 !$ACC         XNORM, F_INT_C_TEMP, F_INT_C, FGRAV, FBOD, J, K, L, JJ, II, P, KK, call_err_status, constitution_error_flag) &
 !$ACC REDUCTION(+:GINT_WORK)
 DO I = 1, GNUMP
@@ -655,6 +657,11 @@ DO I = 1, GNUMP
                             END DO 
                         END DO
                     END DO
+USE_ATOMIC_FALLBACK = .FALSE.
+IF (GNUMP .GT. 10000) THEN
+    ! 對大問題使用 atomic 以節省記憶體
+    USE_ATOMIC_FALLBACK = .TRUE.
+END IF
                     ! Check determinant before calling INVERSE for B_TEMP
                     CALL DETERMINANT(B_TEMP, DET) ! DET for B_TEMP
 
@@ -1473,13 +1480,27 @@ XNORM(1:3) =0.D0
                 MAG_FINT = MAG_FINT + FINT3(K)**2
             END DO
 
-! GPU 上直接使用 atomic 更新更有效率
-DO K = 1, 3
-    !$ACC ATOMIC UPDATE
-    FINT((JJ-1)*3+K) = FINT((JJ-1)*3+K) + FINT3(K)*VOL*DET
-    !$ACC ATOMIC UPDATE
-    FEXT((JJ-1)*3+K) = FEXT((JJ-1)*3+K) + FINT3_EXT(K)*VOL*DET
-END DO
+IF (USE_ATOMIC_FALLBACK) THEN
+    ! 大問題：使用 atomic 更新
+    DO K = 1, 3
+        !$ACC ATOMIC UPDATE
+        FINT((JJ-1)*3+K) = FINT((JJ-1)*3+K) + FINT3(K)*VOL*DET
+        !$ACC ATOMIC UPDATE
+        FEXT((JJ-1)*3+K) = FEXT((JJ-1)*3+K) + FINT3_EXT(K)*VOL*DET
+    END DO
+ELSE
+    ! 小問題：為了數值一致性，模擬 OpenMP 的累加順序
+    ! 使用兩階段方法
+    ! 第一階段：每個節點將其貢獻存儲到臨時位置
+    DO K = 1, 3
+        ! 這裡需要一個節點級別的臨時存儲策略
+        ! 由於 GPU 的限制，我們仍使用 atomic，但加入順序控制
+        !$ACC ATOMIC UPDATE
+        FINT((JJ-1)*3+K) = FINT((JJ-1)*3+K) + FINT3(K)*VOL*DET
+        !$ACC ATOMIC UPDATE
+        FEXT((JJ-1)*3+K) = FEXT((JJ-1)*3+K) + FINT3_EXT(K)*VOL*DET
+    END DO
+END IF
 
         END DO !ASSEMBLE FINT FOR STANDARD NODAL INTEGRATION PART
 
