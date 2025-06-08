@@ -168,7 +168,7 @@ IF (DO_INTERP) THEN
             GVEL_PHY = GVEL
             GACL_PHY = GACL
         
-        ENDIF
+        END IF
 				
 				
       ELSE
@@ -490,7 +490,7 @@ IF (DO_INTERP) THEN
         !DEALLOCATE(ISPACE,JSPACE,KSPACE,NODES_IN_BIN,NODELIST_IN_BIN)       
           
         !!!CONTINUE
-!      END IF !CNT_SEARCH=MAX_CNT_SEARCH
+
 	  
       END IF
       ierr_fint = 0    
