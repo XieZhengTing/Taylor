@@ -138,6 +138,8 @@
       INTEGER, INTENT(OUT) :: H_IERR
       INTEGER :: temp_gmaxn_device_check ! Declare the temporary variable
       INTEGER(KIND=8) :: temp_dim_long
+      LOGICAL :: NEED_SEARCH         ! MOVED: Declaration for search logic
+      LOGICAL :: NEED_BIN_UPDATE     ! MOVED: Declaration for bin update logic
       
 IF (DO_INTERP) THEN
     IF(.NOT. PERIDYNAMICS) THEN  !RKPM
@@ -264,8 +266,7 @@ IF (DO_INTERP) THEN
 
 	  CNT_SEARCH = 0.0d0
       ! 宣告搜尋控制變數
-      LOGICAL :: NEED_SEARCH
-      LOGICAL :: NEED_BIN_UPDATE
+
       NEED_SEARCH = .FALSE.
       NEED_BIN_UPDATE = .FALSE.
 
@@ -489,7 +490,7 @@ IF (DO_INTERP) THEN
         !DEALLOCATE(ISPACE,JSPACE,KSPACE,NODES_IN_BIN,NODELIST_IN_BIN)       
           
         !!!CONTINUE
-      END IF !CNT_SEARCH=MAX_CNT_SEARCH
+!      END IF !CNT_SEARCH=MAX_CNT_SEARCH
 	  
       END IF
       ierr_fint = 0    

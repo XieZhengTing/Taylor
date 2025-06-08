@@ -104,11 +104,12 @@
        LOGICAL, SAVE:: eps_shear_OUTPUT       
        LOGICAL, SAVE:: eps_vol_OUTPUT   
        LOGICAL, SAVE:: dam_OUTPUT 
-!       LOGICAL, SAVE:: IJKspace_OUTPUT
+
        LOGICAL:: SHSUP    !if ture, then using spherical support, =false by defult, then using box support
        INTEGER, SAVE::IKCONTACT
        DOUBLE PRECISION, SAVE::PDSTIME !PERIODIC SEARCH TIME
-       LOGICAL, SAVE:: IJKspace_OUTPUT       
+       LOGICAL, SAVE:: IJKspace_OUTPUT
+       LOGICAL, SAVE, PARAMETER :: DETAILED_OUTPUT = .TRUE. ! For controlling detailed VTK output updates
 
 
        END MODULE
