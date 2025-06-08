@@ -380,6 +380,7 @@ LOGICAL :: USE_ATOMIC_FALLBACK
         GWIN0 = GWIN
     END IF
 
+
     !
     !
     !LOOP OVER THE NODE STACK

@@ -21,6 +21,7 @@
      !$ACC& HPC_SCHEME, NCORES, NCORES_INPUT, MAX_CORES, THIS_CORE_NO, LUSER_OMP_CORES, GHOST_BUFFER, &
      !$ACC& PDSEARCH, PDSTIME, AUTO_TS, DLT_FAC, TIME_SEARCH, LFINITE_STRAIN, LLAGRANGIAN, &
      !$ACC& STABILIZATION_CONTROL_COEF, USE_STAB_CONTROL, node_id_OUTPUT, displacement_OUTPUT, &
+
      !$ACC& velocity_OUTPUT, acceleration_OUTPUT, fint_OUTPUT, fixity_OUTPUT, bodyid_OUTPUT, &
      !$ACC& material_type_OUTPUT, initial_coordinate_OUTPUT, init_velocity_OUTPUT, &
      !$ACC& normalized_window_OUTPUT, nodal_volume_OUTPUT, nodal_mass_OUTPUT, Poissons_ratio_OUTPUT, &
@@ -109,7 +110,7 @@
        INTEGER, SAVE::IKCONTACT
        DOUBLE PRECISION, SAVE::PDSTIME !PERIODIC SEARCH TIME
        LOGICAL, SAVE:: IJKspace_OUTPUT
-       LOGICAL, SAVE, PARAMETER :: DETAILED_OUTPUT = .TRUE. ! For controlling detailed VTK output updates
+       LOGICAL, SAVE, PARAMETER :: DETAILED_OUTPUT = .TRUE. ! For controlling detailed VTK output updates, e.g. ACC UPDATE HOST
 
 
        END MODULE

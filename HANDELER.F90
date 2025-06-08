@@ -221,31 +221,34 @@ IF (DO_INTERP) THEN
       IF (LINIT) THEN
           ALLOCATE(GN(GNUMP)) 
           ALLOCATE(GSTART(GNUMP)) 
-          ! DIM_NN_LIST is set above, ensure it's valid before allocating GSTACK
-          IF (DIM_NN_LIST <= 0) THEN 
-              DIM_NN_LIST = GNUMP * 1000 ! Fallback
-          END IF
-
-    
+          
+          ! DIM_NN_LIST 必須與 OpenMP 版本完全相同
+          DIM_NN_LIST=GNUMP*1000  ! 與 OpenMP 版本一致
+          GMAXN=GNUMP             ! 與 OpenMP 版本一致
+          
           ALLOCATE(GSTACK(DIM_NN_LIST))                
           ALLOCATE(GSTACK_SHP(DIM_NN_LIST))                    
           ALLOCATE(GSTACK_DSHP(3,DIM_NN_LIST))  
           ALLOCATE(GSTACK_DDSHP(6,DIM_NN_LIST)) 
           ALLOCATE(GINVK(3,3,GNUMP))
-          !$ACC ENTER DATA CREATE(GN, GSTART, GSTACK, GSTACK_SHP, GSTACK_DSHP, GSTACK_DDSHP, GINVK)
-
-          ! For newly allocated arrays that are DECLARE CREATE'd, their device counterparts are also allocated.
-          ! If they need initial values from host, an UPDATE DEVICE would be needed after host initialization.
-          ! Here, they are just allocated.
-          ! Without DECLARE CREATE, their data will be copied to device when passed as arguments to ACC ROUTINEs.
-
+          
+          ! 初始化陣列為 0（與 OpenMP 版本的隱含行為一致）
+          GN = 0
+          GSTART = 0
+          GSTACK = 0
+          GSTACK_SHP = 0.0D0
+          GSTACK_DSHP = 0.0D0
+          GSTACK_DDSHP = 0.0D0
+          GINVK = 0.0D0
+          
+          ! 將初始化的資料複製到 GPU
+          !$ACC ENTER DATA COPYIN(GN, GSTART, GSTACK, GSTACK_SHP, GSTACK_DSHP, GSTACK_DDSHP, GINVK)
+          
           CNT_SEARCH = 0.0d0
-
           SEARCHCOUNT=PDSEARCH
-          ! If CNT_SEARCH or SEARCHCOUNT are used in device kernels within HANDELER,
-          ! an !$ACC UPDATE DEVICE(CNT_SEARCH, SEARCHCOUNT) would be needed.
-
-
+          
+          ! 更新標量到 GPU
+          !$ACC UPDATE DEVICE(CNT_SEARCH, SEARCHCOUNT, DIM_NN_LIST, GMAXN)
       END IF
       
       !
@@ -394,59 +397,40 @@ IF (DO_INTERP) THEN
          END IF
          ! ==== 修改區塊結束 ====
          
-         ! ==== 新增區塊開始：條件式搜尋執行 ====
          IF (NEED_SEARCH) THEN
              WRITE(*,*) 'DEBUG: HANDELER - Executing search...'
              
-             ! --- Step 1: 如果不是初始化，需要同步座標資料 ---
-             IF (.NOT.LINIT) THEN
-                 ! 將當前座標從 GPU 傳回 CPU（因為 SOFT_SEARCH 在 CPU 執行）
-                 !$ACC UPDATE HOST(GCOO_CUURENT)
-                 WRITE(*,*) 'DEBUG: HANDELER - Updated coordinates from GPU to CPU'
-             END IF
+             ! --- Step 1: 完整同步所有需要的資料到 CPU ---
+             !$ACC UPDATE HOST(GCOO_CUURENT, GWIN, GSM_LEN)
              
-             ! --- Step 2: 更新空間分割（binning）---
+             ! --- Step 2: 更新空間分割（與 OpenMP 版本完全相同的邏輯）---
              IF (NEED_BIN_UPDATE) THEN
                  CALL GET_BINS(GNUMP,GCOO_CUURENT,NODES_IN_BIN,MAX_NEIGH,NODELIST_IN_BIN, &
                                NBINS,NBINSX,NBINSY,NBINSZ,ISPACE,JSPACE,KSPACE,XMIN,YMIN,ZMIN,XBIN,YBIN,ZBIN)
                  
-                 ! 更新每個節點的 bin 索引
                  DO I=1,GNUMP
                      GIJKSPC(1,I) = ISPACE(I)
                      GIJKSPC(2,I) = JSPACE(I)
                      GIJKSPC(3,I) = KSPACE(I)
                  END DO
-                 
-                 WRITE(*,*) 'DEBUG: HANDELER - Bins updated'
              END IF
             
-             ! --- Step 3: 執行鄰居搜尋 ---
+             ! --- Step 3: 執行鄰居搜尋（與 OpenMP 版本相同）---
              CALL SOFT_SEARCH(GNUMP,GCOO_CUURENT,GN,GSTART,DIM_NN_LIST,GSTACK,GMAXN,GWIN, &
                               NODES_IN_BIN,MAX_NEIGH,NODELIST_IN_BIN, &
                               NBINS,NBINSX,NBINSY,NBINSZ,ISPACE,JSPACE,KSPACE, &
                               GXDIST_MAX, GYDIST_MAX, GZDIST_MAX,GSM_LEN)
              
-             WRITE(*,*) 'DEBUG: HANDELER - SOFT_SEARCH completed, GMAXN = ', GMAXN
+             ! --- Step 4: 完整同步所有修改過的資料回 GPU ---
+             !$ACC UPDATE DEVICE(GN, GSTART, GSTACK, GMAXN)
+             !$ACC UPDATE DEVICE(NODES_IN_BIN, NODELIST_IN_BIN)
+             !$ACC UPDATE DEVICE(ISPACE, JSPACE, KSPACE, GIJKSPC)
              
-            ! --- Step 4: 選擇性更新搜尋結果到 GPU ---
-             ! 只更新必要的陣列，減少資料傳輸
-             !$ACC UPDATE DEVICE(GN, GSTART, GSTACK)
+             ! 如果 SOFT_SEARCH 修改了其他陣列，也要同步
+             !$ACC UPDATE DEVICE(GCOO_CUURENT, GWIN, GSM_LEN)
              
-             ! 初始化時需要額外更新 GMAXN
-             IF (LINIT) THEN
-                 !$ACC UPDATE DEVICE(GMAXN)
-             END IF
-            
-             ! --- Step 5: 如果不是初始化，將座標傳回 GPU ---
-             IF (.NOT.LINIT) THEN
-                 !$ACC UPDATE DEVICE(GCOO_CUURENT)
-                 WRITE(*,*) 'DEBUG: HANDELER - Updated coordinates back to GPU'
-             END IF       
-                
-         ELSE
-             ! 不需要搜尋時的處理
-             WRITE(*,*) 'DEBUG: HANDELER - Skipping search, SEARCHCOUNT = ', SEARCHCOUNT
-         END IF
+             ! 等待所有更新完成
+             !$ACC WAIT
 
 
 
@@ -490,13 +474,19 @@ IF (DO_INTERP) THEN
         !DEALLOCATE(ISPACE,JSPACE,KSPACE,NODES_IN_BIN,NODELIST_IN_BIN)       
           
         !!!CONTINUE
-
-	  
+      END IF !CNT_SEARCH=MAX_CNT_SEARCH
+END IF	  
       END IF
       ierr_fint = 0    
 
 
-      WRITE(*,*) 'DEBUG: HANDELER - Before calling CONSTRUCT_FINT/PD:'
+      ! 確保所有必要的資料都在 GPU 上
+      !$ACC UPDATE DEVICE(GCOO, GCOO_CUURENT, GWIN, GVOL)
+      !$ACC UPDATE DEVICE(GN, GSTART, GSTACK)
+      !$ACC WAIT
+
+      !WRITE(*,*) 'DEBUG: HANDELER - Before calling CONSTRUCT_FINT/PD:' 
+
       WRITE(*,*) '  LINIT = ', LINIT
       !$ACC UPDATE HOST(GMAXN, DIM_NN_LIST) ! Get current device values for check
       ! This UPDATE HOST for GMAXN and DIM_NN_LIST might be problematic if they are not consistently on device
@@ -582,7 +572,20 @@ END IF
           GFEXT(I) = 0.0D0
       END DO
       !$ACC END PARALLEL LOOP
-
+      
+      ! 驗證一致性的檢查點
+      IF (LINIT) THEN
+          ! 在 SOFT_SEARCH 後檢查結果
+          !$ACC UPDATE HOST(GN(1:MIN(10,GNUMP)), GMAXN)
+          WRITE(*,*) 'DEBUG: First 10 GN values: ', GN(1:MIN(10,GNUMP))
+          WRITE(*,*) 'DEBUG: GMAXN after search: ', GMAXN
+          
+          ! 檢查第一個節點的鄰居
+          IF (GNUMP > 0 .AND. GN(1) > 0) THEN
+              !$ACC UPDATE HOST(GSTACK(GSTART(1):GSTART(1)+GN(1)-1))
+              WRITE(*,*) 'DEBUG: Node 1 neighbors: ', GSTACK(GSTART(1):GSTART(1)+GN(1)-1)
+          END IF
+      END IF
 
       IF (PERIDYNAMICS) THEN
 

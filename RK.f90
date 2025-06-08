@@ -339,17 +339,21 @@ CONTAINS
     END IF
 
     IF (MSIZE.EQ.4) THEN
-    CALL M44INV(M_FULL, MINV, ierr_inv) ! 假設 ierr_inv 已宣告為 INTEGER
-    IF (ierr_inv /= 0) THEN 
-        ! 處理錯誤 (e.g., MINV = HUGE(0.0D0); SHP = HUGE(0.0D0); SHPD = HUGE(0.0D0); RETURN)
-        SHP = HUGE(0.0D0); SHPD = HUGE(0.0D0); RETURN;
-    END IF
+        CALL M44INV(M_FULL, MINV, ierr_inv)
     ELSE
-    CALL INVERSE(M_FULL, MSIZE, MINV, ierr_inv) ! 假設 ierr_inv 已宣告為 INTEGER
-    IF (ierr_inv /= 0) THEN 
-        ! 處理錯誤 (e.g., MINV = HUGE(0.0D0); SHP = HUGE(0.0D0); SHPD = HUGE(0.0D0); RETURN)
-        SHP = HUGE(0.0D0); SHPD = HUGE(0.0D0); RETURN;
+        CALL INVERSE(M_FULL, MSIZE, MINV, ierr_inv)
     END IF
+    
+    ! 錯誤處理 - 確保不會因為 GPU 限制而改變行為
+    IF (ierr_inv /= 0) THEN 
+        ! 設定錯誤值但不停止執行（與 OpenMP 版本一致）
+        DO I=1,LNMAX
+            SHP(I) = 0.0D0
+            SHPD(1,I) = 0.0D0
+            SHPD(2,I) = 0.0D0
+            SHPD(3,I) = 0.0D0
+        END DO
+        RETURN
     END IF
     
     H0 = 0.0d0
@@ -877,8 +881,10 @@ CONTAINS
     DOUBLE PRECISION, INTENT(OUT):: PHI,PHIX
     LOGICAL, INTENT(OUT):: ISZERO
     INTEGER, INTENT(OUT) :: ierr
+    
     ISZERO = .FALSE.
     ierr = 0
+    
     IF (CONT.EQ.3) THEN !CUBIC SPLINE
         IF (XN.LE.1.0D0) THEN
             PHI = 1.0D0 - 6.0D0*XN**2 + 8.0D0*XN**3 - 3.0D0*XN**4
@@ -889,12 +895,16 @@ CONTAINS
             ISZERO = .TRUE.
         END IF
     ELSE
-!        PRINT *, 'MLS KERNEL NOT DEFINED' ! This PRINT/STOP will be an issue on device
-!        STOP                             ! Needs error flag propagation if called on device
+        ! 不支援的核函數類型
+        PHI = 0.0D0
+        PHIX = 0.0D0
         ierr = 1
-    END IF ! CONT.EQ.3
+    END IF
+    
     RETURN
     END SUBROUTINE MLS_KERNEL0
+
+
 	  SUBROUTINE HUGHES_WINGET(LMAT, & !IN
 	                           ROT,STRAIN,D) !OUT
 	  !$ACC ROUTINE SEQ
