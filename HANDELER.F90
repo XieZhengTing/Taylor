@@ -143,26 +143,40 @@
       
 IF (DO_INTERP) THEN
     IF(.NOT. PERIDYNAMICS) THEN  !RKPM
-        ! OpenMP 版本沒有平行化，但在 GPU 上應該平行化以提升效能
-        !$ACC PARALLEL LOOP DEFAULT(PRESENT) &
-        !$ACC PRIVATE(LSTART, K, M, J, SHPT, MM)
-        DO I=1,GNUMP
-            LSTART = GSTART(I)
-            DO K = 1, 3
-                M=(I-1)*3+K
-                GDINC_PHY(M) = 0.0d0
-                GVEL_PHY(M) = 0.0d0
-                GACL_PHY(M) = 0.0d0
-                DO J = 1, GN(I)
-                    SHPT=GSTACK_SHP(LSTART+J-1)
-                    MM = (GSTACK(LSTART+J-1) - 1)*3 + K
-                    GDINC_PHY(M) = GDINC_PHY(M) +  SHPT*GDINC(MM)
-                    GVEL_PHY(M) = GVEL_PHY(M) +  SHPT*GVEL(MM)
-                    GACL_PHY(M) = GACL_PHY(M) +  SHPT*GACL(MM)
+        ! 先確保 GSTACK_SHP 已經計算
+        IF (LINIT) THEN
+            WRITE(*,*) 'WARNING: DO_INTERP called but shape functions may not be ready during LINIT'
+            ! 設定預設值避免錯誤
+            !$ACC PARALLEL LOOP DEFAULT(PRESENT)
+            DO I = 1, 3*GNUMP
+                GDINC_PHY(I) = 0.0d0
+                GVEL_PHY(I) = 0.0d0
+                GACL_PHY(I) = 0.0d0
+            END DO
+            !$ACC END PARALLEL LOOP
+        ELSE
+            !$ACC PARALLEL LOOP DEFAULT(PRESENT) &
+            !$ACC PRIVATE(LSTART, K, M, J, SHPT, MM)
+            DO I=1,GNUMP
+                LSTART = GSTART(I)
+                DO K = 1, 3
+                    M=(I-1)*3+K
+                    GDINC_PHY(M) = 0.0d0
+                    GVEL_PHY(M) = 0.0d0
+                    GACL_PHY(M) = 0.0d0
+                    IF (GN(I) > 0) THEN  ! 檢查是否有鄰居
+                        DO J = 1, GN(I)
+                            SHPT=GSTACK_SHP(LSTART+J-1)
+                            MM = (GSTACK(LSTART+J-1) - 1)*3 + K
+                            GDINC_PHY(M) = GDINC_PHY(M) +  SHPT*GDINC(MM)
+                            GVEL_PHY(M) = GVEL_PHY(M) +  SHPT*GVEL(MM)
+                            GACL_PHY(M) = GACL_PHY(M) +  SHPT*GACL(MM)
+                        END DO
+                    END IF
                 END DO
             END DO
-        END DO
-        !$ACC END PARALLEL LOOP
+            !$ACC END PARALLEL LOOP
+        END IF
     ELSE  !PERIDYNAMICS
             GDINC_PHY = GDINC
             GVEL_PHY = GVEL
@@ -175,34 +189,17 @@ IF (DO_INTERP) THEN
       
       !CALL THE NODE SEARCH ROUTINE HERE IF NEEDED
       IF ((LINIT).OR.(.NOT.LLAGRANGIAN)) THEN
-      H_IERR = 0 ! Initialize H_IERR
+      H_IERR = 0
       IF (GNUMP <= 0) THEN
           WRITE(*,*) 'ERROR: HANDELER - GNUMP <= 0 before calculating DIM_NN_LIST. GNUMP = ', GNUMP
           H_IERR = -40 
-
           RETURN
       END IF    
       WRITE(*,*) 'DEBUG: HANDELER - GNUMP = ', GNUMP, ' (before DIM_NN_LIST calculation)'
-     
-
-
-      ! GMAXN is determined by search routines later.
-      ! The GMAXN_IN passed to CONSTRUCT_FINT will be this HANDELER's GMAXN.
-      ! We will check GMAXN after search routines and before CONSTRUCT_FINT call.
-      ! For now, ensure GMAXN (if it has a preliminary value, e.g. from a previous step or LINIT)
-      ! is reasonable if it were to be used before search.
-      ! However, GMAXN is typically an *output* of search routines.
-      ! The example suggests checking GMAXN_IN, which is the GMAXN from HANDELER passed to CONSTRUCT_FINT.
-  
-     
-      ! Calculate and limit DIM_NN_LIST *before* SOFT_SEARCH or any allocation depending on it.
-      temp_dim_long = INT(GNUMP, KIND=8) * 1000_8   ! Default: GNUMP*1000
-      IF (temp_dim_long > 500000_8) THEN           ! Cap at 500,000
-          temp_dim_long = 500000_8
-      END IF
-      ! Ensure at least GNUMP*10
-      temp_dim_long = MAX(temp_dim_long, INT(GNUMP, KIND=8)*10_8)
-      DIM_NN_LIST = INT(temp_dim_long, KIND=4) ! Assign back to INTEGER (default kind)
+      
+      ! 使用與 OpenMP 版本相同的計算方式
+      DIM_NN_LIST = GNUMP * 1000
+      GMAXN = GNUMP
       WRITE(*,*) 'DEBUG: HANDELER - Host DIM_NN_LIST set to = ', DIM_NN_LIST
       ! Immediately update DIM_NN_LIST on the device
       !$ACC UPDATE DEVICE(DIM_NN_LIST)
@@ -219,37 +216,44 @@ IF (DO_INTERP) THEN
 
 
       IF (LINIT) THEN
-          ALLOCATE(GN(GNUMP)) 
-          ALLOCATE(GSTART(GNUMP)) 
+          ! 檢查是否已經分配，避免重複分配
+          IF (.NOT. ALLOCATED(GN)) THEN
+              ALLOCATE(GN(GNUMP)) 
+              GN = 0  ! 初始化
+          END IF
           
-          ! DIM_NN_LIST 必須與 OpenMP 版本完全相同
-          DIM_NN_LIST=GNUMP*1000  ! 與 OpenMP 版本一致
-          GMAXN=GNUMP             ! 與 OpenMP 版本一致
+          IF (.NOT. ALLOCATED(GSTART)) THEN
+              ALLOCATE(GSTART(GNUMP))
+              GSTART = 0  ! 初始化
+          END IF
           
-          ALLOCATE(GSTACK(DIM_NN_LIST))                
-          ALLOCATE(GSTACK_SHP(DIM_NN_LIST))                    
-          ALLOCATE(GSTACK_DSHP(3,DIM_NN_LIST))  
-          ALLOCATE(GSTACK_DDSHP(6,DIM_NN_LIST)) 
-          ALLOCATE(GINVK(3,3,GNUMP))
+          IF (.NOT. ALLOCATED(GSTACK)) THEN
+              ALLOCATE(GSTACK(DIM_NN_LIST))
+              GSTACK = 0  ! 初始化
+          END IF
           
-          ! 初始化陣列為 0（與 OpenMP 版本的隱含行為一致）
-          GN = 0
-          GSTART = 0
-          GSTACK = 0
-          GSTACK_SHP = 0.0D0
-          GSTACK_DSHP = 0.0D0
-          GSTACK_DDSHP = 0.0D0
-          GINVK = 0.0D0
+          IF (.NOT. ALLOCATED(GSTACK_SHP)) THEN
+              ALLOCATE(GSTACK_SHP(DIM_NN_LIST))
+              GSTACK_SHP = 0.0D0  ! 初始化
+          END IF
           
-          ! 將初始化的資料複製到 GPU
+          IF (.NOT. ALLOCATED(GSTACK_DSHP)) THEN
+              ALLOCATE(GSTACK_DSHP(3,DIM_NN_LIST))
+              GSTACK_DSHP = 0.0D0  ! 初始化
+          END IF
+          
+          IF (.NOT. ALLOCATED(GSTACK_DDSHP)) THEN
+              ALLOCATE(GSTACK_DDSHP(6,DIM_NN_LIST))
+              GSTACK_DDSHP = 0.0D0  ! 初始化
+          END IF
+          
+          IF (.NOT. ALLOCATED(GINVK)) THEN
+              ALLOCATE(GINVK(3,3,GNUMP))
+              GINVK = 0.0D0  ! 初始化
+          END IF
+          
+          ! 只在第一次分配時才 ENTER DATA
           !$ACC ENTER DATA COPYIN(GN, GSTART, GSTACK, GSTACK_SHP, GSTACK_DSHP, GSTACK_DDSHP, GINVK)
-          
-          CNT_SEARCH = 0.0d0
-          SEARCHCOUNT=PDSEARCH
-          
-          ! 更新標量到 GPU
-          !$ACC UPDATE DEVICE(CNT_SEARCH, SEARCHCOUNT, DIM_NN_LIST, GMAXN)
-      END IF
       
       !
       ! HARD_SEARCH
@@ -577,14 +581,30 @@ END IF
       IF (LINIT) THEN
           ! 在 SOFT_SEARCH 後檢查結果
           !$ACC UPDATE HOST(GN(1:MIN(10,GNUMP)), GMAXN)
+      IF (LINIT) THEN
+          !$ACC UPDATE HOST(GN, GSTART, GSTACK, GSTACK_SHP, GSTACK_DSHP)
+          
           WRITE(*,*) 'DEBUG: First 10 GN values: ', GN(1:MIN(10,GNUMP))
           WRITE(*,*) 'DEBUG: GMAXN after search: ', GMAXN
           
-          ! 檢查第一個節點的鄰居
+          ! 檢查是否有節點沒有鄰居
+          DO I = 1, MIN(10, GNUMP)
+              IF (GN(I) <= 0) THEN
+                  WRITE(*,*) 'WARNING: Node ', I, ' has no neighbors!'
+              END IF
+          END DO
+          
           IF (GNUMP > 0 .AND. GN(1) > 0) THEN
-              !$ACC UPDATE HOST(GSTACK(GSTART(1):GSTART(1)+GN(1)-1))
               WRITE(*,*) 'DEBUG: Node 1 neighbors: ', GSTACK(GSTART(1):GSTART(1)+GN(1)-1)
+              
+              ! 檢查 shape function 是否已計算
+              WRITE(*,*) 'DEBUG: First 10 SHP values for node 1: ', &
+                        GSTACK_SHP(GSTART(1):MIN(GSTART(1)+9, GSTART(1)+GN(1)-1))
           END IF
+          
+          ! 確保所有資料都同步到 GPU
+          !$ACC UPDATE DEVICE(GN, GSTART, GSTACK, GSTACK_SHP, GSTACK_DSHP, GSTACK_DDSHP)
+      END IF
       END IF
 
       IF (PERIDYNAMICS) THEN
