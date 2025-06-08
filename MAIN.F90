@@ -491,7 +491,7 @@ ENDIF
 
                 CALL EXIT_PROGRAM('Error during HANDELER initialization', ierr_handeler)
             END IF
-        ENDIF
+!        END IF
         !
 
         !DO I=1,LOCAL_NUMP
@@ -516,7 +516,7 @@ ENDIF
             END IF
         END DO
         !$ACC END PARALLEL LOOP
-
+        !$ACC PARALLEL LOOP DEFAULT(PRESENT) PRIVATE(M)
         DO M=1, 3*TOTAL_LOCAL_SIZE ! Loop over all components of vector arrays
             IF (LINIT.AND.(AUTO_TS)) THEN
                 !WE DONT HAVE A TIME STEP ESTIMATE YET
