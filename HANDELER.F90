@@ -216,44 +216,37 @@ IF (DO_INTERP) THEN
 
 
       IF (LINIT) THEN
-          ! 檢查是否已經分配，避免重複分配
-          IF (.NOT. ALLOCATED(GN)) THEN
-              ALLOCATE(GN(GNUMP)) 
-              GN = 0  ! 初始化
-          END IF
+          ALLOCATE(GN(GNUMP)) 
+          ALLOCATE(GSTART(GNUMP)) 
           
-          IF (.NOT. ALLOCATED(GSTART)) THEN
-              ALLOCATE(GSTART(GNUMP))
-              GSTART = 0  ! 初始化
-          END IF
+          ! DIM_NN_LIST 必須與 OpenMP 版本完全相同
+          DIM_NN_LIST=GNUMP*1000  ! 與 OpenMP 版本一致
+          GMAXN=GNUMP             ! 與 OpenMP 版本一致
           
-          IF (.NOT. ALLOCATED(GSTACK)) THEN
-              ALLOCATE(GSTACK(DIM_NN_LIST))
-              GSTACK = 0  ! 初始化
-          END IF
+          ALLOCATE(GSTACK(DIM_NN_LIST))                
+          ALLOCATE(GSTACK_SHP(DIM_NN_LIST))                    
+          ALLOCATE(GSTACK_DSHP(3,DIM_NN_LIST))  
+          ALLOCATE(GSTACK_DDSHP(6,DIM_NN_LIST)) 
+          ALLOCATE(GINVK(3,3,GNUMP))
           
-          IF (.NOT. ALLOCATED(GSTACK_SHP)) THEN
-              ALLOCATE(GSTACK_SHP(DIM_NN_LIST))
-              GSTACK_SHP = 0.0D0  ! 初始化
-          END IF
+          ! 初始化陣列為 0（與 OpenMP 版本的隱含行為一致）
+          GN = 0
+          GSTART = 0
+          GSTACK = 0
+          GSTACK_SHP = 0.0D0
+          GSTACK_DSHP = 0.0D0
+          GSTACK_DDSHP = 0.0D0
+          GINVK = 0.0D0
           
-          IF (.NOT. ALLOCATED(GSTACK_DSHP)) THEN
-              ALLOCATE(GSTACK_DSHP(3,DIM_NN_LIST))
-              GSTACK_DSHP = 0.0D0  ! 初始化
-          END IF
-          
-          IF (.NOT. ALLOCATED(GSTACK_DDSHP)) THEN
-              ALLOCATE(GSTACK_DDSHP(6,DIM_NN_LIST))
-              GSTACK_DDSHP = 0.0D0  ! 初始化
-          END IF
-          
-          IF (.NOT. ALLOCATED(GINVK)) THEN
-              ALLOCATE(GINVK(3,3,GNUMP))
-              GINVK = 0.0D0  ! 初始化
-          END IF
-          
-          ! 只在第一次分配時才 ENTER DATA
+          ! 將初始化的資料複製到 GPU
           !$ACC ENTER DATA COPYIN(GN, GSTART, GSTACK, GSTACK_SHP, GSTACK_DSHP, GSTACK_DDSHP, GINVK)
+          
+          CNT_SEARCH = 0.0d0
+          SEARCHCOUNT=PDSEARCH
+          
+          ! 更新標量到 GPU
+          !$ACC UPDATE DEVICE(CNT_SEARCH, SEARCHCOUNT, DIM_NN_LIST, GMAXN)
+      END IF
       
       !
       ! HARD_SEARCH
@@ -425,16 +418,17 @@ IF (DO_INTERP) THEN
                               NBINS,NBINSX,NBINSY,NBINSZ,ISPACE,JSPACE,KSPACE, &
                               GXDIST_MAX, GYDIST_MAX, GZDIST_MAX,GSM_LEN)
              
-             ! --- Step 4: 完整同步所有修改過的資料回 GPU ---
-             !$ACC UPDATE DEVICE(GN, GSTART, GSTACK, GMAXN)
-             !$ACC UPDATE DEVICE(NODES_IN_BIN, NODELIST_IN_BIN)
-             !$ACC UPDATE DEVICE(ISPACE, JSPACE, KSPACE, GIJKSPC)
-             
-             ! 如果 SOFT_SEARCH 修改了其他陣列，也要同步
-             !$ACC UPDATE DEVICE(GCOO_CUURENT, GWIN, GSM_LEN)
-             
-             ! 等待所有更新完成
-             !$ACC WAIT
+! --- Step 4: 完整同步所有修改過的資料回 GPU ---
+! 關鍵：確保所有形狀函數相關資料都同步
+!$ACC UPDATE DEVICE(GN, GSTART, GSTACK, GMAXN, DIM_NN_LIST)
+!$ACC UPDATE DEVICE(GSTACK_SHP, GSTACK_DSHP, GSTACK_DDSHP)  ! 新增：同步形狀函數
+!$ACC UPDATE DEVICE(GINVK)  ! 新增：同步逆矩陣
+!$ACC UPDATE DEVICE(NODES_IN_BIN, NODELIST_IN_BIN)
+!$ACC UPDATE DEVICE(ISPACE, JSPACE, KSPACE, GIJKSPC)
+!$ACC UPDATE DEVICE(GCOO_CUURENT, GWIN, GSM_LEN)
+
+! 等待所有更新完成
+!$ACC WAIT
 
 
 

@@ -188,6 +188,15 @@ CONTAINS
             
             PHI_SUM = PHI_SUM + PHI(I)
 
+PHI_SUM = PHI_SUM + PHI(I)
+
+! 新增除錯輸出
+IF (I == 1) THEN
+    WRITE(*,*) 'DEBUG RK1: Node ', II, ' PHI = ', PHI(I)
+    WRITE(*,*) '  XMXI_OA = ', XMXI_OA(I), ' YMYI_OA = ', YMYI_OA(I), ' ZMZI_OA = ', ZMZI_OA(I)
+    WRITE(*,*) '  PHIX = ', PHIX, ' PHIY = ', PHIY, ' PHIZ = ', PHIZ
+END IF
+
         ELSE
 
 
@@ -338,11 +347,21 @@ CONTAINS
 
     END IF
 
-    IF (MSIZE.EQ.4) THEN
-        CALL M44INV(M_FULL, MINV, ierr_inv)
-    ELSE
-        CALL INVERSE(M_FULL, MSIZE, MINV, ierr_inv)
+! 新增除錯：檢查 M_FULL 矩陣
+IF (LN > 0) THEN
+    CALL DETERMINANT(M_FULL, DET)
+    IF (ABS(DET) < 1.0D-12) THEN
+        WRITE(*,*) 'WARNING: RK1 - M_FULL nearly singular, DET = ', DET
+        WRITE(*,*) '  PHI_SUM = ', PHI_SUM
+        WRITE(*,*) '  LN = ', LN
     END IF
+END IF
+
+IF (MSIZE.EQ.4) THEN
+    CALL M44INV(M_FULL, MINV, ierr_inv)
+ELSE
+    CALL INVERSE(M_FULL, MSIZE, MINV, ierr_inv)
+END IF
     
     ! 錯誤處理 - 確保不會因為 GPU 限制而改變行為
     IF (ierr_inv /= 0) THEN 
@@ -873,7 +892,7 @@ CONTAINS
 
     RETURN
     END SUBROUTINE
-    SUBROUTINE MLS_KERNEL0(XN,WIN,CONT,PHI,PHIX,ISZERO, ierr)
+SUBROUTINE MLS_KERNEL0(XN,WIN,CONT,PHI,PHIX,ISZERO, ierr)
     !$ACC ROUTINE SEQ
     IMPLICIT NONE
     DOUBLE PRECISION, INTENT(IN):: XN,WIN
@@ -884,6 +903,14 @@ CONTAINS
     
     ISZERO = .FALSE.
     ierr = 0
+    
+    ! 新增：檢查 WIN 有效性
+    IF (WIN <= 0.0D0) THEN
+        PHI = 0.0D0
+        PHIX = 0.0D0
+        ierr = -1
+        RETURN
+    END IF
     
     IF (CONT.EQ.3) THEN !CUBIC SPLINE
         IF (XN.LE.1.0D0) THEN

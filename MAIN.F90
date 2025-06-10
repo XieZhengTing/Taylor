@@ -417,11 +417,17 @@ IF(LINIT) THEN
     LOCAL_FEXT = 0.0d0
     DO_INTERP = .FALSE.
     
-    ! 更新到 Device
-    !$ACC UPDATE DEVICE(LOCAL_DSP, LOCAL_FINT, LOCAL_FEXT, DO_INTERP)
+    ! 新增：初始化形狀函數相關陣列
+    LOCAL_CHAR_DIST = 1.0d0  ! 避免除以零
+    LOCAL_WAVE_VEL = 1.0d0   ! 避免除以零
     
-    ! 確保 LINIT 在 Device 上也是正確的
+    ! 更新到 Device - 包含所有必要陣列
+    !$ACC UPDATE DEVICE(LOCAL_DSP, LOCAL_FINT, LOCAL_FEXT, DO_INTERP)
+    !$ACC UPDATE DEVICE(LOCAL_CHAR_DIST, LOCAL_WAVE_VEL)
     !$ACC UPDATE DEVICE(LINIT)
+    
+    ! 新增：等待同步完成
+    !$ACC WAIT
     
     ! 呼叫 HANDELER 進行初始化
     CALL HANDELER(LOCAL_WIN, LOCAL_VOL, LOCAL_NUMP, LOCAL_COO, LOCAL_COO_CURRENT, &

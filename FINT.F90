@@ -101,8 +101,7 @@ LOGICAL :: USE_ATOMIC_FALLBACK
     DOUBLE PRECISION:: GCHAR_DIST(GNUMP),   GMAX_WVEL(GNUMP) ! FOR LOCAL NODES
 
 
-    INTEGER, INTENT(IN):: GMAXN_IN                             !MAX NUMBER OF NEIGHBORS FOR ALL NODES (Input)
-    INTEGER :: GMAXN                                          ! Local working copy
+    INTEGER, INTENT(IN):: GMAXN                              !MAX NUMBER OF NEIGHBORS FOR ALL NODES
 
 
     INTEGER:: GGHOST(GSIZE_IN)                 !FLAG FOR GHOST NODES (GHOST = 1)
@@ -331,15 +330,12 @@ LOGICAL :: USE_ATOMIC_FALLBACK
     END IF
 
 
-    ! For GMAXN, if it's invalid (e.g., 0 due to sync issues), use GNUMP as a fallback.
-    ! The actual check for GMAXN > 0 before using LSTACK(GMAXN) is still important,
-    ! but this handles the case where GMAXN_IN itself is passed incorrectly.
-    GMAXN = GMAXN_IN  ! Copy input to local variable
-
-    IF (GMAXN <= 0) THEN
-        !WRITE(*,*) 'WARNING: CONSTRUCT_FINT (Device) - Fixing invalid GMAXN from ', GMAXN, ' to ', GNUMP
-        GMAXN = GNUMP 
-    END IF
+! 直接檢查輸入參數
+IF (GMAXN <= 0 .OR. GMAXN > DIM_NN_LIST) THEN
+    WRITE(*,*) 'ERROR: CONSTRUCT_FINT - Invalid GMAXN: ', GMAXN
+    ierr_fint_arg = -15
+    RETURN
+END IF
 
     IF (DIM_NN_LIST <= 0) THEN
        !WRITE(*,*) 'WARNING: CONSTRUCT_FINT (Device) - Fixing invalid DIM_NN_LIST from ', DIM_NN_LIST, ' to ', GNUMP * 1000
