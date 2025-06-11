@@ -55,7 +55,7 @@ MODEL.o model.mod : MODEL.F90
 INVERSE.o inverse_mod.mod : INVERSE.F90
 	$(FC) $(FFLAGS) -c $< -o INVERSE.o
 
-RK.o rk_procedures_mod.mod : RK.f90 inverse_mod.mod fint_functions.mod control.mod model.mod
+RK.o rk_procedures_mod.mod determinant_mod.mod : RK.f90 inverse_mod.mod fint_functions.mod control.mod model.mod determinant_mod.mod
 	$(FC) $(FFLAGS) -c $< -o RK.o
 
 DETERMINANT.o determinant_mod.mod : DETERMINANT.F90
