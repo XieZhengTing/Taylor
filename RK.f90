@@ -175,24 +175,15 @@ END IF
         CALL DERIV_H(XMXI_OA(I),YMYI_OA(I),ZMZI_OA(I),MSIZE,DEG,H_X,H_Y,H_Z)
 
 
-! 計算實際距離（不要過早歸一化）
-        XMXI_OA(I) = X(1) - GCOO(1,II)
-        YMYI_OA(I) = X(2) - GCOO(2,II) 
-        ZMZI_OA(I) = X(3) - GCOO(3,II)
+        XMXI_OA(I) = (X(1) - GCOO(1,II)) / GWIN(1,II)
+        YMYI_OA(I) = (X(2) - GCOO(2,II)) / GWIN(2,II)
+        ZMZI_OA(I) = (X(3) - GCOO(3,II)) / GWIN(3,II)
 
-IF (SHSUP) THEN
+    IF (SHSUP) THEN
             ! 球形支撐域
-            ! 計算實際距離
             DIA(I) = SQRT(XMXI_OA(I)**2 + YMYI_OA(I)**2 + ZMZI_OA(I)**2)
-            
-            ! 使用平均視窗大小
-            AVG_WIN = (GWIN(1,II) + GWIN(2,II) + GWIN(3,II)) / 3.0D0
-            
-            ! 計算歸一化距離
-            DENOM = DIA(I) / AVG_WIN
-            
-            CALL MLS_KERNEL0(DENOM, 1.0D0, CONT, PHI(I), PHIX_X, ISZERO, ierr_mls)
-            IF (ierr_mls /= 0) THEN
+
+            CALL MLS_KERNEL0(DIA(I), 1.0D0, CONT, PHI(I), PHIX_X, ISZERO, ierr_mls)            IF (ierr_mls /= 0) THEN
                 SHP(I) = 0.0D0
                 SHPD(:,I) = 0.0D0
                 CYCLE
@@ -201,7 +192,6 @@ IF (SHSUP) THEN
             ! 簡單除錯輸出
             IF (I <= 3) THEN
                 WRITE(*,*) 'DEBUG RK1 SHSUP: I=', I, ' DIA=', DIA(I)
-                WRITE(*,*) '  AVG_WIN=', AVG_WIN, ' DENOM=', DENOM
                 WRITE(*,*) '  PHI=', PHI(I)
             END IF
             
@@ -245,7 +235,7 @@ ELSE
             END IF
 
             ! 計算張量積
-            PHI(I) = PHIX*PHIY*PHIZ
+            PHI(I) = PHIX*PHIY*PHIZ /(GWIN(1,II)*GWIN(2,II)*GWIN(3,II))
             
             ! 簡單除錯輸出
             IF (I <= 3) THEN
@@ -958,7 +948,7 @@ SUBROUTINE MLS_KERNEL0(XN,WIN,CONT,PHI,PHIX,ISZERO, ierr)
             PHI = (1.0D0 - 6.0D0*R**2 + 8.0D0*R**3 - 3.0D0*R**4)
             IF (R .GT. 1.0D-12) THEN
                 ! 注意：導數需要考慮 chain rule
-                PHIX = (-12.0D0*R + 24.0D0*R**2 - 12.0D0*R**3) / WIN
+                PHIX = (-12.0D0*R + 24.0D0*R**2 - 12.0D0*R**3)
             ELSE
                 PHIX = 0.0D0
             END IF
