@@ -741,11 +741,13 @@ END IF
     !
     LOGICAL:: ISZERO
     INTEGER :: ierr_inv, ierr_mls
+    INTEGER :: VALID_NEIGHBORS
     !
     ! KEEP SOME OF THE STATEMENT FOR LATER USE, SUCH AS SINGULAR KERNEL, QL
     ! #TODO
     ierr_inv = 0
     ierr_mls = 0
+    VALID_NEIGHBORS = 0
     !IF (SELF_EBC) THEN
     IF (.FALSE.) THEN
         DO I=1,LN
