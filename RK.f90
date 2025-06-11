@@ -92,7 +92,7 @@ CONTAINS
     DOUBLE PRECISION:: DET
     INTEGER :: ierr_inv, ierr_mls
     DOUBLE PRECISION :: AVG_WIN
-
+INTEGER :: VALID_NEIGHBORS
 ! 簡單的除錯輸出（避免複雜格式）
     LOGICAL, SAVE :: FIRST_RK1 = .TRUE.
 IF (FIRST_RK1) THEN
@@ -103,6 +103,18 @@ IF (FIRST_RK1) THEN
     WRITE(*,*) '  QL = ', QL
     FIRST_RK1 = .FALSE.
 END IF
+
+    SHP(:) = 0.0D0
+    SHPD(:,:) = 0.0D0
+    
+    ! 初始化局部數組
+    PHI(:) = 0.0D0
+    PHI_X(:) = 0.0D0
+    PHI_Y(:) = 0.0D0
+    PHI_Z(:) = 0.0D0
+    
+    ! 初始化計數器
+    VALID_NEIGHBORS = 0
     !
     ! WE NEED TO BE CAREFUL NOT TO EVALUATE THE SINGULAR KERNAL AT THE NODE
     ! ALSO, WE NEED TO OUTPUT PHYSICAL DISPLACEMENTS!
@@ -168,7 +180,7 @@ END IF
         YMYI_OA(I) = X(2) - GCOO(2,II) 
         ZMZI_OA(I) = X(3) - GCOO(3,II)
 
-        IF (SHSUP) THEN
+IF (SHSUP) THEN
             ! 球形支撐域
             ! 計算實際距離
             DIA(I) = SQRT(XMXI_OA(I)**2 + YMYI_OA(I)**2 + ZMZI_OA(I)**2)
@@ -176,17 +188,20 @@ END IF
             ! 使用平均視窗大小
             AVG_WIN = (GWIN(1,II) + GWIN(2,II) + GWIN(3,II)) / 3.0D0
             
-            CALL MLS_KERNEL0(DIA(I), AVG_WIN, CONT, PHI(I), PHIX_X, ISZERO, ierr_mls)
+            ! 計算歸一化距離
+            DENOM = DIA(I) / AVG_WIN
+            
+            CALL MLS_KERNEL0(DENOM, 1.0D0, CONT, PHI(I), PHIX_X, ISZERO, ierr_mls)
             IF (ierr_mls /= 0) THEN
-                ! Handle MLS_KERNEL0 error
-                SHP(I) = HUGE(0.0D0)
-                SHPD(:,I) = HUGE(0.0D0)
+                SHP(I) = 0.0D0
+                SHPD(:,I) = 0.0D0
                 CYCLE
             END IF
             
             ! 簡單除錯輸出
             IF (I <= 3) THEN
                 WRITE(*,*) 'DEBUG RK1 SHSUP: I=', I, ' DIA=', DIA(I)
+                WRITE(*,*) '  AVG_WIN=', AVG_WIN, ' DENOM=', DENOM
                 WRITE(*,*) '  PHI=', PHI(I)
             END IF
             
@@ -208,64 +223,60 @@ END IF
                 PHI_Z(I) = PHIX_X*DRDZ
             ENDIF
             
-        ELSE
+ELSE
             ! 張量積支撐域
-            ! 重新計算歸一化座標
+            ! 重新計算歸一化座標（保持原始的歸一化）
             XMXI_OA(I) = (X(1) - GCOO(1,II)) / GWIN(1,II)
             YMYI_OA(I) = (X(2) - GCOO(2,II)) / GWIN(2,II)
             ZMZI_OA(I) = (X(3) - GCOO(3,II)) / GWIN(3,II)
             
-            CALL MLS_KERNEL0(ABS(XMXI_OA(I)),GWIN(1,II),CONT,PHIX,PHIX_X,ISZERO, ierr_mls)
+            ! MLS_KERNEL0 期望接收已經歸一化的距離
+            CALL MLS_KERNEL0(ABS(XMXI_OA(I)), 1.0D0, CONT, PHIX, PHIX_X, ISZERO, ierr_mls)
             IF (ierr_mls /= 0) THEN
-                SHP(I) = HUGE(0.0D0); SHPD(:,I) = HUGE(0.0D0); CYCLE;
+                SHP(I) = 0.0D0; SHPD(:,I) = 0.0D0; CYCLE;
             END IF
-            CALL MLS_KERNEL0(ABS(YMYI_OA(I)),GWIN(2,II),CONT,PHIY,PHIY_Y,ISZERO, ierr_mls)
+            CALL MLS_KERNEL0(ABS(YMYI_OA(I)), 1.0D0, CONT, PHIY, PHIY_Y, ISZERO, ierr_mls)
             IF (ierr_mls /= 0) THEN
-                SHP(I) = HUGE(0.0D0); SHPD(:,I) = HUGE(0.0D0); CYCLE;
+                SHP(I) = 0.0D0; SHPD(:,I) = 0.0D0; CYCLE;
             END IF
-            CALL MLS_KERNEL0(ABS(ZMZI_OA(I)),GWIN(3,II),CONT,PHIZ,PHIZ_Z,ISZERO, ierr_mls)
+            CALL MLS_KERNEL0(ABS(ZMZI_OA(I)), 1.0D0, CONT, PHIZ, PHIZ_Z, ISZERO, ierr_mls)
             IF (ierr_mls /= 0) THEN
-                SHP(I) = HUGE(0.0D0); SHPD(:,I) = HUGE(0.0D0); CYCLE;
+                SHP(I) = 0.0D0; SHPD(:,I) = 0.0D0; CYCLE;
             END IF
 
-           ! 計算張量積
-           PHI(I) = PHIX*PHIY*PHIZ
-           ! 除以體積因子（視窗大小的乘積）
-           PHI(I) = PHI(I) / (GWIN(1,II)*GWIN(2,II)*GWIN(3,II))
+            ! 計算張量積
+            PHI(I) = PHIX*PHIY*PHIZ
+            
             ! 簡單除錯輸出
             IF (I <= 3) THEN
                 WRITE(*,*) 'DEBUG RK1 TENSOR: I=', I
+                WRITE(*,*) '  Normalized coords: ', ABS(XMXI_OA(I)), ABS(YMYI_OA(I)), ABS(ZMZI_OA(I))
                 WRITE(*,*) '  PHIX=', PHIX, ' PHIY=', PHIY, ' PHIZ=', PHIZ
                 WRITE(*,*) '  PHI=', PHI(I)
             END IF
 
             IF (XMXI_OA(I).EQ.0) THEN
                 DRDX = 0.0d0
-            ELSEIF (XMXI_OA(I).GE.0) THEN
-                DRDX = 1.0d0/GWIN(1,II)
-            ELSEIF (XMXI_OA(I).LE.0) THEN
-                DRDX = -1.0d0/GWIN(1,II)
+            ELSE
+                DRDX = SIGN(1.0D0, XMXI_OA(I)) / GWIN(1,II)
             ENDIF
 
             IF (YMYI_OA(I).EQ.0) THEN
                 DRDY = 0.0d0
-            ELSEIF (YMYI_OA(I).GE.0) THEN
-                DRDY = 1.0d0/GWIN(2,II)
-            ELSEIF (YMYI_OA(I).LE.0) THEN
-                DRDY = -1.0d0/GWIN(2,II)
+            ELSE
+                DRDY = SIGN(1.0D0, YMYI_OA(I)) / GWIN(2,II)
             ENDIF
 
             IF (ZMZI_OA(I).EQ.0) THEN
                 DRDZ = 0.0d0
-            ELSEIF (ZMZI_OA(I).GE.0) THEN
-                DRDZ = 1.0d0/GWIN(3,II)
-            ELSEIF (ZMZI_OA(I).LE.0) THEN
-                DRDZ = -1.0d0/GWIN(3,II)
+            ELSE
+                DRDZ = SIGN(1.0D0, ZMZI_OA(I)) / GWIN(3,II)
             ENDIF
 
-            PHI_X(I) = PHIX_X*PHIY*PHIZ*DRDX
-            PHI_Y(I) = PHIX*PHIY_Y*PHIZ*DRDY
-            PHI_Z(I) = PHIX*PHIY*PHIZ_Z*DRDZ
+            ! 應用 chain rule
+            PHI_X(I) = PHIX_X * PHIY * PHIZ * DRDX
+            PHI_Y(I) = PHIX * PHIY_Y * PHIZ * DRDY
+            PHI_Z(I) = PHIX * PHIY * PHIZ_Z * DRDZ
 
             !
             ! SINGULAR KERNAL
@@ -299,7 +310,11 @@ WRITE(*,*) 'DEBUG RK1: After neighbor loop - PHI_SUM = ', PHI_SUM, ' LN = ', LN
         CONTINUE
 
     END DO
-
+    WRITE(*,*) 'DEBUG: PHI_SUM = ', PHI_SUM, ' should be close to 1.0'
+    WRITE(*,*) 'DEBUG: Valid neighbors = ', VALID_NEIGHBORS, ' out of ', LN
+    IF (ABS(PHI_SUM - 1.0D0) > 0.1D0) THEN
+        WRITE(*,*) 'WARNING: Poor partition of unity, PHI_SUM = ', PHI_SUM
+    END IF
     !
     ! GET M* IF QUASI-LINEAR
     !
@@ -808,7 +823,9 @@ PHI(I) = PHIX*PHIY*PHIZ !/DENOM
                 WRITE(*,*) '  ZMZI_OA=', ABS(ZMZI_OA(I)), ' PHIZ=', PHIZ
                 WRITE(*,*) '  PHI=', PHI(I)
             END IF
-
+        IF (PHI(I) > 1.0D-12) THEN
+            VALID_NEIGHBORS = VALID_NEIGHBORS + 1
+        END IF
             PHI_SUM = PHI_SUM + PHI(I)
 
         DO J = 1,MSIZE-1
@@ -926,27 +943,20 @@ SUBROUTINE MLS_KERNEL0(XN,WIN,CONT,PHI,PHIX,ISZERO, ierr)
     LOGICAL, INTENT(OUT):: ISZERO
     INTEGER, INTENT(OUT) :: ierr
     
-    DOUBLE PRECISION :: R  ! 歸一化距離
+    DOUBLE PRECISION :: R  ! 這裡 XN 應該已經是歸一化的距離
     
     ISZERO = .FALSE.
     ierr = 0
     
-    ! 檢查 WIN 有效性
-    IF (WIN <= 0.0D0) THEN
-        PHI = 0.0D0
-        PHIX = 0.0D0
-        ierr = -1
-        RETURN
-    END IF
-    
-    ! 計算歸一化距離
-    R = ABS(XN) / WIN
+    ! XN 在調用時已經是 ABS(normalized_distance)
+    R = XN
     
     IF (CONT.EQ.3) THEN !CUBIC SPLINE
         IF (R.LE.1.0D0) THEN
             PHI = (1.0D0 - 6.0D0*R**2 + 8.0D0*R**3 - 3.0D0*R**4)
-            IF (ABS(XN) .GT. 1.0D-12) THEN
-                PHIX = (-12.0D0*R + 24.0D0*R**2 - 12.0D0*R**3) * SIGN(1.0D0, XN) / (WIN**2)
+            IF (R .GT. 1.0D-12) THEN
+                ! 注意：導數需要考慮 chain rule
+                PHIX = (-12.0D0*R + 24.0D0*R**2 - 12.0D0*R**3) / WIN
             ELSE
                 PHIX = 0.0D0
             END IF
