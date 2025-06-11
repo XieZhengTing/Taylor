@@ -92,6 +92,16 @@ CONTAINS
     DOUBLE PRECISION:: DET
     INTEGER :: ierr_inv, ierr_mls
     DOUBLE PRECISION :: AVG_WIN
+
+! 簡單的除錯輸出（避免複雜格式）
+    LOGICAL, SAVE :: FIRST_RK1 = .TRUE.
+    IF (FIRST_RK1) THEN
+        WRITE(*,*) 'DEBUG RK1: First call'
+        WRITE(*,*) '  LN = ', LN
+        WRITE(*,*) '  CONT = ', CONT
+        WRITE(*,*) '  SHSUP = ', SHSUP
+        FIRST_RK1 = .FALSE.
+    END IF
     !
     ! WE NEED TO BE CAREFUL NOT TO EVALUATE THE SINGULAR KERNAL AT THE NODE
     ! ALSO, WE NEED TO OUTPUT PHYSICAL DISPLACEMENTS!
@@ -165,6 +175,10 @@ IF (SHSUP) THEN
     AVG_WIN = (GWIN(1,II) + GWIN(2,II) + GWIN(3,II)) / 3.0D0
     
     CALL MLS_KERNEL0(DIA(I), AVG_WIN, CONT, PHI(I), PHIX_X, ISZERO, ierr_mls)
+        WRITE(*,*) 'DEBUG RK1 SHSUP: I=', I, ' DIA=', DIA(I)
+        WRITE(*,*) '  PHI=', PHI(I)
+    END IF
+ELSE
             IF (ierr_mls /= 0) THEN
                 ! Handle MLS_KERNEL0 error, e.g., set outputs to error values and skip/return
                 SHP(I) = HUGE(0.0D0)
@@ -230,6 +244,13 @@ END IF
 
             !DENOM = GWIN(1,II)*GWIN(2,II)*GWIN(3,II)
             PHI(I) = PHIX*PHIY*PHIZ !/DENOM
+
+    IF (I <= 3) THEN
+        WRITE(*,*) 'DEBUG RK1 TENSOR: I=', I
+        WRITE(*,*) '  PHIX=', PHIX, ' PHIY=', PHIY, ' PHIZ=', PHIZ
+        WRITE(*,*) '  PHI=', PHI(I)
+    END IF
+
 ! 新增：輸出 tensor product 計算
             IF (I <= 5) THEN
                 WRITE(*,'(A,I3,A,I5)') 'DEBUG RK1: Computing PHI for neighbor ', I, ', node ID=', II
@@ -469,6 +490,12 @@ END IF
 
         SHP(I) = C(1,1)*PHI(I)
 
+
+    IF (I <= 3) THEN
+        WRITE(*,*) 'DEBUG RK1 SHP: I=', I
+        WRITE(*,*) '  C11=', C(1,1), ' PHI=', PHI(I)
+        WRITE(*,*) '  SHP=', SHP(I)
+    END IF
 !        IF (IMPL.EQ.1) THEN
 
 !            CX = MATMUL(BX,H_FULL)
@@ -935,8 +962,6 @@ SUBROUTINE MLS_KERNEL0(XN,WIN,CONT,PHI,PHIX,ISZERO, ierr)
     INTEGER, INTENT(OUT) :: ierr
     
     DOUBLE PRECISION :: R  ! 歸一化距離
-    LOGICAL, SAVE :: FIRST_CALL = .TRUE.
-    INTEGER, SAVE :: CALL_COUNT = 0
     
     ISZERO = .FALSE.
     ierr = 0
@@ -946,19 +971,11 @@ SUBROUTINE MLS_KERNEL0(XN,WIN,CONT,PHI,PHIX,ISZERO, ierr)
         PHI = 0.0D0
         PHIX = 0.0D0
         ierr = -1
-        WRITE(*,*) 'ERROR: MLS_KERNEL0 - WIN <= 0: WIN = ', WIN
         RETURN
     END IF
     
     ! 計算歸一化距離
     R = ABS(XN) / WIN
-    
-    ! 除錯輸出（前20次呼叫）
-    IF (CALL_COUNT < 20) THEN
-        WRITE(*,'(A,I3,A,E12.5,A,E12.5,A,E12.5,A,I2)') &
-            'MLS[', CALL_COUNT, '] XN=', XN, ' WIN=', WIN, ' R=', R, ' CONT=', CONT
-        CALL_COUNT = CALL_COUNT + 1
-    END IF
     
     IF (CONT.EQ.3) THEN !CUBIC SPLINE
         IF (R.LE.1.0D0) THEN
@@ -968,28 +985,16 @@ SUBROUTINE MLS_KERNEL0(XN,WIN,CONT,PHI,PHIX,ISZERO, ierr)
             ELSE
                 PHIX = 0.0D0
             END IF
-            
-            ! 輸出計算的 PHI 值（前20次）
-            IF (CALL_COUNT <= 20) THEN
-                WRITE(*,'(A,E15.8,A,E15.8)') '      -> PHI=', PHI, ' PHIX=', PHIX
-            END IF
         ELSE
             PHI = 0.0D0
             PHIX = 0.0D0
             ISZERO = .TRUE.
-            IF (CALL_COUNT <= 20) THEN
-                WRITE(*,'(A)') '      -> PHI=0 (R>1)'
-            END IF
         END IF
     ELSE
         ! 不支援的核函數類型
         PHI = 0.0D0
         PHIX = 0.0D0
         ierr = 1
-        IF (FIRST_CALL) THEN
-            WRITE(*,*) 'ERROR: MLS_KERNEL0 - Unsupported CONT = ', CONT
-            FIRST_CALL = .FALSE.
-        END IF
     END IF
     
     RETURN
