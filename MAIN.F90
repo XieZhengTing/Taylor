@@ -363,6 +363,16 @@
     LOCAL_VEL_PHY = 0.0D0
     LOCAL_DINC_PHY = 0.0D0
 
+    WRITE(*,*) "DEBUG: Checking LOCAL_WIN initialization before time integration:"
+    DO I = 1, MIN(10, LOCAL_NUMP)
+        IF (LOCAL_WIN(1,I) <= 0.0D0 .OR. LOCAL_WIN(2,I) <= 0.0D0 .OR. LOCAL_WIN(3,I) <= 0.0D0) THEN
+            WRITE(*,*) 'WARNING: Node ', I, ' has invalid LOCAL_WIN: ', LOCAL_WIN(1,I), LOCAL_WIN(2,I), LOCAL_WIN(3,I)
+        ELSE IF (I <= 5) THEN
+            WRITE(*,*) 'DEBUG: Node ', I, ' LOCAL_WIN = ', LOCAL_WIN(1,I), LOCAL_WIN(2,I), LOCAL_WIN(3,I)
+        END IF
+    END DO
+    WRITE(*,*)
+    
 ! 保持單一 DATA 區域，但優化資料屬性
 !$ACC DATA &
       !$ACC COPYIN(LOCAL_COO, MODEL_BODYFORCE, MODEL_ELCON, MODEL_NODE_IDS, MODEL_NORM_WIN, &

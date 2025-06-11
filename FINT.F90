@@ -13,16 +13,15 @@
     !*     Copyright 2016 Michael C Hillman                 *
     !*                                                      *
     !********************************************************
-SUBROUTINE CONSTRUCT_FINT(GWIN,    GVOL,       GNUMP,        GCOO,  GCOO_CUURENT,   &
-GSM_LEN, GSM_AREA,   GSM_VOL,      GNSNI_FAC,      &
-GGHOST,  GPROP,      GSTATE,       GSTRESS,        &
-GSTRAIN, G_H_STRESS, G_S_STRESS, GDINC,      GDINC_TOT,    GMAT_TYPE,                    &
-GEBC_NODES, DLT, GSIZE_IN,                               &
-GN,      GSTART,     DIM_NN_LIST,                  &
-GSTACK,  GSTACK_SHP, GSTACK_DSHP,  GSTACK_DDSHP,  GMAXN,  GINVK, LINIT,   &
+    SUBROUTINE CONSTRUCT_FINT(GWIN,    GVOL,       GNUMP,        GCOO,  GCOO_CUURENT,   &
+    GSM_LEN, GSM_AREA,   GSM_VOL,      GNSNI_FAC,      &
+    GGHOST,  GPROP,      GSTATE,       GSTRESS,        &
+    GSTRAIN, G_H_STRESS, G_S_STRESS, GDINC,      GDINC_TOT,    GMAT_TYPE,                    &
+    GEBC_NODES, DLT, GSIZE_IN,                               &
+    GN,      GSTART,     DIM_NN_LIST,                  &
+    GSTACK,  GSTACK_SHP, GSTACK_DSHP,  GSTACK_DDSHP,  GMAXN,  GINVK, LINIT,   &
     FINT,    FEXT,       DLT_FINT,   GCHAR_DIST,   GMAX_WVEL, &
-        LOCAL_DX_STRESS, LOCAL_DY_STRESS, LOCAL_DZ_STRESS, & !OUTPUT (TOTAL_LOCAL_SIZE BASED)
-
+    LOCAL_DX_STRESS, LOCAL_DY_STRESS, LOCAL_DZ_STRESS, & !OUTPUT (TOTAL_LOCAL_SIZE BASED)
     G_X_MOM, G_Y_MOM, G_Z_MOM,MODEL_BODYFORCE,GINT_WORK, MODEL_BODY_ID, GSTRAIN_EQ, ierr_fint_arg)
 
 
@@ -32,11 +31,11 @@ GSTACK,  GSTACK_SHP, GSTACK_DSHP,  GSTACK_DDSHP,  GMAXN,  GINVK, LINIT,   &
     ! BASED ON CURRENT DISPLACEMENT INCREMENT, STATE VARIABLES, AND SO ON,
     ! COMPUTE THE INTERNAL FORCE FOR A SET OF NODES GIVEN THEIR COORDINATES,
     ! DILATIONS, AND SO ON.
-!    !$ACC ROUTINE SEQ
+!   !$ACC ROUTINE SEQ
     !VOIGT ORDERING:
     !XX, YY, ZZ, YZ, XZ, XY
     !
-!    !$ACC ROUTINE SEQ
+!   !$ACC ROUTINE SEQ
     USE FINT_FUNCTIONS
     USE CONTROL
     USE CONSTITUTE_VONMISES_MOD    ! For VON_MISES
@@ -49,16 +48,15 @@ GSTACK,  GSTACK_SHP, GSTACK_DSHP,  GSTACK_DDSHP,  GMAXN,  GINVK, LINIT,   &
     USE INVERSE_MOD                ! For INVERSE, INV3
     USE DETERMINANT_MOD            ! For DETERMINANT
     USE CONSTITUTION_MOD  
-    !    USE omp_lib
-    !
+    ! USE omp_lib
     IMPLICIT NONE
     ! Parameters for numerical stability and fallback behavior (as suggested)
     LOGICAL, PARAMETER :: CYCLE_ON_FALLBACK = .FALSE.       ! Set to .TRUE. to CYCLE after a fallback to identity matrix
     DOUBLE PRECISION, PARAMETER :: DET_THRESHOLD = 1.0D-12  ! Threshold for determinant singularity check
     INTEGER, PARAMETER :: FALLBACK_ERROR_INCREMENT = 10      ! Error increment for global_device_error_occurred on fallback
     DOUBLE PRECISION, ALLOCATABLE :: FINT_LOCAL(:), FEXT_LOCAL(:)
-INTEGER :: THREAD_ID, NUM_THREADS
-LOGICAL :: USE_ATOMIC_FALLBACK
+    INTEGER :: THREAD_ID, NUM_THREADS
+    LOGICAL :: USE_ATOMIC_FALLBACK
 
     !
     !*********************************************************
@@ -79,8 +77,6 @@ LOGICAL :: USE_ATOMIC_FALLBACK
     DOUBLE PRECISION:: GCOO_CUURENT(3,GSIZE_IN) !CUURENT COORDINATE FOR EACH NODE
     DOUBLE PRECISION:: GWIN(3,GNUMP)        !WINDOWS FOR EACH (LOCAL) NODE
 	DOUBLE PRECISION, SAVE, ALLOCATABLE:: GWIN0(:,:) ! Assumed to be (3,GNUMP) if related to GWIN
-
-	
     DOUBLE PRECISION:: GSM_LEN(6,GNUMP)     !SMOOTHING LENGTHS FOR EACH (LOCAL) NODE
 
     ! (1-6) = (+X, -X, +Y, -Y, +Z, -Z)
@@ -88,26 +84,18 @@ LOGICAL :: USE_ATOMIC_FALLBACK
     DOUBLE PRECISION:: GSM_AREA(3,GNUMP)    !AREAS OF SMOOTHING ZONE SIDES FOR EACH (LOCAL) NODE
     INTEGER:: GN(GNUMP)                     !NUMBER OF NEIGHBORS FOR EACH (LOCAL) NODE
     INTEGER:: GSTART(GNUMP)                 !START LOCATION OF NODE NEIOGHBORS IN STACK (FOR LOCAL NODES)
-
     INTEGER:: DIM_NN_LIST                   !SIZE OF NEIGHBOR STACK
     INTEGER:: GSTACK(DIM_NN_LIST)           !NEIGHBORS FOR EACH NODE (STACKED)
     DOUBLE PRECISION:: GSTACK_SHP(DIM_NN_LIST)       !SHAPES (STACKED)
     DOUBLE PRECISION:: GSTACK_DSHP(3,DIM_NN_LIST)       !SHAPES (STACKED)
     DOUBLE PRECISION:: GSTACK_DDSHP(6,DIM_NN_LIST)       !SHAPES (STACKED)
     DOUBLE PRECISION:: GINVK(3,3,GNUMP)     ! FOR LOCAL NODES
-
-DOUBLE PRECISION:: GCHAR_DIST(GNUMP),   GMAX_WVEL(GNUMP) ! FOR LOCAL NODES
-
-INTEGER, INTENT(IN):: GMAXN                              !MAX NUMBER OF NEIGHBORS FOR ALL NODES
-
-INTEGER:: GGHOST(GSIZE_IN)                 !FLAG FOR GHOST NODES (GHOST = 1)
-
+    DOUBLE PRECISION:: GCHAR_DIST(GNUMP),   GMAX_WVEL(GNUMP) ! FOR LOCAL NODES
+    INTEGER, INTENT(IN):: GMAXN                              !MAX NUMBER OF NEIGHBORS FOR ALL NODES
+    INTEGER:: GGHOST(GSIZE_IN)                 !FLAG FOR GHOST NODES (GHOST = 1)
     LOGICAL:: GEBC_NODES(GSIZE_IN)
-
     DOUBLE PRECISION:: GVOL(GSIZE_IN)          !VOLUME OF EACH NODE
     DOUBLE PRECISION:: GNSNI_FAC(3,GNUMP)   ! FOR LOCAL NODES
-
-
     !
     !STATE AND FIELD VARIABLES
     !
@@ -119,22 +107,13 @@ INTEGER:: GGHOST(GSIZE_IN)                 !FLAG FOR GHOST NODES (GHOST = 1)
     INTEGER::          GMAT_TYPE(GNUMP)    !MATERIAL TYPE OF EACH (LOCAL) NODE
     DOUBLE PRECISION:: G_H_STRESS(6,GSIZE_IN)!GC
     DOUBLE PRECISION:: G_S_STRESS(6,GSIZE_IN)!GC
-
     DOUBLE PRECISION, INTENT(IN) :: DLT
-    !
-    !GLOBAL OUT - Explicitly dimensioned dummy arguments
     DOUBLE PRECISION, INTENT(INOUT), DIMENSION(GSIZE_IN*3):: FINT, FEXT
-
-
     DOUBLE PRECISION:: DLT_FINT
-    
     DOUBLE PRECISION:: GSTRAIN_EQ(GSIZE_IN)     !EQUIVALENT PLASTIC STARIN OF EACH NODE
-
-    !
     INTEGER, INTENT(OUT) :: ierr_fint_arg
     !********** LOCAL VARIABLES **********
     INTEGER:: I,J,K,L,JJ, K_PRINT, L_PRINT, J_PRINT      !INDICIES
-
     DOUBLE PRECISION:: LCOO(3)    !COORDINATE AT A NODE IN INITIAL CONFIGURATION
     DOUBLE PRECISION:: LCOO_T(3)    !COORDINATE AT A NODE IN CURRENT CONFIGURATION
     DOUBLE PRECISION:: LWIN(3) !WINDOW A NODE
@@ -149,34 +128,27 @@ INTEGER:: GGHOST(GSIZE_IN)                 !FLAG FOR GHOST NODES (GHOST = 1)
     DOUBLE PRECISION:: LSTRAIN(6)
     DOUBLE PRECISION:: L_H_STRESS(6)!GC: FOR VISCOELASTIC
     DOUBLE PRECISION:: L_S_STRESS(6)!GC
-
-
     DOUBLE PRECISION, INTENT(IN):: G_X_MOM(GNUMP),G_Y_MOM(GNUMP),G_Z_MOM(GNUMP) ! For local nodes
-
-
-
     DOUBLE PRECISION:: LSTATE(20)      !STATE VARIABLES OF A NODE
     DOUBLE PRECISION:: LPROP(30)     !MATERIAL PROPERTIES OF A NODE
     INTEGER:: LMAT_TYPE    !MATERIAL TYPE OF EACH NODE
     LOGICAL:: SELF_EBC
-    !
     INTEGER:: LSTART              !LOCATION OF START IN STACK
     INTEGER:: LGHOST              !FLAG FOR GHOST NODES (GHOST = 1)
     INTEGER:: LSTACK(GMAXN)       !LOCAL LIST/STACK OF NEIGHBORS
-DOUBLE PRECISION:: PHI(GMAXN)       !INFLUENCE FUNCTION FOR NEIGHBORS
+    DOUBLE PRECISION:: PHI(GMAXN)       !INFLUENCE FUNCTION FOR NEIGHBORS
     INTEGER:: LN                  !NUMBER OF NEIGHBORS FOR A NODE
     DOUBLE PRECISION:: LVOL       !VOLUME OF A NODE
     DOUBLE PRECISION:: SHP(GMAXN), SHPD(3,GMAXN), SHPD_TRASH(3,GMAXN)
     DOUBLE PRECISION:: SHPDTMP(3,GMAXN)
-    DOUBLE PRECISION:: SHPD_SM(3,GMAXN_IN)        !SHAPE FUNCTION SMOOTHED GRADIENTS
-    DOUBLE PRECISION:: SHPDD_SM(6,GMAXN_IN)       !SHAPE FUNCTION SMOOTHED SMOOTHED GRADIENTS
-
+    DOUBLE PRECISION:: SHPD_SM(3,GMAXN)        !SHAPE FUNCTION SMOOTHED GRADIENTS
+    DOUBLE PRECISION:: SHPDD_SM(6,GMAXN)       !SHAPE FUNCTION SMOOTHED SMOOTHED GRADIENTS
     DOUBLE PRECISION:: SHPDTEMP(9) !TEMPORARY VARIABLE FOR SHAPES FOR STABILZIATION
-DOUBLE PRECISION:: SHP6(GMAXN,6), SHPD6(3,GMAXN,6)
+    DOUBLE PRECISION:: SHP6(GMAXN,6), SHPD6(3,GMAXN,6)
     DOUBLE PRECISION:: LMAT(3,3) !INCREMENTAL DEFORMATION GRADIENT WITH RESPECT TO THE CURRENT TIME STEP
-DOUBLE PRECISION:: LDINC(3,GMAXN),LDINC_TOT(3,GMAXN)
-DOUBLE PRECISION:: LCOO_CUURENT(3,GMAXN)
-DOUBLE PRECISION:: LCOONE(3,GMAXN)
+    DOUBLE PRECISION:: LDINC(3,GMAXN),LDINC_TOT(3,GMAXN)
+    DOUBLE PRECISION:: LCOO_CUURENT(3,GMAXN)
+    DOUBLE PRECISION:: LCOONE(3,GMAXN)
     DOUBLE PRECISION:: B_TEMP(3,3), B_INV_TEMP(3,3) !GC
     DOUBLE PRECISION:: STRAIN(6)       !INCREMENTALLY OBJECTIVE STRAIN
     DOUBLE PRECISION:: ELAS_MAT(6,6)
@@ -189,18 +161,14 @@ DOUBLE PRECISION:: LCOONE(3,GMAXN)
     DOUBLE PRECISION:: FMAT(3,3), IFMAT(3,3),X_0(3),X_t(3), DX_t(3,1), PKSTRESS(3,3), TEMP_STRESS(3,3)
 !    DOUBLE PRECISION, ALLOCATABLE:: FINT_TEMP(:,:,:), FEXT_TEMP(:,:,:)
     DOUBLE PRECISION:: DET
-    !DOUBLE PRECISION:: FINT_TEMP(20,3,GNUMP)
-!    INTEGER:: ID_RANK
-
-    !0329
+!     DOUBLE PRECISION:: FINT_TEMP(20,3,GNUMP)
+!     INTEGER:: ID_RANK
     DOUBLE PRECISION:: PMAT(6,3)
     DOUBLE PRECISION:: FBOD(3),FGRAV(3)
     !DOUBLE PRECISION:: MODEL_BODYFORCE(3)
     !0702
     DOUBLE PRECISION:: MODEL_BODYFORCE(3,GNUMP) ! For local nodes
-
     DOUBLE PRECISION:: LBOD(3)
-
 
     !NSNI
     INTEGER::XMAP(3),YMAP(3),ZMAP(3)
@@ -209,19 +177,15 @@ DOUBLE PRECISION:: LCOONE(3,GMAXN)
     DOUBLE PRECISION::  LOCAL_DX_STRESS(6,GSIZE_IN)
     DOUBLE PRECISION::  LOCAL_DY_STRESS(6,GSIZE_IN)
     DOUBLE PRECISION::  LOCAL_DZ_STRESS(6,GSIZE_IN)
-
-
     DOUBLE PRECISION::  LDX_STRESS(6)
     DOUBLE PRECISION::  LDY_STRESS(6)
     DOUBLE PRECISION::  LDZ_STRESS(6)
     DOUBLE PRECISION:: CMAT(6,6), LAMDA, MU, LAMDA_PLUS_2MU
-DOUBLE PRECISION:: XBMAT(6,3), XBMAT_T(3,6), XFINT3(GMAXN,3)
-DOUBLE PRECISION:: YBMAT(6,3), YBMAT_T(3,6), YFINT3(GMAXN,3)
-DOUBLE PRECISION:: ZBMAT(6,3), ZBMAT_T(3,6), ZFINT3(GMAXN,3)
+    DOUBLE PRECISION:: XBMAT(6,3), XBMAT_T(3,6), XFINT3(GMAXN,3)
+    DOUBLE PRECISION:: YBMAT(6,3), YBMAT_T(3,6), YFINT3(GMAXN,3)
+    DOUBLE PRECISION:: ZBMAT(6,3), ZBMAT_T(3,6), ZFINT3(GMAXN,3)
     DOUBLE PRECISION:: MAG_STAB_FINT,MAG_FINT
-
     DOUBLE PRECISION:: TEMP_DEBUG(3)
-
     DOUBLE PRECISION:: GINT_WORK
 !    DOUBLE PRECISION, ALLOCATABLE:: GINT_WORK_TEMP(:)
     DOUBLE PRECISION, ALLOCATABLE :: fint_temp(:)      ! 調整型別和秩（如果需要）
@@ -229,7 +193,6 @@ DOUBLE PRECISION:: ZBMAT(6,3), ZBMAT_T(3,6), ZFINT3(GMAXN,3)
     DOUBLE PRECISION, ALLOCATABLE :: gint_work_temp(:) ! 調整型別和秩（如果需要）
     INTEGER :: global_device_error_occurred
     INTEGER :: inverse_fallback_count ! New counter for inverse fallbacks
-
     INTEGER :: device_error_status_check ! For STAT= in ALLOCATE/DEALLOCATE
     !
     ! FOR TIME STEP CALCS
@@ -241,12 +204,8 @@ DOUBLE PRECISION:: ZBMAT(6,3), ZBMAT_T(3,6), ZFINT3(GMAXN,3)
         SHEAR_TRIAL, BULK_TRIAL, PMOD, DENSITY, MAXMOD, MAX_VEL,   &
         DIST, XJ, YJ, ZJ, CHAR_DIST, DLT_TEMP, XI, YI, ZI
     DOUBLE PRECISION:: D(6)
-    
-          !0703 contact
     INTEGER, INTENT(IN) :: MODEL_BODY_ID(GNUMP) ! For local nodes, but used for MODEL_BODY_ID(KK) where KK is neighbor
-
-    INTEGER :: LOCAL_BODY_ID, LOCAL_BODY_ID_2, II, P,KK
-         ! 0703      
+    INTEGER :: LOCAL_BODY_ID, LOCAL_BODY_ID_2, II, P,KK    
     DOUBLE PRECISION:: F_INT_C(3), MU1, MU_NEW, MU_NEW2, X2(3), X1(3), TEMP, F_N, XNORM(3), F_T1, F_T2, F_T3, F_TT, F_INT_C_TEMP(3),F_T
 	!LOGICAL::      KCONTACT
     DOUBLE PRECISION:: DX(3), LITTLE_DX(3),LENGTH_DX,LENGTH_LITTLE_DX
@@ -254,13 +213,9 @@ DOUBLE PRECISION:: ZBMAT(6,3), ZBMAT_T(3,6), ZFINT3(GMAXN,3)
     DOUBLE PRECISION:: NSNI_LIMITER
     INTEGER :: constitution_error_flag
     INTEGER :: call_err_status
-    ! For chunking
     INTEGER, PARAMETER :: CHUNK_SIZE = 1024    ! Process CHUNK_SIZE nodes at a time (Adjust as needed)
-
     INTEGER :: chunk_start, chunk_end, nchunks, c_chunk
 
-    !
-    !
     !
     !*********************************************************
     !******************** EXECUTABLE CODE ********************
@@ -274,10 +229,10 @@ DOUBLE PRECISION:: ZBMAT(6,3), ZBMAT_T(3,6), ZFINT3(GMAXN,3)
     END IF
 
 
-! Ensure GMAXN does not exceed a practical limit
-IF (GMAXN > 5000) THEN ! Example practical limit for GMAXN
-    WRITE(*,*) 'WARNING: CONSTRUCT_FINT - GMAXN (', GMAXN, ') > 5000. This may cause performance issues.'
-END IF
+    ! Ensure GMAXN does not exceed a practical limit
+    IF (GMAXN > 5000) THEN ! Example practical limit for GMAXN
+        WRITE(*,*) 'WARNING: CONSTRUCT_FINT - GMAXN (', GMAXN, ') > 5000. This may cause performance issues.'
+    END IF
 
     IF (GNUMP <= 0) THEN
         ierr_fint_arg = -10; RETURN
@@ -286,9 +241,9 @@ END IF
         ierr_fint_arg = -101; RETURN
     END IF
 
-! WRITE(*,*) 'DEBUG: CONSTRUCT_FINT (Device) - Entry parameter check:'
-! WRITE(*,*) '  Received GMAXN = ', GMAXN
-! WRITE(*,*) '  Received DIM_NN_LIST = ', DIM_NN_LIST    ! WRITE(*,*) '  Received GNUMP = ', GNUMP
+    ! WRITE(*,*) 'DEBUG: CONSTRUCT_FINT (Device) - Entry parameter check:'
+    ! WRITE(*,*) '  Received GMAXN = ', GMAXN
+    ! WRITE(*,*) '  Received DIM_NN_LIST = ', DIM_NN_LIST    ! WRITE(*,*) '  Received GNUMP = ', GNUMP
     ! WRITE(*,*) '  Received GSIZE_IN = ', GSIZE_IN
 
 
@@ -306,21 +261,19 @@ END IF
         ierr_fint_arg = -10
         RETURN
     END IF
+
     IF (GSIZE_IN <= 0) THEN
         ! WRITE(*,*) 'FATAL ERROR: CONSTRUCT_FINT (Device) called with invalid GSIZE_IN = ', GSIZE_IN
-
-
         ierr_fint_arg = -101 
         RETURN
     END IF
 
-
-! 直接檢查輸入參數
-IF (GMAXN <= 0 .OR. GMAXN > DIM_NN_LIST) THEN
-    WRITE(*,*) 'ERROR: CONSTRUCT_FINT - Invalid GMAXN: ', GMAXN
-    ierr_fint_arg = -15
-    RETURN
-END IF
+    ! 直接檢查輸入參數
+    IF (GMAXN <= 0 .OR. GMAXN > DIM_NN_LIST) THEN
+        WRITE(*,*) 'ERROR: CONSTRUCT_FINT - Invalid GMAXN: ', GMAXN
+        ierr_fint_arg = -15
+        RETURN
+    END IF
 
     IF (DIM_NN_LIST <= 0) THEN
        !WRITE(*,*) 'WARNING: CONSTRUCT_FINT (Device) - Fixing invalid DIM_NN_LIST from ', DIM_NN_LIST, ' to ', GNUMP * 1000
@@ -333,13 +286,11 @@ END IF
         RETURN 
     END IF
 
-    ! FEXT is now dimensioned with GSIZE_IN*3. The GSIZE_IN check handles this.
- !   WRITE(*,*) 'DEBUG: CONSTRUCT_FINT (Device) - After parameter fix:'
- !   WRITE(*,*) '  GMAXN = ', GMAXN
- !   WRITE(*,*) '  DIM_NN_LIST = ', DIM_NN_LIST
+!     FEXT is now dimensioned with GSIZE_IN*3. The GSIZE_IN check handles this.
+!     WRITE(*,*) 'DEBUG: CONSTRUCT_FINT (Device) - After parameter fix:'
+!     WRITE(*,*) '  GMAXN = ', GMAXN
+!     WRITE(*,*) '  DIM_NN_LIST = ', DIM_NN_LIST
  
-
-
     !INITIALIZE FINT
 
     ! Initialize FINT and FEXT on the device at the beginning of the routine,
@@ -348,7 +299,6 @@ END IF
     FINT(1:GSIZE_IN*3) = 0.0D0
     FEXT(1:GSIZE_IN*3) = 0.0D0
     GINT_WORK = 0.0D0 ! Initialize GINT_WORK before accumulation
-
     DET = 1.d0
     ! Handle GWIN0 allocation outside parallel region
     IF (LINIT) THEN
@@ -369,18 +319,17 @@ END IF
     !LET OPEN-MP DECIDE HOW TO DO THE DO-LOOP
     !		
 
-		
-		
-! Direct parallelization without chunking
-!$ACC PARALLEL LOOP DEFAULT(PRESENT) &
-!$ACC COPYOUT(global_device_error_occurred, inverse_fallback_count) &
-!$ACC PRIVATE(LCOO, LCOO_T, VOL, LWIN, LSM_LEN, LN, LSTART, LGHOST, LVOL, LPROP, LMAT_TYPE, LOCAL_BODY_ID, SELF_EBC, &
-!$ACC         LSTRESS, LSTRAIN, LSTATE, LBOD, LSTACK, LDINC, LDINC_TOT, LCOONE, LCOO_CUURENT, &
-!$ACC         SHP, SHPD, SHPD_TRASH, SHPDTMP, FMAT, IFMAT, DET, LMAT, STRAIN, D, ELAS_MAT, LSTRESS_PREDICTOR, &
-!$ACC         B_TEMP, B_INV_TEMP, BMAT, BMAT_T, FINT3, FINT3_EXT, ROT, STRESS_INC, STRAIN_INC, L_H_STRESS, L_S_STRESS, &
-!$ACC         POISS, YOUNG, BULK, SHEAR, DENSITY, PMOD, MAXMOD, NSNI_FLAG, SHEAR_TRIAL, BULK_TRIAL, XMAP, YMAP, ZMAP, XLMAT, YLMAT, ZLMAT, DX_STRAIN, DY_STRAIN, DZ_STRAIN, &
-!$ACC         XNORM, F_INT_C_TEMP, F_INT_C, FGRAV, FBOD, J, K, L, JJ, II, P, KK, call_err_status, constitution_error_flag) &
-!$ACC REDUCTION(+:GINT_WORK)
+    ! Direct parallelization without chunking
+    !$ACC PARALLEL LOOP DEFAULT(PRESENT) &
+    !$ACC COPYOUT(global_device_error_occurred, inverse_fallback_count) &
+    !$ACC PRIVATE(LCOO, LCOO_T, VOL, LWIN, LSM_LEN, LN, LSTART, LGHOST, LVOL, LPROP, LMAT_TYPE, LOCAL_BODY_ID, SELF_EBC, &
+    !$ACC         LSTRESS, LSTRAIN, LSTATE, LBOD, LSTACK, LDINC, LDINC_TOT, LCOONE, LCOO_CUURENT, &
+    !$ACC         SHP, SHPD, SHPD_TRASH, SHPDTMP, FMAT, IFMAT, DET, LMAT, STRAIN, D, ELAS_MAT, LSTRESS_PREDICTOR, &
+    !$ACC         B_TEMP, B_INV_TEMP, BMAT, BMAT_T, FINT3, FINT3_EXT, ROT, STRESS_INC, STRAIN_INC, L_H_STRESS, L_S_STRESS, &
+    !$ACC         POISS, YOUNG, BULK, SHEAR, DENSITY, PMOD, MAXMOD, NSNI_FLAG, SHEAR_TRIAL, BULK_TRIAL, XMAP, YMAP, ZMAP, XLMAT, YLMAT, ZLMAT, DX_STRAIN, DY_STRAIN, DZ_STRAIN, &
+    !$ACC         XNORM, F_INT_C_TEMP, F_INT_C, FGRAV, FBOD, J, K, L, JJ, II, P, KK, call_err_status, constitution_error_flag) &
+    !$ACC REDUCTION(+:GINT_WORK)
+
 DO I = 1, GNUMP
         !
         ! Initialize call_err_status for each node I inside the parallel loop
@@ -515,20 +464,20 @@ DO I = 1, GNUMP
                     END DO
                 END DO
                 CALL DETERMINANT(FMAT,DET) ! DET for FMAT
- !                  IF (I == 1) THEN
-  !                      WRITE(*,*) 'DEBUG: CONSTRUCT_FINT - Node ', I, ' - FMAT (Lagrangian, LINIT) Determinant = ', DET
- !                   END IF
+                !   IF (I == 1) THEN
+                !        WRITE(*,*) 'DEBUG: CONSTRUCT_FINT - Node ', I, ' - FMAT (Lagrangian, LINIT) Determinant = ', DET
+                !    END IF
 
                 !
                 !
                 SHPDTMP(:,1:LN)=SHPD(:,1:LN)
                 SHPD(:,1:LN) = 0.0d0
 
-                !CALL INVERSE(FMAT, 3, IFMAT)
-!                IF (I == 1) THEN
-!                    WRITE(*,*) 'DEBUG: CONSTRUCT_FINT - Node ', I, ' - About to call INV3 for FMAT (Lagrangian, non-LINIT)'
-!                    WRITE(*,*) 'DEBUG: CONSTRUCT_FINT - Node ', I, ' - FMAT Determinant = ', DET
-                ! END IF                ! This END IF was misplaced and commented out, seems correct.
+            !     CALL INVERSE(FMAT, 3, IFMAT)
+            !     IF (I == 1) THEN
+            !        WRITE(*,*) 'DEBUG: CONSTRUCT_FINT - Node ', I, ' - About to call INV3 for FMAT (Lagrangian, non-LINIT)'
+            !        WRITE(*,*) 'DEBUG: CONSTRUCT_FINT - Node ', I, ' - FMAT Determinant = ', DET
+            !     END IF                ! This END IF was misplaced and commented out, seems correct.
                 IF (ABS(DET) < DET_THRESHOLD) THEN ! Use parameterized threshold
 
 
@@ -545,7 +494,6 @@ DO I = 1, GNUMP
                     global_device_error_occurred = global_device_error_occurred + FALLBACK_ERROR_INCREMENT
                     call_err_status = -99 ! Indicate fallback due to determinant
 
-
                 ELSE
                     CALL INV3(FMAT,  IFMAT, call_err_status) 
 
@@ -561,14 +509,14 @@ DO I = 1, GNUMP
                         inverse_fallback_count = inverse_fallback_count + 1
                         !$ACC ATOMIC UPDATE
                         global_device_error_occurred = global_device_error_occurred + FALLBACK_ERROR_INCREMENT
-                         ! call_err_status from INV3 is kept if INV3 itself failed
-
-
+                        ! call_err_status from INV3 is kept if INV3 itself failed
                     END IF
                 END IF
-!                IF (I == 1) THEN
-!                     WRITE(*,*) 'DEBUG: CONSTRUCT_FINT - Node ', I, ' - INV3/Fallback for FMAT completed.'
- !               END IF
+
+            !    IF (I == 1) THEN
+            !         WRITE(*,*) 'DEBUG: CONSTRUCT_FINT - Node ', I, ' - INV3/Fallback for FMAT completed.'
+            !    END IF
+
                 IF (CYCLE_ON_FALLBACK .AND. (call_err_status /= 0 .OR. ABS(DET) < DET_THRESHOLD) ) THEN
                     CYCLE
                 END IF
@@ -576,21 +524,19 @@ DO I = 1, GNUMP
                 ! If after fallback, we still consider it a major error to CYCLE, then the original error accumulation can be kept.
                 ! For now, we assume fallback allows continuation. If global_device_error_occurred should still be incremented, uncomment below.
                 ! IF (call_err_status_original_from_inv3 /= 0) THEN ! hypothetical original status
-                    ! !$ACC ATOMIC UPDATE
-                    ! global_device_error_occurred = global_device_error_occurred + 1000 
-                    ! CYCLE
+                !     !$ACC ATOMIC UPDATE
+                !     global_device_error_occurred = global_device_error_occurred + 1000 
+                !     CYCLE
                 ! END IF
 
                 DO J = 1, LN
-
                     DO K = 1, 3
                         SHPD(1,J) = SHPD(1,J) + SHPDTMP(K,J)*IFMAT(K,1)
                         SHPD(2,J) = SHPD(2,J) + SHPDTMP(K,J)*IFMAT(K,2)
                         SHPD(3,J) = SHPD(3,J) + SHPDTMP(K,J)*IFMAT(K,3)
                     END DO
                 END DO
-                ! Moved END IF to correctly close the LFINITE_STRAIN block
-            END IF ! IF (LFINITE_STRAIN)
+            END IF
 
         ELSE
             !
@@ -601,20 +547,27 @@ DO I = 1, GNUMP
                 ! DIRECT NODAL INTEGRATION
                 !
                 IF (LLAGRANGIAN) THEN
- !                   IF (I == 1) THEN
-  !                      WRITE(*,*) 'DEBUG: CONSTRUCT_FINT - Node ', I, ' - About to call RK1 (Lagrangian)'
-  !                  END IF
+                !    IF (I == 1) THEN
+                !        WRITE(*,*) 'DEBUG: CONSTRUCT_FINT - Node ', I, ' - About to call RK1 (Lagrangian)'
+                !    END IF
+                    ! 新增：檢查 RK_CONT 參數
+                    IF (I == 1) THEN
+                        WRITE(*,*) 'DEBUG: CONSTRUCT_FINT - RK parameters check:'
+                        WRITE(*,*) '  RK_CONT = ', RK_CONT, ' (should be 3 for cubic spline)'
+                        WRITE(*,*) '  RK_DEGREE = ', RK_DEGREE
+                        WRITE(*,*) '  RK_PSIZE = ', RK_PSIZE
+                    END IF
                     CALL RK1(LCOO, RK_DEGREE, RK_PSIZE, RK_CONT, RK_IMPL,GCOO, GWIN, GSIZE_IN, LSTACK, LN, GMAXN, GEBC_NODES,SELF_EBC, &
                         QL, QL_COEF,QL_LEN, &
                         SHP, SHPD,SHSUP)
-  !                  IF (I == 1) THEN
-  !                      WRITE(*,*) 'DEBUG: CONSTRUCT_FINT - Node ', I, ' - RK1 call completed (Lagrangian)'
-  !                  END IF
+                !    IF (I == 1) THEN
+                !        WRITE(*,*) 'DEBUG: CONSTRUCT_FINT - Node ', I, ' - RK1 call completed (Lagrangian)'
+                !    END IF
 
                 ELSE !GCOO_CUURENT
- !                   IF (I == 1) THEN
-  !                      WRITE(*,*) 'DEBUG: CONSTRUCT_FINT - Node ', I, ' - About to call RK1 (Eulerian/Updated Lagrangian)'
-  !                  END IF
+                !    IF (I == 1) THEN
+                !        WRITE(*,*) 'DEBUG: CONSTRUCT_FINT - Node ', I, ' - About to call RK1 (Eulerian/Updated Lagrangian)'
+                !    END IF
 
                     CALL RK1(LCOO_T, RK_DEGREE, RK_PSIZE, RK_CONT, RK_IMPL,GCOO_CUURENT, GWIN, GSIZE_IN, LSTACK, LN, GMAXN, GEBC_NODES,SELF_EBC, &
                         QL, QL_COEF,QL_LEN, &
@@ -626,7 +579,6 @@ DO I = 1, GNUMP
  !                       END IF
  !                   END IF                    
                     ! CALCULATE THE DEFORMATION GRADIENT (FMAT = (dX/dx)^-1 = dx/dX)
-
                     ! IF (I == 1) THEN  ! This was a duplicated debug message
                     !    WRITE(*,*) 'DEBUG: CONSTRUCT_FINT - Node ', I, ' - RK1 call completed (Eulerian/Updated Lagrangian)'
                     ! END IF
@@ -639,13 +591,14 @@ DO I = 1, GNUMP
                             END DO 
                         END DO
                     END DO
-USE_ATOMIC_FALLBACK = .FALSE.
-IF (GNUMP .GT. 10000) THEN
+    USE_ATOMIC_FALLBACK = .FALSE.
+    IF (GNUMP .GT. 10000) THEN
     ! 對大問題使用 atomic 以節省記憶體
-    USE_ATOMIC_FALLBACK = .TRUE.
-END IF
-                    ! Check determinant before calling INVERSE for B_TEMP
-                    CALL DETERMINANT(B_TEMP, DET) ! DET for B_TEMP
+        USE_ATOMIC_FALLBACK = .TRUE.
+    END IF
+
+    ! Check determinant before calling INVERSE for B_TEMP
+    CALL DETERMINANT(B_TEMP, DET) ! DET for B_TEMP
 
  !                   IF (I == 1) THEN
  !                       WRITE(*,*) 'DEBUG: CONSTRUCT_FINT - Node ', I, ' - About to call INVERSE for B_TEMP'
@@ -682,7 +635,7 @@ END IF
                         B_INV_TEMP(3,3) = 1.0D0
                         !$ACC ATOMIC UPDATE
                         inverse_fallback_count = inverse_fallback_count + 1
-                     !$ACC ATOMIC UPDATE
+                        !$ACC ATOMIC UPDATE
                         global_device_error_occurred = global_device_error_occurred + FALLBACK_ERROR_INCREMENT 
                         call_err_status = -99 ! Indicate fallback due to determinant
 
@@ -700,18 +653,17 @@ END IF
                             B_INV_TEMP(3,3) = 1.0D0
                             !$ACC ATOMIC UPDATE
                             inverse_fallback_count = inverse_fallback_count + 1
-                         !$ACC ATOMIC UPDATE
+                            !$ACC ATOMIC UPDATE
                             global_device_error_occurred = global_device_error_occurred + FALLBACK_ERROR_INCREMENT     
-                            ! call_err_status from INVERSE is kept if INVERSE itself failed
-
-     
+                            ! call_err_status from INVERSE is kept if INVERSE itself failed    
                         END IF
-
                     END IF
+
                     IF (CYCLE_ON_FALLBACK .AND. (call_err_status /= 0 .OR. ABS(DET) < DET_THRESHOLD) ) THEN 
 
                         CYCLE
                     END IF
+                    
                     FMAT = B_INV_TEMP
                     !
                     ! STORE THE SHP FOR PHY DISPLACEMENT/VEL CACULATION FOR DNI
@@ -753,18 +705,13 @@ END IF
 !                DO J = 1, 3
 !                    LSM_AOV((J-1)*2+1) = GSM_AREA(J,I) / LSM_VOL
 !                    LSM_AOV((J-1)*2+2) = GSM_AREA(J,I) / LSM_VOL
-!                END DO
-
-                !
-                !COMPUTE THE SHAPE FUNCTIONS AT GRADIENT SMOOTHING POINTS
-                !
+!                END DO           
+! COMPUTE THE SHAPE FUNCTIONS AT GRADIENT SMOOTHING POINTS    
 !                DO J = 1, 6
-
 !                    SM_COO(:) = LSM_PTS(:,J)
 !                    CALL RK1(SM_COO, RK_DEGREE, RK_PSIZE, RK_CONT, RK_IMPL, GCOO_CUURENT, GWIN, GSIZE_IN, LSTACK, LN, GMAXN, GEBC_NODES,SELF_EBC, &
 !                        QL, QL_COEF,QL_LEN, &
 !                        SHP, SHPD, SHSUP)
-
 !                    DO K = 1, LN
                     
 !                        SHP6(K,J) = SHP(K)
@@ -783,11 +730,9 @@ END IF
 !                    SHPD(3,K) = (SHP6(K,5)*LSM_AOV(5) - SHP6(K,6)*LSM_AOV(6))
 
 !                END DO
-                !
+
 !                IF (ITYPE_INT.EQ.2) THEN
-
                     !NSNI CALCS
-
 !                    DO K = 1, LN
                         !
                         ! SMOOTH X Y Z IN X DIRECTION
@@ -896,36 +841,35 @@ END IF
                     SHPD(:,1:LN) = 0.0d0
 
 
-                    !CALL INVERSE(FMAT, 3, IFMAT)
-! 保持與 OpenMP 相似的簡單處理
-IF (ABS(DET) < 1.0D-12) THEN
-    ! 記錄問題但繼續計算（與 OpenMP 行為一致）
-    !$ACC ATOMIC UPDATE
-    inverse_fallback_count = inverse_fallback_count + 1
-    
-    ! 使用小的擾動避免奇異性
-    DO K = 1, 3
-        FMAT(K,K) = FMAT(K,K) + 1.0D-10
-    END DO
-END IF
+    !CALL INVERSE(FMAT, 3, IFMAT)
+    ! 保持與 OpenMP 相似的簡單處理
+    IF (ABS(DET) < 1.0D-12) THEN
+        ! 記錄問題但繼續計算（與 OpenMP 行為一致）
+        !$ACC ATOMIC UPDATE
+        inverse_fallback_count = inverse_fallback_count + 1
+        
+        ! 使用小的擾動避免奇異性
+        DO K = 1, 3
+            FMAT(K,K) = FMAT(K,K) + 1.0D-10
+        END DO
+    END IF
 
-CALL INV3(FMAT, IFMAT, call_err_status)
-
-! 如果失敗，跳過此節點（保守處理）
-IF (call_err_status /= 0) THEN
-    CYCLE
-END IF
+    CALL INV3(FMAT, IFMAT, call_err_status)
+    ! 如果失敗，跳過此節點（保守處理）
+    IF (call_err_status /= 0) THEN
+        CYCLE
+    END IF
                     ! IF (I == 1) THEN
-                         ! WRITE(*,*) 'DEBUG: CONSTRUCT_FINT - Node ', I, ' - INV3/Fallback for FMAT (Lagrangian, LINIT) completed.'
+                    !      WRITE(*,*) 'DEBUG: CONSTRUCT_FINT - Node ', I, ' - INV3/Fallback for FMAT (Lagrangian, LINIT) completed.'
                     ! END IF
                     IF (CYCLE_ON_FALLBACK .AND. (call_err_status /= 0 .OR. ABS(DET) < DET_THRESHOLD) ) THEN
                         CYCLE
                     END IF
                     ! Original error handling for CYCLE if needed, but fallback should allow continuation.
                     ! IF (original_call_err_status_from_inv3 /= 0) THEN
-                        ! !$ACC ATOMIC UPDATE
-                        ! global_device_error_occurred = global_device_error_occurred + 3000 
-                        ! CYCLE 
+                    !     !$ACC ATOMIC UPDATE
+                    !     global_device_error_occurred = global_device_error_occurred + 3000 
+                    !     CYCLE 
                     ! END IF
 
                     DO J = 1, LN
@@ -938,7 +882,6 @@ END IF
                         END DO
 
                     END DO
-                ! Moved END IF to correctly close the LFINITE_STRAIN block
                END IF ! IF (LFINITE_STRAIN)
  
 
@@ -1124,21 +1067,22 @@ END IF
 
         IF (LMAT_TYPE.EQ.5) THEN
             ! IF (I == 1) THEN
-                ! WRITE(*,*) 'DEBUG: CONSTRUCT_FINT - Node ', I, ' - About to call HYPERELASTIC'
+            !     WRITE(*,*) 'DEBUG: CONSTRUCT_FINT - Node ', I, ' - About to call HYPERELASTIC'
             ! END IF
 
             CALL HYPERELASTIC(LPROP,LSTRESS,FMAT,LSTRAIN, constitution_error_flag) ! 新增 ierr 參數
             ! IF (I == 1) THEN
-                ! WRITE(*,*) 'DEBUG: CONSTRUCT_FINT - Node ', I, ' - HYPERELASTIC call completed, status: ', constitution_error_flag
+            !     WRITE(*,*) 'DEBUG: CONSTRUCT_FINT - Node ', I, ' - HYPERELASTIC call completed, status: ', constitution_error_flag
             ! END IF
         ELSE
             ! IF (I == 1) THEN
-                ! WRITE(*,*) 'DEBUG: CONSTRUCT_FINT - Node ', I, ' - About to call CONSTITUTION'
+            !     WRITE(*,*) 'DEBUG: CONSTRUCT_FINT - Node ', I, ' - About to call CONSTITUTION'
             ! END IF
+
             CALL CONSTITUTION(LSTRESS_PREDICTOR,LMAT_TYPE, LSTRAIN, STRAIN, LPROP, DLT, FMAT, &
                 LSTATE, LSTRESS, L_H_STRESS, L_S_STRESS, constitution_error_flag) !IN/OUT, OUT
             ! IF (I == 1) THEN
-                ! WRITE(*,*) 'DEBUG: CONSTRUCT_FINT - Node ', I, ' - CONSTITUTION call completed, status: ', constitution_error_flag
+            !     WRITE(*,*) 'DEBUG: CONSTRUCT_FINT - Node ', I, ' - CONSTITUTION call completed, status: ', constitution_error_flag
             ! END IF
             IF (constitution_error_flag /= 0) THEN
                 !$ACC ATOMIC UPDATE
@@ -1179,7 +1123,6 @@ END IF
 
         GSTRAIN_EQ(I) = LSTRAIN(1)**2 + LSTRAIN(2)**2 + LSTRAIN(3)**2 + & ! GSTRAIN_EQ is (GSIZE_IN)
 	               2.0d0*(LSTRAIN(4)**2 + LSTRAIN(5)**2 + LSTRAIN(6)**2)
-
         GSTRAIN_EQ(I) = ( GSTRAIN_EQ(I) *2.3d0)**0.5
 
 
@@ -1187,7 +1130,7 @@ END IF
         IF (LFINITE_STRAIN) THEN
             DO J = 1, 6
             
-!                 GINT_WORK_TEMP(ID_RANK+1) = GINT_WORK_TEMP(ID_RANK+1) + 0.5d0*D(J)*(2*LSTRESS(J)-STRESS_INC(J))*VOL*DET
+!                GINT_WORK_TEMP(ID_RANK+1) = GINT_WORK_TEMP(ID_RANK+1) + 0.5d0*D(J)*(2*LSTRESS(J)-STRESS_INC(J))*VOL*DET
                  GINT_WORK = GINT_WORK + 0.5d0*D(J)*(2*LSTRESS(J)-STRESS_INC(J))*VOL*DET ! Accumulate directly with reduction
  
             END DO
@@ -1224,18 +1167,15 @@ END IF
 			  GMAX_WVEL(I) = DSQRT(MAXMOD/DENSITY) ! GMAX_WVEL is (GNUMP)
 
 
-			  !IF (LMAT_TYPE.EQ.3) THEN
-			  !	!FUDGE THE DRUCKER-PRAGER TIME STEP SO THAT THE FACTOR CAN BE 1.0
-			  !	GMAX_WVEL(I) = GMAX_WVEL(I)/0.3d0
-			  !END IF
+			!   IF (LMAT_TYPE.EQ.3) THEN
+			!   	FUDGE THE DRUCKER-PRAGER TIME STEP SO THAT THE FACTOR CAN BE 1.0
+			!   	GMAX_WVEL(I) = GMAX_WVEL(I)/0.3d0
+			!   END IF
 
-		!ELSE
-		  !
-		  ! DO IT THE WAY DR. YREUAX DOES
-		  !
-          !GMAX_WVEL(I) = DSQRT(BULK/DENSITY)
-          !
-		!END IF
+		! ELSE		  
+		!   DO IT THE WAY DR. YREUAX DOES		  
+        !   GMAX_WVEL(I) = DSQRT(BULK/DENSITY)         
+		! END IF
 		
 !        IF (ITYPE_INT.EQ.2) THEN
 
@@ -1332,7 +1272,7 @@ END IF
 
 
 !        END IF !NSNI
-XNORM(1:3) =0.D0
+    XNORM(1:3) =0.D0
         DO K = 1, LN
             KK = LSTACK(K)
             IF(LOCAL_BODY_ID .EQ.MODEL_BODY_ID(KK)) THEN ! MODEL_BODY_ID is (GNUMP), KK can be > GNUMP. This needs care.
@@ -1462,27 +1402,27 @@ XNORM(1:3) =0.D0
                 MAG_FINT = MAG_FINT + FINT3(K)**2
             END DO
 
-IF (USE_ATOMIC_FALLBACK) THEN
-    ! 大問題：使用 atomic 更新
-    DO K = 1, 3
-        !$ACC ATOMIC UPDATE
-        FINT((JJ-1)*3+K) = FINT((JJ-1)*3+K) + FINT3(K)*VOL*DET
-        !$ACC ATOMIC UPDATE
-        FEXT((JJ-1)*3+K) = FEXT((JJ-1)*3+K) + FINT3_EXT(K)*VOL*DET
-    END DO
-ELSE
-    ! 小問題：為了數值一致性，模擬 OpenMP 的累加順序
-    ! 使用兩階段方法
-    ! 第一階段：每個節點將其貢獻存儲到臨時位置
-    DO K = 1, 3
-        ! 這裡需要一個節點級別的臨時存儲策略
-        ! 由於 GPU 的限制，我們仍使用 atomic，但加入順序控制
-        !$ACC ATOMIC UPDATE
-        FINT((JJ-1)*3+K) = FINT((JJ-1)*3+K) + FINT3(K)*VOL*DET
-        !$ACC ATOMIC UPDATE
-        FEXT((JJ-1)*3+K) = FEXT((JJ-1)*3+K) + FINT3_EXT(K)*VOL*DET
-    END DO
-END IF
+    IF (USE_ATOMIC_FALLBACK) THEN
+        ! 大問題：使用 atomic 更新
+        DO K = 1, 3
+            !$ACC ATOMIC UPDATE
+            FINT((JJ-1)*3+K) = FINT((JJ-1)*3+K) + FINT3(K)*VOL*DET
+            !$ACC ATOMIC UPDATE
+            FEXT((JJ-1)*3+K) = FEXT((JJ-1)*3+K) + FINT3_EXT(K)*VOL*DET
+        END DO
+    ELSE
+        ! 小問題：為了數值一致性，模擬 OpenMP 的累加順序
+        ! 使用兩階段方法
+        ! 第一階段：每個節點將其貢獻存儲到臨時位置
+        DO K = 1, 3
+            ! 這裡需要一個節點級別的臨時存儲策略
+            ! 由於 GPU 的限制，我們仍使用 atomic，但加入順序控制
+            !$ACC ATOMIC UPDATE
+            FINT((JJ-1)*3+K) = FINT((JJ-1)*3+K) + FINT3(K)*VOL*DET
+            !$ACC ATOMIC UPDATE
+            FEXT((JJ-1)*3+K) = FEXT((JJ-1)*3+K) + FINT3_EXT(K)*VOL*DET
+        END DO
+    END IF
 
         END DO !ASSEMBLE FINT FOR STANDARD NODAL INTEGRATION PART
 
@@ -1596,7 +1536,7 @@ END IF
     END DO !INTEGRATION POINT (NODE) LOOP
     !$ACC END PARALLEL LOOP
 
-    !$ACC WAIT  ! Wait for the current chunk to complete
+!     $ACC WAIT  ! Wait for the current chunk to complete
 !    END DO ! End of chunking loop (c_chunk)
 
 
@@ -1709,13 +1649,6 @@ END IF
 !                END IF
 !                DLT_FINT = MIN(DLT_TEMP,DLT_FINT)
 !            END IF
-
 !        END DO
-
 !        DLT_FINT = DLT_FINT*DLT_FAC
-
-
-
 !    END IF !CALC TIME STEP
-
-

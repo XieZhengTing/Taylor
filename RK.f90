@@ -147,15 +147,20 @@ CONTAINS
         CALL DERIV_H(XMXI_OA(I),YMYI_OA(I),ZMZI_OA(I),MSIZE,DEG,H_X,H_Y,H_Z)
 
 
-        XMXI_OA(I) = (X(1) -  GCOO(1,II)) /GWIN(1,II)
-        YMYI_OA(I) = (X(2) -  GCOO(2,II)) /GWIN(2,II)
-        ZMZI_OA(I) = (X(3) -  GCOO(3,II)) /GWIN(3,II)
+! 計算實際距離（不要過早歸一化）
+XMXI_OA(I) = X(1) - GCOO(1,II)
+YMYI_OA(I) = X(2) - GCOO(2,II) 
+ZMZI_OA(I) = X(3) - GCOO(3,II)
 
-        IF (SHSUP) THEN
- !           DENOM = (GWIN(1,II)*GWIN(2,II)*GWIN(3,II))**(1.D0/3.D0)
-            DIA(I) = SQRT(XMXI_OA(I)**2+YMYI_OA(I)**2+ZMZI_OA(I)**2)
-
-            CALL MLS_KERNEL0(DIA(I),GWIN(1,II),CONT,PHI(I),PHIX_X,ISZERO, ierr_mls)
+IF (SHSUP) THEN
+    ! 計算實際距離
+    DIA(I) = SQRT(XMXI_OA(I)**2 + YMYI_OA(I)**2 + ZMZI_OA(I)**2)
+    
+    ! 使用平均視窗大小
+    DOUBLE PRECISION :: AVG_WIN
+    AVG_WIN = (GWIN(1,II) + GWIN(2,II) + GWIN(3,II)) / 3.0D0
+    
+    CALL MLS_KERNEL0(DIA(I), AVG_WIN, CONT, PHI(I), PHIX_X, ISZERO, ierr_mls)
             IF (ierr_mls /= 0) THEN
                 ! Handle MLS_KERNEL0 error, e.g., set outputs to error values and skip/return
                 SHP(I) = HUGE(0.0D0)
@@ -784,6 +789,18 @@ END IF
             SHP(I) = HUGE(0.0D0); CYCLE;
         END IF
 
+!DENOM = GWIN(1,II)*GWIN(2,II)*GWIN(3,II)
+            PHI(I) = PHIX*PHIY*PHIZ !/DENOM
+
+            ! 新增除錯輸出
+            IF (I <= 3) THEN
+                WRITE(*,*) 'DEBUG RK1 (Tensor Product): Node ', II
+                WRITE(*,*) '  XMXI_OA = ', ABS(XMXI_OA(I)), ' WIN_X = ', GWIN(1,II)
+                WRITE(*,*) '  YMYI_OA = ', ABS(YMYI_OA(I)), ' WIN_Y = ', GWIN(2,II)
+                WRITE(*,*) '  ZMZI_OA = ', ABS(ZMZI_OA(I)), ' WIN_Z = ', GWIN(3,II)
+                WRITE(*,*) '  PHIX = ', PHIX, ' PHIY = ', PHIY, ' PHIZ = ', PHIZ
+                WRITE(*,*) '  PHI(I) = ', PHI(I)
+            END IF
 
         !DENOM = GWIN(1,II)*GWIN(2,II)*GWIN(3,II)
         PHI(I) = PHIX*PHIY*PHIZ !/DENOM
@@ -903,21 +920,39 @@ SUBROUTINE MLS_KERNEL0(XN,WIN,CONT,PHI,PHIX,ISZERO, ierr)
     LOGICAL, INTENT(OUT):: ISZERO
     INTEGER, INTENT(OUT) :: ierr
     
+    DOUBLE PRECISION :: R  ! 新增：歸一化距離
+    
     ISZERO = .FALSE.
     ierr = 0
     
-    ! 新增：檢查 WIN 有效性
+    ! 檢查 WIN 有效性
     IF (WIN <= 0.0D0) THEN
+        WRITE(*,*) 'ERROR: MLS_KERNEL0 - WIN <= 0: WIN = ', WIN
         PHI = 0.0D0
         PHIX = 0.0D0
         ierr = -1
         RETURN
     END IF
     
+    ! 計算歸一化距離
+    R = ABS(XN) / WIN
+    
+    LOGICAL, SAVE :: FIRST_CALL = .TRUE.
+    INTEGER, SAVE :: CALL_COUNT = 0
+    IF (FIRST_CALL .OR. CALL_COUNT < 5) THEN
+        WRITE(*,*) 'DEBUG MLS_KERNEL0: XN=', XN, ' WIN=', WIN, ' R=', R, ' CONT=', CONT
+        CALL_COUNT = CALL_COUNT + 1
+        IF (CALL_COUNT >= 5) FIRST_CALL = .FALSE.
+    END IF
+    
     IF (CONT.EQ.3) THEN !CUBIC SPLINE
-        IF (XN.LE.1.0D0) THEN
-            PHI = 1.0D0 - 6.0D0*XN**2 + 8.0D0*XN**3 - 3.0D0*XN**4
-            PHIX = -12.0D0*XN + 24.0D0*XN**2 - 12.0D0*XN**3
+        IF (R.LE.1.0D0) THEN
+            PHI = (1.0D0 - 6.0D0*R**2 + 8.0D0*R**3 - 3.0D0*R**4) / WIN
+            IF (ABS(XN) .GT. 1.0D-12) THEN
+                PHIX = (-12.0D0*R + 24.0D0*R**2 - 12.0D0*R**3) * SIGN(1.0D0, XN) / (WIN**2)
+            ELSE
+                PHIX = 0.0D0
+            END IF
         ELSE
             PHI = 0.0D0
             PHIX = 0.0D0
@@ -931,7 +966,7 @@ SUBROUTINE MLS_KERNEL0(XN,WIN,CONT,PHI,PHIX,ISZERO, ierr)
     END IF
     
     RETURN
-    END SUBROUTINE MLS_KERNEL0
+END SUBROUTINE MLS_KERNEL0
 
 
 	  SUBROUTINE HUGHES_WINGET(LMAT, & !IN
