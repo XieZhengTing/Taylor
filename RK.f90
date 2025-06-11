@@ -792,15 +792,15 @@ END IF
 !DENOM = GWIN(1,II)*GWIN(2,II)*GWIN(3,II)
             PHI(I) = PHIX*PHIY*PHIZ !/DENOM
 
-            ! 新增除錯輸出
-            IF (I <= 3) THEN
-                WRITE(*,*) 'DEBUG RK1 (Tensor Product): Node ', II
-                WRITE(*,*) '  XMXI_OA = ', ABS(XMXI_OA(I)), ' WIN_X = ', GWIN(1,II)
-                WRITE(*,*) '  YMYI_OA = ', ABS(YMYI_OA(I)), ' WIN_Y = ', GWIN(2,II)
-                WRITE(*,*) '  ZMZI_OA = ', ABS(ZMZI_OA(I)), ' WIN_Z = ', GWIN(3,II)
-                WRITE(*,*) '  PHIX = ', PHIX, ' PHIY = ', PHIY, ' PHIZ = ', PHIZ
-                WRITE(*,*) '  PHI(I) = ', PHI(I)
-            END IF
+IF (I <= 5) THEN
+    WRITE(*,*) 'DEBUG RK1 (Tensor): II=', II, ' I=', I
+    WRITE(*,*) '  XMXI_OA=', ABS(XMXI_OA(I)), ' PHIX=', PHIX
+    WRITE(*,*) '  YMYI_OA=', ABS(YMYI_OA(I)), ' PHIY=', PHIY
+    WRITE(*,*) '  ZMZI_OA=', ABS(ZMZI_OA(I)), ' PHIZ=', PHIZ
+    WRITE(*,*) '  PHI(I) = PHIX*PHIY*PHIZ = ', PHI(I)
+END IF
+
+PHI_SUM = PHI_SUM + PHI(I)
 
         !DENOM = GWIN(1,II)*GWIN(2,II)*GWIN(3,II)
         PHI(I) = PHIX*PHIY*PHIZ !/DENOM
@@ -922,7 +922,9 @@ SUBROUTINE MLS_KERNEL0(XN,WIN,CONT,PHI,PHIX,ISZERO, ierr)
     
     DOUBLE PRECISION :: R  ! 新增：歸一化距離
       LOGICAL, SAVE :: FIRST_CALL = .TRUE.
-      INTEGER, SAVE :: CALL_COUNT = 0    
+      INTEGER, SAVE :: CALL_COUNT = 0
+      LOGICAL, SAVE :: FIRST_FEW = .TRUE.
+      INTEGER, SAVE :: PHI_COUNT = 0 
     ISZERO = .FALSE.
     ierr = 0
     
@@ -956,9 +958,7 @@ END IF
             ELSE
                 PHIX = 0.0D0
             END IF
-            
-        LOGICAL, SAVE :: FIRST_FEW = .TRUE.
-        INTEGER, SAVE :: PHI_COUNT = 0
+
         IF (FIRST_FEW .AND. PHI_COUNT < 10) THEN
             WRITE(*,*) 'DEBUG MLS_KERNEL0: R=', R, ' PHI=', PHI, ' PHIX=', PHIX
             PHI_COUNT = PHI_COUNT + 1
@@ -970,6 +970,14 @@ END IF
             PHIX = 0.0D0
             ISZERO = .TRUE.
         END IF
+    LOGICAL, SAVE :: FIRST_PHI = .TRUE.
+    INTEGER, SAVE :: PHI_OUT_COUNT = 0
+    IF (FIRST_PHI .AND. PHI_OUT_COUNT < 10 .AND. R.LE.1.0D0) THEN
+        WRITE(*,*) 'DEBUG MLS_KERNEL0: R=', R, ' WIN=', WIN, ' PHI=', PHI
+        PHI_OUT_COUNT = PHI_OUT_COUNT + 1
+        IF (PHI_OUT_COUNT >= 10) FIRST_PHI = .FALSE.
+    END IF
+
     ELSE
         ! 不支援的核函數類型
         PHI = 0.0D0
