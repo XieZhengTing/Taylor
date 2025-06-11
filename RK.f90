@@ -183,7 +183,8 @@ END IF
             ! 球形支撐域
             DIA(I) = SQRT(XMXI_OA(I)**2 + YMYI_OA(I)**2 + ZMZI_OA(I)**2)
 
-            CALL MLS_KERNEL0(DIA(I), 1.0D0, CONT, PHI(I), PHIX_X, ISZERO, ierr_mls)            IF (ierr_mls /= 0) THEN
+            CALL MLS_KERNEL0(DIA(I), 1.0D0, CONT, PHI(I), PHIX_X, ISZERO, ierr_mls)
+            IF (ierr_mls /= 0) THEN
                 SHP(I) = 0.0D0
                 SHPD(:,I) = 0.0D0
                 CYCLE
