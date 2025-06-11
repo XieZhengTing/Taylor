@@ -95,13 +95,14 @@ CONTAINS
 
 ! 簡單的除錯輸出（避免複雜格式）
     LOGICAL, SAVE :: FIRST_RK1 = .TRUE.
-    IF (FIRST_RK1) THEN
-        WRITE(*,*) 'DEBUG RK1: First call'
-        WRITE(*,*) '  LN = ', LN
-        WRITE(*,*) '  CONT = ', CONT
-        WRITE(*,*) '  SHSUP = ', SHSUP
-        FIRST_RK1 = .FALSE.
-    END IF
+IF (FIRST_RK1) THEN
+    WRITE(*,*) 'DEBUG RK1: First call'
+    WRITE(*,*) '  LN = ', LN
+    WRITE(*,*) '  CONT = ', CONT
+    WRITE(*,*) '  SHSUP = ', SHSUP
+    WRITE(*,*) '  QL = ', QL
+    FIRST_RK1 = .FALSE.
+END IF
     !
     ! WE NEED TO BE CAREFUL NOT TO EVALUATE THE SINGULAR KERNAL AT THE NODE
     ! ALSO, WE NEED TO OUTPUT PHYSICAL DISPLACEMENTS!
@@ -163,47 +164,43 @@ CONTAINS
 
 
 ! 計算實際距離（不要過早歸一化）
-XMXI_OA(I) = X(1) - GCOO(1,II)
-YMYI_OA(I) = X(2) - GCOO(2,II) 
-ZMZI_OA(I) = X(3) - GCOO(3,II)
+        XMXI_OA(I) = X(1) - GCOO(1,II)
+        YMYI_OA(I) = X(2) - GCOO(2,II) 
+        ZMZI_OA(I) = X(3) - GCOO(3,II)
 
-IF (SHSUP) THEN
-    ! 計算實際距離
-    DIA(I) = SQRT(XMXI_OA(I)**2 + YMYI_OA(I)**2 + ZMZI_OA(I)**2)
-    
-    ! 使用平均視窗大小
-    AVG_WIN = (GWIN(1,II) + GWIN(2,II) + GWIN(3,II)) / 3.0D0
-    
-    CALL MLS_KERNEL0(DIA(I), AVG_WIN, CONT, PHI(I), PHIX_X, ISZERO, ierr_mls)
-        WRITE(*,*) 'DEBUG RK1 SHSUP: I=', I, ' DIA=', DIA(I)
-        WRITE(*,*) '  PHI=', PHI(I)
-    END IF
-ELSE
+        IF (SHSUP) THEN
+            ! 球形支撐域
+            ! 計算實際距離
+            DIA(I) = SQRT(XMXI_OA(I)**2 + YMYI_OA(I)**2 + ZMZI_OA(I)**2)
+            
+            ! 使用平均視窗大小
+            AVG_WIN = (GWIN(1,II) + GWIN(2,II) + GWIN(3,II)) / 3.0D0
+            
+            CALL MLS_KERNEL0(DIA(I), AVG_WIN, CONT, PHI(I), PHIX_X, ISZERO, ierr_mls)
             IF (ierr_mls /= 0) THEN
-                ! Handle MLS_KERNEL0 error, e.g., set outputs to error values and skip/return
+                ! Handle MLS_KERNEL0 error
                 SHP(I) = HUGE(0.0D0)
                 SHPD(:,I) = HUGE(0.0D0)
-                CYCLE ! or RETURN if appropriate
+                CYCLE
             END IF
-
+            
+            ! 簡單除錯輸出
+            IF (I <= 3) THEN
+                WRITE(*,*) 'DEBUG RK1 SHSUP: I=', I, ' DIA=', DIA(I)
+                WRITE(*,*) '  PHI=', PHI(I)
+            END IF
             
             IF (IMPL.EQ.1) THEN
-
+                ! Implicit formulation (not implemented)
             ELSE
-                IF  (DIA(I).LE.(1.0d-13)) THEN
-                    
-                   ! IF  (YMYI_OA(I).LE.(1.0d-13)) THEN
-            
-                        !IF  (ZMZI_OA(I).LE.(1.0d-13)) THEN
-                            DRDX = 0.0d0
-                            DRDY = 0.0d0
-                            DRDZ = 0.0d0
-                       ! ENDIF
-                    !ENDIF
+                IF (DIA(I).LE.(1.0d-13)) THEN
+                    DRDX = 0.0d0
+                    DRDY = 0.0d0
+                    DRDZ = 0.0d0
                 ELSE
-                    DRDX = (X(1) -  GCOO(1,II))/GWIN(1,II)**2/DIA(I)
-                    DRDY = (X(2) -  GCOO(2,II))/GWIN(2,II)**2/DIA(I)
-                    DRDZ = (X(3) -  GCOO(3,II))/GWIN(3,II)**2/DIA(I)
+                    DRDX = (X(1) - GCOO(1,II))/GWIN(1,II)**2/DIA(I)
+                    DRDY = (X(2) - GCOO(2,II))/GWIN(2,II)**2/DIA(I)
+                    DRDZ = (X(3) - GCOO(3,II))/GWIN(3,II)**2/DIA(I)
                 ENDIF
                 
                 PHI_X(I) = PHIX_X*DRDX
@@ -211,110 +208,81 @@ ELSE
                 PHI_Z(I) = PHIX_X*DRDZ
             ENDIF
             
-            PHI_SUM = PHI_SUM + PHI(I)
-
-PHI_SUM = PHI_SUM + PHI(I)
-
-! 新增除錯輸出
-IF (I == 1) THEN
-    WRITE(*,*) 'DEBUG RK1: Node ', II, ' PHI = ', PHI(I)
-    WRITE(*,*) '  XMXI_OA = ', XMXI_OA(I), ' YMYI_OA = ', YMYI_OA(I), ' ZMZI_OA = ', ZMZI_OA(I)
-    WRITE(*,*) '  PHIX = ', PHIX, ' PHIY = ', PHIY, ' PHIZ = ', PHIZ
-END IF
-
         ELSE
-
-
+            ! 張量積支撐域
+            ! 重新計算歸一化座標
+            XMXI_OA(I) = (X(1) - GCOO(1,II)) / GWIN(1,II)
+            YMYI_OA(I) = (X(2) - GCOO(2,II)) / GWIN(2,II)
+            ZMZI_OA(I) = (X(3) - GCOO(3,II)) / GWIN(3,II)
+            
             CALL MLS_KERNEL0(ABS(XMXI_OA(I)),GWIN(1,II),CONT,PHIX,PHIX_X,ISZERO, ierr_mls)
             IF (ierr_mls /= 0) THEN
-                ! Handle MLS_KERNEL0 error
                 SHP(I) = HUGE(0.0D0); SHPD(:,I) = HUGE(0.0D0); CYCLE;
             END IF
             CALL MLS_KERNEL0(ABS(YMYI_OA(I)),GWIN(2,II),CONT,PHIY,PHIY_Y,ISZERO, ierr_mls)
             IF (ierr_mls /= 0) THEN
-                ! Handle MLS_KERNEL0 error
                 SHP(I) = HUGE(0.0D0); SHPD(:,I) = HUGE(0.0D0); CYCLE;
             END IF
             CALL MLS_KERNEL0(ABS(ZMZI_OA(I)),GWIN(3,II),CONT,PHIZ,PHIZ_Z,ISZERO, ierr_mls)
             IF (ierr_mls /= 0) THEN
-                ! Handle MLS_KERNEL0 error
                 SHP(I) = HUGE(0.0D0); SHPD(:,I) = HUGE(0.0D0); CYCLE;
             END IF
 
-
-            !DENOM = GWIN(1,II)*GWIN(2,II)*GWIN(3,II)
-            PHI(I) = PHIX*PHIY*PHIZ !/DENOM
-
-    IF (I <= 3) THEN
-        WRITE(*,*) 'DEBUG RK1 TENSOR: I=', I
-        WRITE(*,*) '  PHIX=', PHIX, ' PHIY=', PHIY, ' PHIZ=', PHIZ
-        WRITE(*,*) '  PHI=', PHI(I)
-    END IF
-
-! 新增：輸出 tensor product 計算
-            IF (I <= 5) THEN
-                WRITE(*,'(A,I3,A,I5)') 'DEBUG RK1: Computing PHI for neighbor ', I, ', node ID=', II
-                WRITE(*,'(A,3E12.5)') '  PHIX,PHIY,PHIZ = ', PHIX, PHIY, PHIZ
-            END IF
-            
-            PHI(I) = PHIX*PHIY*PHIZ !/DENOM
-            
-            IF (I <= 5) THEN
-                WRITE(*,'(A,E15.8)') '  PHI(I) = ', PHI(I)
+           ! 計算張量積
+           PHI(I) = PHIX*PHIY*PHIZ
+           ! 除以體積因子（視窗大小的乘積）
+           PHI(I) = PHI(I) / (GWIN(1,II)*GWIN(2,II)*GWIN(3,II))
+            ! 簡單除錯輸出
+            IF (I <= 3) THEN
+                WRITE(*,*) 'DEBUG RK1 TENSOR: I=', I
+                WRITE(*,*) '  PHIX=', PHIX, ' PHIY=', PHIY, ' PHIZ=', PHIZ
+                WRITE(*,*) '  PHI=', PHI(I)
             END IF
 
+            IF (XMXI_OA(I).EQ.0) THEN
+                DRDX = 0.0d0
+            ELSEIF (XMXI_OA(I).GE.0) THEN
+                DRDX = 1.0d0/GWIN(1,II)
+            ELSEIF (XMXI_OA(I).LE.0) THEN
+                DRDX = -1.0d0/GWIN(1,II)
+            ENDIF
 
-!            IF (IMPL.EQ.1) THEN
+            IF (YMYI_OA(I).EQ.0) THEN
+                DRDY = 0.0d0
+            ELSEIF (YMYI_OA(I).GE.0) THEN
+                DRDY = 1.0d0/GWIN(2,II)
+            ELSEIF (YMYI_OA(I).LE.0) THEN
+                DRDY = -1.0d0/GWIN(2,II)
+            ENDIF
 
-!            ELSE
-                IF (XMXI_OA(I).EQ.0) THEN
-                    DRDX = 0.0d0
-                ELSEIF (XMXI_OA(I).GE.0) THEN
-                    DRDX = 1.0d0/GWIN(1,II)
-                ELSEIF (XMXI_OA(I).LE.0) THEN
-                    DRDX = -1.0d0/GWIN(1,II)
-                ENDIF
+            IF (ZMZI_OA(I).EQ.0) THEN
+                DRDZ = 0.0d0
+            ELSEIF (ZMZI_OA(I).GE.0) THEN
+                DRDZ = 1.0d0/GWIN(3,II)
+            ELSEIF (ZMZI_OA(I).LE.0) THEN
+                DRDZ = -1.0d0/GWIN(3,II)
+            ENDIF
 
-                IF (YMYI_OA(I).EQ.0) THEN
-                    DRDY = 0.0d0
-                ELSEIF (YMYI_OA(I).GE.0) THEN
-                    DRDY = 1.0d0/GWIN(1,II)
-                ELSEIF (YMYI_OA(I).LE.0) THEN
-                    DRDY = -1.0d0/GWIN(1,II)
-                ENDIF
-
-                IF (ZMZI_OA(I).EQ.0) THEN
-                    DRDZ = 0.0d0
-                ELSEIF (ZMZI_OA(I).GE.0) THEN
-                    DRDZ = 1.0d0/GWIN(1,II)
-                ELSEIF (ZMZI_OA(I).LE.0) THEN
-                    DRDZ = -1.0d0/GWIN(1,II)
-                ENDIF
-
-                PHI_X(I) = PHIX_X*PHIY*PHIZ*DRDX
-                PHI_Y(I) = PHIX*PHIY_Y*PHIZ*DRDY
-                PHI_Z(I) = PHIX*PHIY*PHIZ_Z*DRDZ
-!            ENDIF
-
+            PHI_X(I) = PHIX_X*PHIY*PHIZ*DRDX
+            PHI_Y(I) = PHIX*PHIY_Y*PHIZ*DRDY
+            PHI_Z(I) = PHIX*PHIY*PHIZ_Z*DRDZ
 
             !
             ! SINGULAR KERNAL
-            ! #TODO
             !
             IF (EBCS(II)) THEN
-
                 WINDOW_MOD = 1.0d0/(DSQRT(XMXI_OA(I)**2 + YMYI_OA(I)**2 + ZMZI_OA(I)**2) + 1.0E-015)
 
                 ! FOR DSHP
-                PHI_X(I) = PHI_X(I)*WINDOW_MOD - PHI(I)*WINDOW_MOD*WINDOW_MOD*WINDOW_MOD*XMXI_OA(I)/GWIN(1,II)  ! x
-                PHI_Y(I) = PHI_Y(I)*WINDOW_MOD - PHI(I)*WINDOW_MOD*WINDOW_MOD*WINDOW_MOD*YMYI_OA(I)/GWIN(2,II)  ! y
-                PHI_Z(I) = PHI_Z(I)*WINDOW_MOD - PHI(I)*WINDOW_MOD*WINDOW_MOD*WINDOW_MOD*ZMZI_OA(I)/GWIN(3,II)  ! z
+                PHI_X(I) = PHI_X(I)*WINDOW_MOD - PHI(I)*WINDOW_MOD*WINDOW_MOD*WINDOW_MOD*XMXI_OA(I)/GWIN(1,II)
+                PHI_Y(I) = PHI_Y(I)*WINDOW_MOD - PHI(I)*WINDOW_MOD*WINDOW_MOD*WINDOW_MOD*YMYI_OA(I)/GWIN(2,II)
+                PHI_Z(I) = PHI_Z(I)*WINDOW_MOD - PHI(I)*WINDOW_MOD*WINDOW_MOD*WINDOW_MOD*ZMZI_OA(I)/GWIN(3,II)
                 ! FOR SHAP
                 PHI(I) = PHI(I)*WINDOW_MOD
-
             END IF
-            PHI_SUM = PHI_SUM + PHI(I)
         ENDIF
+        
+        PHI_SUM = PHI_SUM + PHI(I)
         DO J = 1, MSIZE
             DO K = 1, MSIZE
                 M_FULL(J,K) = M_FULL(J,K) + H_FULL(J,1)*H_FULL(K,1)*PHI(I)
@@ -327,7 +295,7 @@ END IF
 
             END DO
         END DO
-        
+WRITE(*,*) 'DEBUG RK1: After neighbor loop - PHI_SUM = ', PHI_SUM, ' LN = ', LN
         CONTINUE
 
     END DO
@@ -831,20 +799,17 @@ END IF
         END IF
 
 !DENOM = GWIN(1,II)*GWIN(2,II)*GWIN(3,II)
-            PHI(I) = PHIX*PHIY*PHIZ !/DENOM
+PHI(I) = PHIX*PHIY*PHIZ !/DENOM
 
-IF (I <= 5) THEN
-    WRITE(*,*) 'DEBUG RK1 (Tensor): II=', II, ' I=', I
-    WRITE(*,*) '  XMXI_OA=', ABS(XMXI_OA(I)), ' PHIX=', PHIX
-    WRITE(*,*) '  YMYI_OA=', ABS(YMYI_OA(I)), ' PHIY=', PHIY
-    WRITE(*,*) '  ZMZI_OA=', ABS(ZMZI_OA(I)), ' PHIZ=', PHIZ
-    WRITE(*,*) '  PHI(I) = PHIX*PHIY*PHIZ = ', PHI(I)
-END IF
+            IF (I <= 5) THEN
+                WRITE(*,*) 'DEBUG UDFM_SHAPE_TENSOR: I=', I, ' II=', II
+                WRITE(*,*) '  XMXI_OA=', ABS(XMXI_OA(I)), ' PHIX=', PHIX
+                WRITE(*,*) '  YMYI_OA=', ABS(YMYI_OA(I)), ' PHIY=', PHIY
+                WRITE(*,*) '  ZMZI_OA=', ABS(ZMZI_OA(I)), ' PHIZ=', PHIZ
+                WRITE(*,*) '  PHI=', PHI(I)
+            END IF
 
-PHI_SUM = PHI_SUM + PHI(I)
-
-        !DENOM = GWIN(1,II)*GWIN(2,II)*GWIN(3,II)
-        PHI(I) = PHIX*PHIY*PHIZ !/DENOM
+            PHI_SUM = PHI_SUM + PHI(I)
 
         DO J = 1,MSIZE-1
             DO K = 1,MSIZE-1
@@ -979,7 +944,7 @@ SUBROUTINE MLS_KERNEL0(XN,WIN,CONT,PHI,PHIX,ISZERO, ierr)
     
     IF (CONT.EQ.3) THEN !CUBIC SPLINE
         IF (R.LE.1.0D0) THEN
-            PHI = (1.0D0 - 6.0D0*R**2 + 8.0D0*R**3 - 3.0D0*R**4) / WIN
+            PHI = (1.0D0 - 6.0D0*R**2 + 8.0D0*R**3 - 3.0D0*R**4)
             IF (ABS(XN) .GT. 1.0D-12) THEN
                 PHIX = (-12.0D0*R + 24.0D0*R**2 - 12.0D0*R**3) * SIGN(1.0D0, XN) / (WIN**2)
             ELSE
