@@ -372,7 +372,7 @@
         END IF
     END DO
     WRITE(*,*)
-    
+
 ! 保持單一 DATA 區域，但優化資料屬性
 !$ACC DATA &
       !$ACC COPYIN(LOCAL_COO, MODEL_BODYFORCE, MODEL_ELCON, MODEL_NODE_IDS, MODEL_NORM_WIN, &
@@ -426,7 +426,10 @@ IF(LINIT) THEN
     LOCAL_FINT = 0.0d0
     LOCAL_FEXT = 0.0d0
     DO_INTERP = .FALSE.
+    !$ACC UPDATE DEVICE(RK_DEGREE, RK_CONT, RK_IMPL, RK_PSIZE)
     
+    ! 新增：驗證 RK_CONT 值
+    WRITE(*,*) 'DEBUG: MAIN - RK_CONT on host = ', RK_CONT
     ! 新增：初始化形狀函數相關陣列
     LOCAL_CHAR_DIST = 1.0d0  ! 避免除以零
     LOCAL_WAVE_VEL = 1.0d0   ! 避免除以零

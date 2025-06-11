@@ -401,7 +401,11 @@
           IF ((RK_IMPL.LT.0).OR.(RK_IMPL.GT.1)) THEN
 	        CALL EXIT_PROGRAM('ERRROR, CHOOSE RK_IMPL = (0,1) IN CARD *RK PARAMETERS IN THE CONTROL FILE',2)
           END IF
-          
+          !$ACC UPDATE DEVICE(RK_DEGREE, RK_CONT, RK_IMPL)
+          WRITE(*,*) 'DEBUG: PRE_CONTROL - Read RK parameters from file and updated to GPU'
+          WRITE(*,*) '  RK_DEGREE = ', RK_DEGREE
+          WRITE(*,*) '  RK_CONT = ', RK_CONT
+          WRITE(*,*) '  RK_IMPL = ', RK_IMPL          
 	    END IF 
         
           
@@ -790,7 +794,10 @@
         WRITE(*,*) 'RK_DEGREE = 1'
         WRITE(*,*) 'RK_CONT = 3'
         WRITE(*,*) 'RK_IMPL = 0'
-        
+
+        !$ACC UPDATE DEVICE(RK_CONT, RK_DEGREE, RK_IMPL, RK_PSIZE)
+        WRITE(*,*) 'DEBUG: PRE_CONTROL - Updated RK parameters to GPU'
+
       END IF
       
       
@@ -799,7 +806,9 @@
       IF (RK_DEGREE.EQ.2) RK_PSIZE = 10
       
       IF (RK_DEGREE.GT.2) CALL EXIT_PROGRAM('(RK_DEGREE.GT.2) NOT IMPLEMENTED YET',0)
-      
+      !$ACC UPDATE DEVICE(RK_PSIZE)
+      WRITE(*,*) 'DEBUG: PRE_CONTROL - RK_PSIZE = ', RK_PSIZE, ' updated to GPU'
+
       IF ((.NOT.READ_QL_LEN).AND.READ_RK_PARAMETERS) THEN
       
         IF (QL) THEN 
@@ -987,7 +996,15 @@
       DEALLOCATE(MODEL_NODE_SET_ID)
       DEALLOCATE(MODEL_NODE_SET_LENGTH)
       
-
+      !$ACC UPDATE DEVICE(RK_DEGREE, RK_CONT, RK_IMPL, RK_PSIZE, ITYPE_INT)
+      WRITE(*,*) 'DEBUG: PRE_CONTROL - Final GPU update of control parameters:'
+      WRITE(*,*) '  RK_DEGREE = ', RK_DEGREE
+      WRITE(*,*) '  RK_CONT = ', RK_CONT
+      WRITE(*,*) '  RK_IMPL = ', RK_IMPL
+      WRITE(*,*) '  RK_PSIZE = ', RK_PSIZE
+      WRITE(*,*) '  ITYPE_INT = ', ITYPE_INT
+      WRITE(*,*)
+      
 	  CONTINUE
 	  
 	  RETURN

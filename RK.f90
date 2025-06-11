@@ -91,6 +91,7 @@ CONTAINS
     LOGICAL:: ISZERO
     DOUBLE PRECISION:: DET
     INTEGER :: ierr_inv, ierr_mls
+    DOUBLE PRECISION :: AVG_WIN
     !
     ! WE NEED TO BE CAREFUL NOT TO EVALUATE THE SINGULAR KERNAL AT THE NODE
     ! ALSO, WE NEED TO OUTPUT PHYSICAL DISPLACEMENTS!
@@ -157,7 +158,6 @@ IF (SHSUP) THEN
     DIA(I) = SQRT(XMXI_OA(I)**2 + YMYI_OA(I)**2 + ZMZI_OA(I)**2)
     
     ! 使用平均視窗大小
-    DOUBLE PRECISION :: AVG_WIN
     AVG_WIN = (GWIN(1,II) + GWIN(2,II) + GWIN(3,II)) / 3.0D0
     
     CALL MLS_KERNEL0(DIA(I), AVG_WIN, CONT, PHI(I), PHIX_X, ISZERO, ierr_mls)
@@ -921,7 +921,8 @@ SUBROUTINE MLS_KERNEL0(XN,WIN,CONT,PHI,PHIX,ISZERO, ierr)
     INTEGER, INTENT(OUT) :: ierr
     
     DOUBLE PRECISION :: R  ! 新增：歸一化距離
-    
+      LOGICAL, SAVE :: FIRST_CALL = .TRUE.
+      INTEGER, SAVE :: CALL_COUNT = 0    
     ISZERO = .FALSE.
     ierr = 0
     
@@ -937,14 +938,16 @@ SUBROUTINE MLS_KERNEL0(XN,WIN,CONT,PHI,PHIX,ISZERO, ierr)
     ! 計算歸一化距離
     R = ABS(XN) / WIN
     
-    LOGICAL, SAVE :: FIRST_CALL = .TRUE.
-    INTEGER, SAVE :: CALL_COUNT = 0
+
     IF (FIRST_CALL .OR. CALL_COUNT < 5) THEN
         WRITE(*,*) 'DEBUG MLS_KERNEL0: XN=', XN, ' WIN=', WIN, ' R=', R, ' CONT=', CONT
+IF (CONT /= 3) THEN
+    WRITE(*,*) 'ERROR: MLS_KERNEL0 - CONT should be 3 but is ', CONT
+END IF
         CALL_COUNT = CALL_COUNT + 1
         IF (CALL_COUNT >= 5) FIRST_CALL = .FALSE.
     END IF
-    
+
     IF (CONT.EQ.3) THEN !CUBIC SPLINE
         IF (R.LE.1.0D0) THEN
             PHI = (1.0D0 - 6.0D0*R**2 + 8.0D0*R**3 - 3.0D0*R**4) / WIN
@@ -953,6 +956,15 @@ SUBROUTINE MLS_KERNEL0(XN,WIN,CONT,PHI,PHIX,ISZERO, ierr)
             ELSE
                 PHIX = 0.0D0
             END IF
+            
+        LOGICAL, SAVE :: FIRST_FEW = .TRUE.
+        INTEGER, SAVE :: PHI_COUNT = 0
+        IF (FIRST_FEW .AND. PHI_COUNT < 10) THEN
+            WRITE(*,*) 'DEBUG MLS_KERNEL0: R=', R, ' PHI=', PHI, ' PHIX=', PHIX
+            PHI_COUNT = PHI_COUNT + 1
+            IF (PHI_COUNT >= 10) FIRST_FEW = .FALSE.
+        END IF
+
         ELSE
             PHI = 0.0D0
             PHIX = 0.0D0
@@ -970,7 +982,7 @@ END SUBROUTINE MLS_KERNEL0
 
 
 	  SUBROUTINE HUGHES_WINGET(LMAT, & !IN
-	                           ROT,STRAIN,D) !OUT
+                        ROT,STRAIN,D) !OUT
 	  !$ACC ROUTINE SEQ
 	  ! FUNCTION OF THIS SUBROUTINE:
 	  !

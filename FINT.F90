@@ -221,6 +221,13 @@
     !******************** EXECUTABLE CODE ********************
     !*********************************************************
     ierr_fint_arg = 0 
+    
+    IF (RK_CONT /= 3) THEN
+        WRITE(*,*) 'ERROR: CONSTRUCT_FINT - RK_CONT = ', RK_CONT, ' (expected 3)'
+        RK_CONT = 3  ! 強制設定為 3
+        WRITE(*,*) 'WARNING: CONSTRUCT_FINT - Forcing RK_CONT = 3'
+    END IF
+
     ! Sanity checks at the beginning of the subroutine (Step 3 from request)
     IF (DIM_NN_LIST <= 0 .OR. DIM_NN_LIST > 10000000) THEN ! Example upper bound
         WRITE(*,*) 'ERROR: CONSTRUCT_FINT - DIM_NN_LIST out of range: ', DIM_NN_LIST
