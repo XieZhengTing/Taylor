@@ -121,7 +121,11 @@ CONTAINS
     ! GET THE MOMENT MATRIX
     !
     !  dMx,dMy,dMz KC
-
+    WRITE(*,*) 'DEBUG RK1: Entry check'
+    WRITE(*,*) '  LN (number of neighbors) = ', LN
+    WRITE(*,*) '  CONT = ', CONT
+    WRITE(*,*) '  QL = ', QL
+    WRITE(*,*) '  SHSUP = ', SHSUP
     PHI_SUM = 0.0d0
     M_FULL = 0.0d0
     M_FULL_STAR = 0.0d0
@@ -226,7 +230,17 @@ END IF
 
             !DENOM = GWIN(1,II)*GWIN(2,II)*GWIN(3,II)
             PHI(I) = PHIX*PHIY*PHIZ !/DENOM
-
+! 新增：輸出 tensor product 計算
+            IF (I <= 5) THEN
+                WRITE(*,'(A,I3,A,I5)') 'DEBUG RK1: Computing PHI for neighbor ', I, ', node ID=', II
+                WRITE(*,'(A,3E12.5)') '  PHIX,PHIY,PHIZ = ', PHIX, PHIY, PHIZ
+            END IF
+            
+            PHI(I) = PHIX*PHIY*PHIZ !/DENOM
+            
+            IF (I <= 5) THEN
+                WRITE(*,'(A,E15.8)') '  PHI(I) = ', PHI(I)
+            END IF
 
 
 !            IF (IMPL.EQ.1) THEN
@@ -920,36 +934,32 @@ SUBROUTINE MLS_KERNEL0(XN,WIN,CONT,PHI,PHIX,ISZERO, ierr)
     LOGICAL, INTENT(OUT):: ISZERO
     INTEGER, INTENT(OUT) :: ierr
     
-    DOUBLE PRECISION :: R  ! 新增：歸一化距離
-      LOGICAL, SAVE :: FIRST_CALL = .TRUE.
-      INTEGER, SAVE :: CALL_COUNT = 0
-      LOGICAL, SAVE :: FIRST_FEW = .TRUE.
-      INTEGER, SAVE :: PHI_COUNT = 0 
+    DOUBLE PRECISION :: R  ! 歸一化距離
+    LOGICAL, SAVE :: FIRST_CALL = .TRUE.
+    INTEGER, SAVE :: CALL_COUNT = 0
+    
     ISZERO = .FALSE.
     ierr = 0
     
     ! 檢查 WIN 有效性
     IF (WIN <= 0.0D0) THEN
-        WRITE(*,*) 'ERROR: MLS_KERNEL0 - WIN <= 0: WIN = ', WIN
         PHI = 0.0D0
         PHIX = 0.0D0
         ierr = -1
+        WRITE(*,*) 'ERROR: MLS_KERNEL0 - WIN <= 0: WIN = ', WIN
         RETURN
     END IF
     
     ! 計算歸一化距離
     R = ABS(XN) / WIN
     
-
-    IF (FIRST_CALL .OR. CALL_COUNT < 5) THEN
-        WRITE(*,*) 'DEBUG MLS_KERNEL0: XN=', XN, ' WIN=', WIN, ' R=', R, ' CONT=', CONT
-IF (CONT /= 3) THEN
-    WRITE(*,*) 'ERROR: MLS_KERNEL0 - CONT should be 3 but is ', CONT
-END IF
+    ! 除錯輸出（前20次呼叫）
+    IF (CALL_COUNT < 20) THEN
+        WRITE(*,'(A,I3,A,E12.5,A,E12.5,A,E12.5,A,I2)') &
+            'MLS[', CALL_COUNT, '] XN=', XN, ' WIN=', WIN, ' R=', R, ' CONT=', CONT
         CALL_COUNT = CALL_COUNT + 1
-        IF (CALL_COUNT >= 5) FIRST_CALL = .FALSE.
     END IF
-
+    
     IF (CONT.EQ.3) THEN !CUBIC SPLINE
         IF (R.LE.1.0D0) THEN
             PHI = (1.0D0 - 6.0D0*R**2 + 8.0D0*R**3 - 3.0D0*R**4) / WIN
@@ -958,31 +968,28 @@ END IF
             ELSE
                 PHIX = 0.0D0
             END IF
-
-        IF (FIRST_FEW .AND. PHI_COUNT < 10) THEN
-            WRITE(*,*) 'DEBUG MLS_KERNEL0: R=', R, ' PHI=', PHI, ' PHIX=', PHIX
-            PHI_COUNT = PHI_COUNT + 1
-            IF (PHI_COUNT >= 10) FIRST_FEW = .FALSE.
-        END IF
-
+            
+            ! 輸出計算的 PHI 值（前20次）
+            IF (CALL_COUNT <= 20) THEN
+                WRITE(*,'(A,E15.8,A,E15.8)') '      -> PHI=', PHI, ' PHIX=', PHIX
+            END IF
         ELSE
             PHI = 0.0D0
             PHIX = 0.0D0
             ISZERO = .TRUE.
+            IF (CALL_COUNT <= 20) THEN
+                WRITE(*,'(A)') '      -> PHI=0 (R>1)'
+            END IF
         END IF
-    LOGICAL, SAVE :: FIRST_PHI = .TRUE.
-    INTEGER, SAVE :: PHI_OUT_COUNT = 0
-    IF (FIRST_PHI .AND. PHI_OUT_COUNT < 10 .AND. R.LE.1.0D0) THEN
-        WRITE(*,*) 'DEBUG MLS_KERNEL0: R=', R, ' WIN=', WIN, ' PHI=', PHI
-        PHI_OUT_COUNT = PHI_OUT_COUNT + 1
-        IF (PHI_OUT_COUNT >= 10) FIRST_PHI = .FALSE.
-    END IF
-
     ELSE
         ! 不支援的核函數類型
         PHI = 0.0D0
         PHIX = 0.0D0
         ierr = 1
+        IF (FIRST_CALL) THEN
+            WRITE(*,*) 'ERROR: MLS_KERNEL0 - Unsupported CONT = ', CONT
+            FIRST_CALL = .FALSE.
+        END IF
     END IF
     
     RETURN
