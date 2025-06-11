@@ -17,6 +17,7 @@
       INTEGER::CL,L,FL,F2LPO
       LOGICAL:: ISZERO
       
+      ! GPU 不再在函式內重新除以支撐域尺寸
       !XSA = XSA/AJ
       ISZERO=.FALSE.
       

@@ -590,10 +590,6 @@ END IF
           
           IF (GNUMP > 0 .AND. GN(1) > 0) THEN
               WRITE(*,*) 'DEBUG: Node 1 neighbors: ', GSTACK(GSTART(1):GSTART(1)+GN(1)-1)
-              
-              ! 檢查 shape function 是否已計算
-              WRITE(*,*) 'DEBUG: First 10 SHP values for node 1: ', &
-                        GSTACK_SHP(GSTART(1):MIN(GSTART(1)+9, GSTART(1)+GN(1)-1))
           END IF
           
           ! 確保所有資料都同步到 GPU
@@ -657,6 +653,7 @@ END IF
                           LOCAL_DX_STRESS, LOCAL_DY_STRESS, LOCAL_DZ_STRESS, &
                           G_X_MOM, G_Y_MOM, G_Z_MOM, MODEL_BODYFORCE, GINT_WORK, MODEL_BODY_ID, GSTRAIN_EQ, &
                           ierr_fint)
+    !$ACC UPDATE HOST(GSTACK_SHP, GSTACK_DSHP)
           ! !$ACC END DATA
 
 
@@ -669,7 +666,14 @@ END IF
           RETURN
       END IF
 
-	  END IF
+	  END IF ! Corresponds to IF (PERIDYNAMICS)
+ 
+      ! 在 CONSTRUCT_FINT 計算完 SHP 後再輸出
+      IF (GNUMP > 0 .AND. GN(1) > 0) THEN
+          !$ACC UPDATE HOST(GSTACK_SHP)
+          WRITE(*,*) 'DEBUG: First 10 SHP values for node 1 (after CONSTRUCT_FINT): ', &
+                    GSTACK_SHP(GSTART(1):MIN(GSTART(1)+9, GSTART(1)+GN(1)-1))
+      END IF
 	  
       END IF
 
