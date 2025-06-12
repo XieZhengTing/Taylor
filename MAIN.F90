@@ -516,10 +516,16 @@ ENDIF
             ! LOCAL_DLT is now COPYOUT, will be updated at END DATA or via explicit UPDATE HOST if needed sooner.
 
 
-           IF (ierr_handeler .NE. 0) THEN
+            IF (ierr_handeler .NE. 0) THEN
                 WRITE(*,*) 'FATAL ERROR: MAIN - Error returned from HANDELER during LINIT. ierr_handeler = ', ierr_handeler
-
                 CALL EXIT_PROGRAM('Error during HANDELER initialization', ierr_handeler)
+            END IF
+            
+            ! 驗證形狀函數計算（僅在初始化時）
+            IF (LINIT) THEN
+                !$ACC WAIT
+                ! 注意：這需要在 CONSTRUCT_FINT 或其他調用 RK1 的地方進行
+                ! 因為 SHP 是 RK1 的局部變量，無法在這裡直接訪問
             END IF
             
             ! 驗證初始化結果

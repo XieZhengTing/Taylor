@@ -157,14 +157,19 @@ END IF
     M_Y = 0.0d0
     M_Z = 0.0d0
 
+    ! 診斷第一個節點的視窗大小
+    IF (LN > 0) THEN
+        II = LSTACK(1)
+        WRITE(*,*) 'DEBUG: First neighbor - GWIN = ', GWIN(1,II), GWIN(2,II), GWIN(3,II)
+    END IF
+    
     DO I=1,LN
 
         II = LSTACK(I)
         
-        
-                IF (II.EQ.42) THEN
-                CONTINUE
-                END IF
+        IF (II.EQ.42) THEN
+            CONTINUE
+        END IF
         !TODO: MAKE NORMALIZED
         XMXI_OA(I) = (X(1) -  GCOO(1,II))
         YMYI_OA(I) = (X(2) -  GCOO(2,II))
@@ -201,6 +206,7 @@ IF (SHSUP) THEN
             DENOM = DIA(I) / AVG_WIN
             
             CALL MLS_KERNEL0(DENOM, 1.0D0, CONT, PHI(I), PHIX_X, ISZERO, ierr_mls)
+            PHI(I) = PHI(I) / (AVG_WIN**3)
             IF (ierr_mls /= 0) THEN
                 SHP(I) = 0.0D0
                 SHPD(:,I) = 0.0D0
@@ -233,7 +239,6 @@ ELSE
             YMYI_OA(I) = (X(2) - GCOO(2,II)) / GWIN(2,II)
             ZMZI_OA(I) = (X(3) - GCOO(3,II)) / GWIN(3,II)
             
-            ! MLS_KERNEL0 期望接收已經歸一化的距離
             CALL MLS_KERNEL0(ABS(XMXI_OA(I)), 1.0D0, CONT, PHIX, PHIX_X, ISZERO, ierr_mls)
             IF (ierr_mls /= 0) THEN
                 SHP(I) = 0.0D0; SHPD(:,I) = 0.0D0; CYCLE;
@@ -247,13 +252,15 @@ ELSE
                 SHP(I) = 0.0D0; SHPD(:,I) = 0.0D0; CYCLE;
             END IF
 
-            ! 計算張量積
+            ! 計算張量積（不除以體積，與 OpenMP 版本一致）
             PHI(I) = PHIX*PHIY*PHIZ
             
-            ! 簡單除錯輸出
+            ! 檢查歸一化座標是否在合理範圍內
             IF (I <= 3) THEN
                 WRITE(*,*) 'DEBUG RK1 TENSOR: I=', I
-                WRITE(*,*) '  Normalized coords: ', ABS(XMXI_OA(I)), ABS(YMYI_OA(I)), ABS(ZMZI_OA(I))
+                WRITE(*,*) '  Raw distance: ', (X(1)-GCOO(1,II)), (X(2)-GCOO(2,II)), (X(3)-GCOO(3,II))
+                WRITE(*,*) '  Window size: ', GWIN(1,II), GWIN(2,II), GWIN(3,II)
+                WRITE(*,*) '  Normalized: ', ABS(XMXI_OA(I)), ABS(YMYI_OA(I)), ABS(ZMZI_OA(I))
                 WRITE(*,*) '  PHIX=', PHIX, ' PHIY=', PHIY, ' PHIZ=', PHIZ
                 WRITE(*,*) '  PHI=', PHI(I)
             END IF
@@ -339,7 +346,19 @@ WRITE(*,*) 'DEBUG RK1: After neighbor loop - PHI_SUM = ', PHI_SUM, ' LN = ', LN
         END IF
     END IF
     
-    WRITE(*,*) 'DEBUG: PHI_SUM = ', PHI_SUM, ' should be close to 1.0'
+    ! 歸一化 PHI 值以確保分區一致性
+    IF (PHI_SUM > 1.0D-12) THEN
+        DO I = 1, LN
+            PHI(I) = PHI(I) / PHI_SUM
+        END DO
+        ! 更新矩陣 M_FULL
+        M_FULL = M_FULL / PHI_SUM
+        M_X = M_X / PHI_SUM
+        M_Y = M_Y / PHI_SUM
+        M_Z = M_Z / PHI_SUM
+    END IF
+    
+    WRITE(*,*) 'DEBUG: PHI_SUM = ', PHI_SUM, ' (before normalization)'
     WRITE(*,*) 'DEBUG: Valid neighbors = ', VALID_NEIGHBORS, ' out of ', LN
     IF (ABS(PHI_SUM - 1.0D0) > 0.1D0) THEN
         WRITE(*,*) 'WARNING: Poor partition of unity, PHI_SUM = ', PHI_SUM
@@ -411,10 +430,16 @@ IF (LN > 0) THEN
     END IF
 END IF
 
-IF (MSIZE.EQ.4) THEN
-    CALL M44INV(M_FULL, MINV, ierr_inv)
+IF (PHI_SUM < 1.0D-10) THEN
+    ! PHI_SUM 太小，矩陣可能奇異
+    WRITE(*,*) 'ERROR: PHI_SUM too small = ', PHI_SUM, ' LN = ', LN
+    ierr_inv = 1
 ELSE
-    CALL INVERSE(M_FULL, MSIZE, MINV, ierr_inv)
+    IF (MSIZE.EQ.4) THEN
+        CALL M44INV(M_FULL, MINV, ierr_inv)
+    ELSE
+        CALL INVERSE(M_FULL, MSIZE, MINV, ierr_inv)
+    END IF
 END IF
     
     ! 錯誤處理 - 確保不會因為 GPU 限制而改變行為
@@ -545,6 +570,8 @@ END IF
         CY = CY +SHPD(1,I)*GCOO(1,II)
     ENDDO
     CY = CY-1.0D0
+
+
     !IF(ABS(SUM(SHPD(1,1:LN)-0.D0).GT. 1.0E-03)) THEN
     !WRITE(*,*) 'SHPD1 ERROR: SUM = ', SUM(SHPD(1,1:LN))
     !PAUSE
@@ -759,6 +786,7 @@ END IF
     DOUBLE PRECISION:: XMXI_OA(LNMAX)
     DOUBLE PRECISION:: YMYI_OA(LNMAX)
     DOUBLE PRECISION:: ZMZI_OA(LNMAX)
+    DOUBLE PRECISION:: DIA(LNMAX)
 
     DOUBLE PRECISION:: TEST
 
@@ -856,8 +884,8 @@ END IF
             SHP(I) = HUGE(0.0D0); CYCLE;
         END IF
 
-!DENOM = GWIN(1,II)*GWIN(2,II)*GWIN(3,II)
-PHI(I) = PHIX*PHIY*PHIZ !/DENOM
+! 不除以體積（與 OpenMP 版本一致）
+PHI(I) = PHIX*PHIY*PHIZ
 
             IF (I <= 5) THEN
                 WRITE(*,*) 'DEBUG UDFM_SHAPE_TENSOR: I=', I, ' II=', II
@@ -998,7 +1026,7 @@ SUBROUTINE MLS_KERNEL0(XN,WIN,CONT,PHI,PHIX,ISZERO, ierr)
         IF (R.LE.1.0D0) THEN
             PHI = (1.0D0 - 6.0D0*R**2 + 8.0D0*R**3 - 3.0D0*R**4)
             IF (R .GT. 1.0D-12) THEN
-                ! 注意：導數需要考慮 chain rule
+                ! 對於歸一化輸入，不需要額外的 /WIN
                 PHIX = (-12.0D0*R + 24.0D0*R**2 - 12.0D0*R**3)
             ELSE
                 PHIX = 0.0D0
