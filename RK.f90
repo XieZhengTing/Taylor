@@ -175,15 +175,23 @@ END IF
         CALL DERIV_H(XMXI_OA(I),YMYI_OA(I),ZMZI_OA(I),MSIZE,DEG,H_X,H_Y,H_Z)
 
 
-        XMXI_OA(I) = (X(1) - GCOO(1,II)) / GWIN(1,II)
-        YMYI_OA(I) = (X(2) - GCOO(2,II)) / GWIN(2,II)
-        ZMZI_OA(I) = (X(3) - GCOO(3,II)) / GWIN(3,II)
+! 計算實際距離（不要過早歸一化）
+        XMXI_OA(I) = X(1) - GCOO(1,II)
+        YMYI_OA(I) = X(2) - GCOO(2,II) 
+        ZMZI_OA(I) = X(3) - GCOO(3,II)
 
-    IF (SHSUP) THEN
+IF (SHSUP) THEN
             ! 球形支撐域
+            ! 計算實際距離
             DIA(I) = SQRT(XMXI_OA(I)**2 + YMYI_OA(I)**2 + ZMZI_OA(I)**2)
-
-            CALL MLS_KERNEL0(DIA(I), 1.0D0, CONT, PHI(I), PHIX_X, ISZERO, ierr_mls)
+            
+            ! 使用平均視窗大小
+            AVG_WIN = (GWIN(1,II) + GWIN(2,II) + GWIN(3,II)) / 3.0D0
+            
+            ! 計算歸一化距離
+            DENOM = DIA(I) / AVG_WIN
+            
+            CALL MLS_KERNEL0(DENOM, 1.0D0, CONT, PHI(I), PHIX_X, ISZERO, ierr_mls)
             IF (ierr_mls /= 0) THEN
                 SHP(I) = 0.0D0
                 SHPD(:,I) = 0.0D0
@@ -193,20 +201,16 @@ END IF
             ! 簡單除錯輸出
             IF (I <= 3) THEN
                 WRITE(*,*) 'DEBUG RK1 SHSUP: I=', I, ' DIA=', DIA(I)
+                WRITE(*,*) '  AVG_WIN=', AVG_WIN, ' DENOM=', DENOM
                 WRITE(*,*) '  PHI=', PHI(I)
             END IF
             
             IF (IMPL.EQ.1) THEN
                 ! Implicit formulation (not implemented)
-            ELSE
-                IF (DIA(I).LE.(1.0d-13)) THEN
-                    DRDX = 0.0d0
-                    DRDY = 0.0d0
-                    DRDZ = 0.0d0
                 ELSE
-                    DRDX = (X(1) - GCOO(1,II))/GWIN(1,II)**2/DIA(I)
-                    DRDY = (X(2) - GCOO(2,II))/GWIN(2,II)**2/DIA(I)
-                    DRDZ = (X(3) - GCOO(3,II))/GWIN(3,II)**2/DIA(I)
+                    DRDX = (X(1) - GCOO(1,II))/AVG_WIN/DIA(I)
+                    DRDY = (X(2) - GCOO(2,II))/AVG_WIN/DIA(I)
+                    DRDZ = (X(3) - GCOO(3,II))/AVG_WIN/DIA(I)
                 ENDIF
                 
                 PHI_X(I) = PHIX_X*DRDX
@@ -236,7 +240,7 @@ ELSE
             END IF
 
             ! 計算張量積
-            PHI(I) = PHIX*PHIY*PHIZ /(GWIN(1,II)*GWIN(2,II)*GWIN(3,II))
+            PHI(I) = PHIX*PHIY*PHIZ
             
             ! 簡單除錯輸出
             IF (I <= 3) THEN
@@ -283,6 +287,11 @@ ELSE
                 PHI(I) = PHI(I)*WINDOW_MOD
             END IF
         ENDIF
+        
+        ! 檢查這個鄰居是否在支撐域內（PHI > 0）
+        IF (PHI(I) > 1.0D-12) THEN
+            VALID_NEIGHBORS = VALID_NEIGHBORS + 1
+        END IF
         
         PHI_SUM = PHI_SUM + PHI(I)
         DO J = 1, MSIZE
@@ -507,6 +516,23 @@ END IF
         CY = CY +SHPD(1,I)*GCOO(1,II)
     ENDDO
     CY = CY-1.0D0
+    
+    ! 檢查形狀函數總和（應該接近 1.0）
+    CX = SUM(SHP(1:LN))
+    WRITE(*,*) 'DEBUG: Final SHP sum = ', CX, ' (should be ~1.0)'
+    IF (ABS(CX - 1.0D0) > 1.0E-3) THEN
+        WRITE(*,*) 'WARNING: Poor shape function sum = ', CX
+        
+        ! 檢查是否有任何非零的形狀函數
+        J = 0
+        DO I = 1, LN
+            IF (ABS(SHP(I)) > 1.0D-12) THEN
+                J = J + 1
+            END IF
+        END DO
+        WRITE(*,*) '  Non-zero shape functions: ', J, ' out of ', LN
+    END IF
+    
     !IF(ABS(SUM(SHPD(1,1:LN)-0.D0).GT. 1.0E-03)) THEN
     !WRITE(*,*) 'SHPD1 ERROR: SUM = ', SUM(SHPD(1,1:LN))
     !PAUSE
@@ -790,17 +816,17 @@ END IF
         YMYI_OA(I) = -(X(2) -  GCOO(2,II)) /GWIN(2,II)
         ZMZI_OA(I) = -(X(3) -  GCOO(3,II)) /GWIN(3,II)
 
-        CALL MLS_KERNEL0(ABS(XMXI_OA(I)),GWIN(1,II),CONT,PHIX,PHIX_X,ISZERO, ierr_mls)
+        CALL MLS_KERNEL0(ABS(XMXI_OA(I)), 1.0D0, CONT,PHIX,PHIX_X,ISZERO, ierr_mls)
         IF (ierr_mls /= 0) THEN 
             ! Handle MLS_KERNEL0 error
-            SHP(I) = HUGE(0.0D0); CYCLE;
+            SHP(I) = 0.0D0; CYCLE;
         END IF
-        CALL MLS_KERNEL0(ABS(YMYI_OA(I)),GWIN(2,II),CONT,PHIY,PHIY_Y,ISZERO, ierr_mls)
+        CALL MLS_KERNEL0(ABS(YMYI_OA(I)), 1.0D0, CONT,PHIY,PHIY_Y,ISZERO, ierr_mls)
         IF (ierr_mls /= 0) THEN 
             ! Handle MLS_KERNEL0 error
-            SHP(I) = HUGE(0.0D0); CYCLE;
+            SHP(I) = 0.0D0; CYCLE;
         END IF
-        CALL MLS_KERNEL0(ABS(ZMZI_OA(I)),GWIN(3,II),CONT,PHIZ,PHIZ_Z,ISZERO, ierr_mls)
+        CALL MLS_KERNEL0(ABS(ZMZI_OA(I)), 1.0D0, CONT,PHIZ,PHIZ_Z,ISZERO, ierr_mls)
         IF (ierr_mls /= 0) THEN 
             ! Handle MLS_KERNEL0 error
             SHP(I) = HUGE(0.0D0); CYCLE;

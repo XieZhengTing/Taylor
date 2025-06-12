@@ -133,9 +133,13 @@
 !            PAUSE
         END IF
         
-        !PHI = PHI / AJ
-      !  PHI_X = PHI_X / AJ
-      
+       IF (AJ .GT. 1.0D-12) THEN
+           PHI   = PHI   / AJ
+           PHI_X = PHI_X / AJ
+       ELSE
+           PHI   = 0.0D0
+           PHI_X = 0.0D0
+       END IF
       RETURN
       
     END SUBROUTINE
