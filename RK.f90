@@ -92,7 +92,8 @@ CONTAINS
     DOUBLE PRECISION:: DET
     INTEGER :: ierr_inv, ierr_mls
     DOUBLE PRECISION :: AVG_WIN
-INTEGER :: VALID_NEIGHBORS
+    INTEGER :: VALID_NEIGHBORS
+    DOUBLE PRECISION :: SHP_SUM, SHPD_SUM
 ! 簡單的除錯輸出（避免複雜格式）
     LOGICAL, SAVE :: FIRST_RK1 = .TRUE.
 IF (FIRST_RK1) THEN
@@ -216,8 +217,7 @@ IF (SHSUP) THEN
                 PHI_X(I) = PHIX_X*DRDX
                 PHI_Y(I) = PHIX_X*DRDY
                 PHI_Z(I) = PHIX_X*DRDZ
-            ENDIF
-            
+
 ELSE
             ! 張量積支撐域
             ! 重新計算歸一化座標（保持原始的歸一化）
@@ -520,18 +520,21 @@ END IF
     ! 檢查形狀函數總和（應該接近 1.0）
     CX = SUM(SHP(1:LN))
     WRITE(*,*) 'DEBUG: Final SHP sum = ', CX, ' (should be ~1.0)'
-    IF (ABS(CX - 1.0D0) > 1.0E-3) THEN
-        WRITE(*,*) 'WARNING: Poor shape function sum = ', CX
+    IF (ABS(SHP_SUM - 1.0D0) .GT. 1.0E-3) THEN
+        WRITE(*,*) 'WARNING: Poor shape function sum = ', SHP_SUM
         
         ! 檢查是否有任何非零的形狀函數
         J = 0
         DO I = 1, LN
-            IF (ABS(SHP(I)) > 1.0D-12) THEN
+            IF (ABS(SHP(I)) .GT. 1.0D-12) THEN
                 J = J + 1
             END IF
         END DO
         WRITE(*,*) '  Non-zero shape functions: ', J, ' out of ', LN
     END IF
+    
+    ! 重新使用 CX 進行原本的計算
+    CX = SUM(SHPD(1,1:LN))
     
     !IF(ABS(SUM(SHPD(1,1:LN)-0.D0).GT. 1.0E-03)) THEN
     !WRITE(*,*) 'SHPD1 ERROR: SUM = ', SUM(SHPD(1,1:LN))
