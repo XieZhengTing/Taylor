@@ -205,7 +205,8 @@ IF (SHSUP) THEN
             ! 計算歸一化距離
             DENOM = DIA(I) / AVG_WIN
             
-            CALL MLS_KERNEL0(DENOM, 1.0D0, CONT, PHI(I), PHIX_X, ISZERO, ierr_mls)
+            ! 球形支撐域：DIA(I) 已經是歸一化距離
+            CALL MLS_KERNEL0(DIA(I), 1.0D0, CONT, PHI(I), PHIX_X, ISZERO, ierr_mls)
             PHI(I) = PHI(I) / (AVG_WIN**3)
             IF (ierr_mls /= 0) THEN
                 SHP(I) = 0.0D0
@@ -248,7 +249,8 @@ ELSE
             IF (ierr_mls /= 0) THEN
                 SHP(I) = 0.0D0; SHPD(:,I) = 0.0D0; CYCLE;
             END IF
-            CALL MLS_KERNEL0(ABS(ZMZI_OA(I)), GWIN(3,II), CONT, PHIZ, PHIZ_Z, ISZERO, ierr_mls)            IF (ierr_mls /= 0) THEN
+            CALL MLS_KERNEL0(ABS(ZMZI_OA(I)), GWIN(3,II), CONT, PHIZ, PHIZ_Z, ISZERO, ierr_mls)            
+            IF (ierr_mls /= 0) THEN
                 SHP(I) = 0.0D0; SHPD(:,I) = 0.0D0; CYCLE;
             END IF
 
@@ -868,17 +870,15 @@ END IF
         YMYI_OA(I) = -(X(2) -  GCOO(2,II)) /GWIN(2,II)
         ZMZI_OA(I) = -(X(3) -  GCOO(3,II)) /GWIN(3,II)
 
-        CALL MLS_KERNEL0(ABS(XMXI_OA(I)), 1.0D0, CONT,PHIX,PHIX_X,ISZERO, ierr_mls)
+        CALL MLS_KERNEL0(ABS(XMXI_OA(I)), GWIN(1,II), CONT,PHIX,PHIX_X,ISZERO, ierr_mls)
         IF (ierr_mls /= 0) THEN 
-            ! Handle MLS_KERNEL0 error
             SHP(I) = 0.0D0; CYCLE;
         END IF
-        CALL MLS_KERNEL0(ABS(YMYI_OA(I)), 1.0D0, CONT,PHIY,PHIY_Y,ISZERO, ierr_mls)
+        CALL MLS_KERNEL0(ABS(YMYI_OA(I)), GWIN(2,II), CONT,PHIY,PHIY_Y,ISZERO, ierr_mls)
         IF (ierr_mls /= 0) THEN 
-            ! Handle MLS_KERNEL0 error
             SHP(I) = 0.0D0; CYCLE;
         END IF
-        CALL MLS_KERNEL0(ABS(ZMZI_OA(I)), 1.0D0, CONT,PHIZ,PHIZ_Z,ISZERO, ierr_mls)
+        CALL MLS_KERNEL0(ABS(ZMZI_OA(I)), GWIN(3,II), CONT,PHIZ,PHIZ_Z,ISZERO, ierr_mls)
         IF (ierr_mls /= 0) THEN 
             ! Handle MLS_KERNEL0 error
             SHP(I) = HUGE(0.0D0); CYCLE;
@@ -1014,13 +1014,13 @@ SUBROUTINE MLS_KERNEL0(XN,WIN,CONT,PHI,PHIX,ISZERO, ierr)
     LOGICAL, INTENT(OUT):: ISZERO
     INTEGER, INTENT(OUT) :: ierr
     
-    DOUBLE PRECISION :: R  ! 這裡 XN 應該已經是歸一化的距離
+    DOUBLE PRECISION :: R  ! 歸一化距離
     
     ISZERO = .FALSE.
     ierr = 0
     
-    ! XN 在調用時已經是 ABS(normalized_distance)
-    R = XN
+    ! 計算歸一化距離（與 OpenMP 版本一致）
+    R = XN / WIN
     
     IF (CONT.EQ.3) THEN !CUBIC SPLINE
         IF (R.LE.1.0D0) THEN
