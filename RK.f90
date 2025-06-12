@@ -239,16 +239,16 @@ ELSE
             YMYI_OA(I) = (X(2) - GCOO(2,II)) / GWIN(2,II)
             ZMZI_OA(I) = (X(3) - GCOO(3,II)) / GWIN(3,II)
             
-            CALL MLS_KERNEL0(ABS(XMXI_OA(I)), 1.0D0, CONT, PHIX, PHIX_X, ISZERO, ierr_mls)
+            ! 保持與 OpenMP 版本完全一致
+            CALL MLS_KERNEL0(ABS(XMXI_OA(I)), GWIN(1,II), CONT, PHIX, PHIX_X, ISZERO, ierr_mls)
             IF (ierr_mls /= 0) THEN
                 SHP(I) = 0.0D0; SHPD(:,I) = 0.0D0; CYCLE;
             END IF
-            CALL MLS_KERNEL0(ABS(YMYI_OA(I)), 1.0D0, CONT, PHIY, PHIY_Y, ISZERO, ierr_mls)
+            CALL MLS_KERNEL0(ABS(YMYI_OA(I)), GWIN(2,II), CONT, PHIY, PHIY_Y, ISZERO, ierr_mls)
             IF (ierr_mls /= 0) THEN
                 SHP(I) = 0.0D0; SHPD(:,I) = 0.0D0; CYCLE;
             END IF
-            CALL MLS_KERNEL0(ABS(ZMZI_OA(I)), 1.0D0, CONT, PHIZ, PHIZ_Z, ISZERO, ierr_mls)
-            IF (ierr_mls /= 0) THEN
+            CALL MLS_KERNEL0(ABS(ZMZI_OA(I)), GWIN(3,II), CONT, PHIZ, PHIZ_Z, ISZERO, ierr_mls)            IF (ierr_mls /= 0) THEN
                 SHP(I) = 0.0D0; SHPD(:,I) = 0.0D0; CYCLE;
             END IF
 
