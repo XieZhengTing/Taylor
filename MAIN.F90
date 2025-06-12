@@ -17,6 +17,7 @@
     !
     USE MODEL
     USE CONTROL
+    USE, INTRINSIC :: IEEE_ARITHMETIC
     !
     IMPLICIT NONE
     !
@@ -520,6 +521,17 @@ ENDIF
 
                 CALL EXIT_PROGRAM('Error during HANDELER initialization', ierr_handeler)
             END IF
+            
+            ! 驗證初始化結果
+            !$ACC WAIT
+            !$ACC UPDATE HOST(LOCAL_FINT(1:3))
+            
+            WRITE(*,*) 'DEBUG: After initial HANDELER:'
+            WRITE(*,*) '  LOCAL_FINT(1:3) = ', LOCAL_FINT(1:3)
+            
+            IF (ALL(ABS(LOCAL_FINT(1:3)) < 1.0D-12)) THEN
+                WRITE(*,*) 'WARNING: Initial internal forces are zero - shape functions may not be computed correctly!'
+            END IF
 !        END IF
         !
 
@@ -869,7 +881,10 @@ DLOCAL_TOTAL_ENERGY = DLOCAL_INT_ENERGY + DLOCAL_KIN_ENERGY - DLOCAL_EXT_ENERGY
 
         !$ACC UPDATE HOST(DLOCAL_INT_ENERGY, DLOCAL_KIN_ENERGY, DLOCAL_EXT_ENERGY, DLOCAL_TOTAL_ENERGY)
 
-        WRITE(121,'(I20,4E20.5)') STEPS, DLOCAL_INT_ENERGY ,DLOCAL_KIN_ENERGY,DLOCAL_EXT_ENERGY,DLOCAL_TOTAL_ENERGY
+        ! 只在特定步數輸出能量
+        IF (MOD(STEPS, 100) == 0) THEN
+            WRITE(121,'(I20,4E20.5)') STEPS, DLOCAL_INT_ENERGY ,DLOCAL_KIN_ENERGY,DLOCAL_EXT_ENERGY,DLOCAL_TOTAL_ENERGY
+        END IF
         !
 !        !$ACC UPDATE HOST(TIME_COUNTER)
         IF (TIME_COUNTER >= TIME_OUTPUT) THEN ! Use >= for safer comparison with floating point
@@ -996,6 +1011,21 @@ END IF
         LINIT = .FALSE.
         ! All these (TIME, TIME_COUNTER, STEPS, TIMER_STEPS, LINIT, exodusStep) are COPY, device versions updated.
 
+        ! 定期檢查計算狀態
+        IF (MOD(STEPS, 10) == 0) THEN
+            !$ACC UPDATE HOST(LOCAL_VEL(1:3), LOCAL_DSP_TOT(1:3))
+            
+            WRITE(*,'(A,I6,A,E12.5,A,3E12.5)') &
+                ' Step ', STEPS, ' Time = ', TIME, &
+                ' Node 1 vel = ', LOCAL_VEL(1:3)
+            
+            ! 檢查 NaN 或 Inf
+            IF (ANY(IEEE_IS_NAN(LOCAL_VEL(1:3))) .OR. &
+                ANY(.NOT. IEEE_IS_FINITE(LOCAL_VEL(1:3)))) THEN
+                WRITE(*,*) 'ERROR: NaN or Inf detected in velocities!'
+                EXIT
+            END IF
+        END IF
 
         WRITE(120,*) TIME
 

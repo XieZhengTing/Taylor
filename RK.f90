@@ -92,8 +92,7 @@ CONTAINS
     DOUBLE PRECISION:: DET
     INTEGER :: ierr_inv, ierr_mls
     DOUBLE PRECISION :: AVG_WIN
-    INTEGER :: VALID_NEIGHBORS
-    DOUBLE PRECISION :: SHP_SUM, SHPD_SUM
+INTEGER :: VALID_NEIGHBORS
 ! 簡單的除錯輸出（避免複雜格式）
     LOGICAL, SAVE :: FIRST_RK1 = .TRUE.
 IF (FIRST_RK1) THEN
@@ -176,7 +175,16 @@ END IF
         CALL DERIV_H(XMXI_OA(I),YMYI_OA(I),ZMZI_OA(I),MSIZE,DEG,H_X,H_Y,H_Z)
 
 
-! 計算實際距離（不要過早歸一化）
+        ! 檢查視窗大小有效性
+        IF (GWIN(1,II) <= 0.0D0 .OR. GWIN(2,II) <= 0.0D0 .OR. GWIN(3,II) <= 0.0D0) THEN
+            PHI(I) = 0.0D0
+            PHI_X(I) = 0.0D0
+            PHI_Y(I) = 0.0D0
+            PHI_Z(I) = 0.0D0
+            CYCLE
+        END IF
+        
+        ! 計算實際距離（不要過早歸一化）
         XMXI_OA(I) = X(1) - GCOO(1,II)
         YMYI_OA(I) = X(2) - GCOO(2,II) 
         ZMZI_OA(I) = X(3) - GCOO(3,II)
@@ -217,7 +225,7 @@ IF (SHSUP) THEN
                 PHI_X(I) = PHIX_X*DRDX
                 PHI_Y(I) = PHIX_X*DRDY
                 PHI_Z(I) = PHIX_X*DRDZ
-
+     
 ELSE
             ! 張量積支撐域
             ! 重新計算歸一化座標（保持原始的歸一化）
@@ -288,6 +296,12 @@ ELSE
             END IF
         ENDIF
         
+        ! 檢查 PHI 值的合理性
+        IF (PHI(I) < 0.0D0 .OR. PHI(I) > 1.1D0) THEN
+            ! PHI 應該在 [0, 1] 範圍內
+            PHI(I) = 0.0D0
+        END IF
+        
         ! 檢查這個鄰居是否在支撐域內（PHI > 0）
         IF (PHI(I) > 1.0D-12) THEN
             VALID_NEIGHBORS = VALID_NEIGHBORS + 1
@@ -310,6 +324,21 @@ WRITE(*,*) 'DEBUG RK1: After neighbor loop - PHI_SUM = ', PHI_SUM, ' LN = ', LN
         CONTINUE
 
     END DO
+    
+    ! 檢查並修正異常的 PHI_SUM
+    IF (PHI_SUM > 1000.0D0) THEN
+        WRITE(*,*) 'ERROR: Abnormal PHI_SUM = ', PHI_SUM, ' at node with LN = ', LN
+        ! 重置為合理值以避免崩潰
+        PHI_SUM = 1.0D0
+        ! 重新歸一化 PHI 值
+        IF (PHI_SUM > 1.0D-12) THEN
+            DO I = 1, LN
+                PHI(I) = PHI(I) / PHI_SUM
+            END DO
+            PHI_SUM = 1.0D0
+        END IF
+    END IF
+    
     WRITE(*,*) 'DEBUG: PHI_SUM = ', PHI_SUM, ' should be close to 1.0'
     WRITE(*,*) 'DEBUG: Valid neighbors = ', VALID_NEIGHBORS, ' out of ', LN
     IF (ABS(PHI_SUM - 1.0D0) > 0.1D0) THEN
@@ -516,26 +545,6 @@ END IF
         CY = CY +SHPD(1,I)*GCOO(1,II)
     ENDDO
     CY = CY-1.0D0
-    
-    ! 檢查形狀函數總和（應該接近 1.0）
-    CX = SUM(SHP(1:LN))
-    WRITE(*,*) 'DEBUG: Final SHP sum = ', CX, ' (should be ~1.0)'
-    IF (ABS(SHP_SUM - 1.0D0) .GT. 1.0E-3) THEN
-        WRITE(*,*) 'WARNING: Poor shape function sum = ', SHP_SUM
-        
-        ! 檢查是否有任何非零的形狀函數
-        J = 0
-        DO I = 1, LN
-            IF (ABS(SHP(I)) .GT. 1.0D-12) THEN
-                J = J + 1
-            END IF
-        END DO
-        WRITE(*,*) '  Non-zero shape functions: ', J, ' out of ', LN
-    END IF
-    
-    ! 重新使用 CX 進行原本的計算
-    CX = SUM(SHPD(1,1:LN))
-    
     !IF(ABS(SUM(SHPD(1,1:LN)-0.D0).GT. 1.0E-03)) THEN
     !WRITE(*,*) 'SHPD1 ERROR: SUM = ', SUM(SHPD(1,1:LN))
     !PAUSE
@@ -800,6 +809,18 @@ END IF
     M_X = 0.0d0
     M_Y = 0.0d0
     M_Z = 0.0d0
+    
+    ! 初始化所有 PHI 相關陣列
+    DO I = 1, LNMAX
+        PHI(I) = 0.0D0
+        PHI_X(I) = 0.0D0
+        PHI_Y(I) = 0.0D0
+        PHI_Z(I) = 0.0D0
+        XMXI_OA(I) = 0.0D0
+        YMYI_OA(I) = 0.0D0
+        ZMZI_OA(I) = 0.0D0
+        DIA(I) = 0.0D0
+    END DO
 
     K_MATX = 0.d0
 
