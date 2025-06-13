@@ -481,6 +481,9 @@ END IF
       ! 確保所有必要的資料都在 GPU 上
       !$ACC UPDATE DEVICE(GCOO, GCOO_CUURENT, GWIN, GVOL)
       !$ACC UPDATE DEVICE(GN, GSTART, GSTACK)
+      !$ACC UPDATE DEVICE(GSTACK_SHP, GSTACK_DSHP, GSTACK_DDSHP)  ! 新增：同步形狀函數陣列
+      !$ACC UPDATE DEVICE(GINVK)  ! 新增：同步逆矩陣
+      !$ACC UPDATE DEVICE(GEBC_NODES)   ! 新增：同步邊界條件標誌（正確的變數名稱）
       !$ACC WAIT
 
       !WRITE(*,*) 'DEBUG: HANDELER - Before calling CONSTRUCT_FINT/PD:' 

@@ -181,11 +181,14 @@ END IF
 
 
         ! 檢查視窗大小有效性
-        IF (GWIN(1,II) <= 0.0D0 .OR. GWIN(2,II) <= 0.0D0 .OR. GWIN(3,II) <= 0.0D0) THEN
+        IF (GWIN(1,II) <= 1.0D-10 .OR. GWIN(2,II) <= 1.0D-10 .OR. GWIN(3,II) <= 1.0D-10) THEN
+            ! 不能在 GPU 核心中使用 WRITE 語句
+            ! 使用預設最小視窗大小而非完全跳過
             PHI(I) = 0.0D0
             PHI_X(I) = 0.0D0
             PHI_Y(I) = 0.0D0
             PHI_Z(I) = 0.0D0
+            ! 考慮不要完全跳過，但目前先保持原邏輯
             CYCLE
         END IF
         
@@ -337,7 +340,11 @@ ELSE
 
             END DO
         END DO
-WRITE(*,*) 'DEBUG RK1: After neighbor loop - PHI_SUM = ', PHI_SUM, ' LN = ', LN
+    !WRITE(*,*) 'DEBUG RK1: After neighbor loop - PHI_SUM = ', PHI_SUM, ' LN = ', LN
+    ! 移除過多的除錯輸出，只保留關鍵診斷
+    IF (ABS(PHI_SUM) < 1.0D-10 .OR. ABS(PHI_SUM - 1.0D0) > 0.1D0) THEN
+        WRITE(*,*) 'WARNING RK1: Abnormal PHI_SUM = ', PHI_SUM, ' LN = ', LN
+    END IF
         CONTINUE
 
     END DO
