@@ -211,8 +211,8 @@ IF (SHSUP) THEN
             ! 調用 MLS_KERNEL0，使用歸一化距離
             CALL MLS_KERNEL0(DENOM, AVG_WIN, CONT, PHI(I), PHIX_X, ISZERO, ierr_mls)
             
-            ! 球形支撐域的體積歸一化
-            PHI(I) = PHI(I) / (AVG_WIN**3)
+            ! 球形支撐域（不進行體積歸一化）
+            !PHI(I) = PHI(I) / (AVG_WIN**3)
 
             IF (ierr_mls /= 0) THEN
                 SHP(I) = 0.0D0
@@ -261,9 +261,9 @@ ELSE
                 SHP(I) = 0.0D0; SHPD(:,I) = 0.0D0; CYCLE;
             END IF
 
-            ! 計算張量積並除以體積
-            DENOM = GWIN(1,II)*GWIN(2,II)*GWIN(3,II)
-            PHI(I) = PHIX*PHIY*PHIZ / DENOM
+            ! 計算張量積（不除以體積，與 OpenMP 版本一致）
+            !DENOM = GWIN(1,II)*GWIN(2,II)*GWIN(3,II)
+            PHI(I) = PHIX*PHIY*PHIZ !/DENOM
             
             ! 檢查歸一化座標是否在合理範圍內
             IF (I <= 3) THEN
@@ -356,17 +356,17 @@ WRITE(*,*) 'DEBUG RK1: After neighbor loop - PHI_SUM = ', PHI_SUM, ' LN = ', LN
         END IF
     END IF
     
-    ! 歸一化 PHI 值以確保分區一致性
-    IF (PHI_SUM > 1.0D-12) THEN
-        DO I = 1, LN
-            PHI(I) = PHI(I) / PHI_SUM
-        END DO
-        ! 更新矩陣 M_FULL
-        M_FULL = M_FULL / PHI_SUM
-        M_X = M_X / PHI_SUM
-        M_Y = M_Y / PHI_SUM
-        M_Z = M_Z / PHI_SUM
-    END IF
+    ! 不進行 PHI_SUM 歸一化（與 OpenMP 版本一致）
+    !IF (PHI_SUM > 1.0D-12) THEN
+    !    DO I = 1, LN
+    !        PHI(I) = PHI(I) / PHI_SUM
+    !    END DO
+    !    ! 更新矩陣 M_FULL
+    !    M_FULL = M_FULL / PHI_SUM
+    !    M_X = M_X / PHI_SUM
+    !    M_Y = M_Y / PHI_SUM
+    !    M_Z = M_Z / PHI_SUM
+    !END IF
     
     WRITE(*,*) 'DEBUG: PHI_SUM = ', PHI_SUM, ' (before normalization)'
     WRITE(*,*) 'DEBUG: Valid neighbors = ', VALID_NEIGHBORS, ' out of ', LN

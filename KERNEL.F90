@@ -19,7 +19,6 @@
       LOGICAL:: ISZERO
       
       ! 計算歸一化距離
-      R = XSA / AJ
       ISZERO=.FALSE.
       
 !        IF (ISPLINE.GE.5) THEN
@@ -57,13 +56,11 @@
 !        END IF
 
         IF (ISPLINE.EQ.3) THEN
-            
             ! C3 CONTINUETY
-            
-            IF (R.LE.(0.5D0)) THEN
-                PHI=  2.0D0/3.0D0    - 4.0D0*R**2  +  4.0D0*R**3
-                PHI_X=  - 8.0D0*R  +  12.0D0*R**2
-            ELSEIF (R.LE.(1.0D0)) THEN
+            IF (XSA.LE.(0.5D0)) THEN
+                PHI=  2.0D0/3.0D0    - 4.0D0*XSA**2  +  4.0D0*XSA**3
+                PHI_X=  - 8.0D0*XSA  +  12.0D0*XSA**2
+            ELSEIF (XSA.LE.(1.0D0)) THEN
                 PHI=  4.0D0/3.0D0 -4.0D0*R +  4.0D0*R**2  - 4.0D0/3.0D0*R**3
                 PHI_X= -4.0D0 +  8.0D0*R  - 4.0D0*R**2
             ELSE   
