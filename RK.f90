@@ -1034,8 +1034,8 @@ SUBROUTINE MLS_KERNEL0(XN,WIN,CONT,PHI,PHIX,ISZERO, ierr)
     ISZERO = .FALSE.
     ierr = 0
     
-    ! 計算歸一化距離
-    R = XN / WIN
+    ! R = XN / WIN  ! 這行造成雙重歸一化，必須移除
+    R = XN  ! 直接使用已歸一化的輸入
     
     IF (CONT.EQ.3) THEN !CUBIC SPLINE
         IF (R.LE.1.0D0) THEN
