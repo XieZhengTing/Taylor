@@ -12,13 +12,14 @@
       
       !LOCAL VARIABLES
       DOUBLE PRECISION::XSA
+      DOUBLE PRECISION:: R  ! 添加局部變量 R      
       INTEGER::I,J,K,II,JJ,KK
       
       INTEGER::CL,L,FL,F2LPO
       LOGICAL:: ISZERO
       
-      ! GPU 不再在函式內重新除以支撐域尺寸
-      !XSA = XSA/AJ
+      ! 計算歸一化距離
+      R = XSA / AJ
       ISZERO=.FALSE.
       
 !        IF (ISPLINE.GE.5) THEN
@@ -59,12 +60,12 @@
             
             ! C3 CONTINUETY
             
-            IF (XSA.LE.(0.5D0)) THEN
-                PHI=  2.0D0/3.0D0    - 4.0D0*XSA**2  +  4.0D0*XSA**3
-                PHI_X=  - 8.0D0*XSA  +  12.0D0*XSA**2
-            ELSEIF (XSA.LE.(1.0D0)) THEN
-                PHI=  4.0D0/3.0D0 -4.0D0*XSA +  4.0D0*XSA**2  - 4.0D0/3.0D0*XSA**3
-                PHI_X= -4.0D0 +  8.0D0*XSA  - 4.0D0*XSA**2
+            IF (R.LE.(0.5D0)) THEN
+                PHI=  2.0D0/3.0D0    - 4.0D0*R**2  +  4.0D0*R**3
+                PHI_X=  - 8.0D0*R  +  12.0D0*R**2
+            ELSEIF (R.LE.(1.0D0)) THEN
+                PHI=  4.0D0/3.0D0 -4.0D0*R +  4.0D0*R**2  - 4.0D0/3.0D0*R**3
+                PHI_X= -4.0D0 +  8.0D0*R  - 4.0D0*R**2
             ELSE   
                 PHI= 0.0D0
                 PHI_X= 0.0D0
@@ -133,13 +134,14 @@
 !            PAUSE
         END IF
         
-       IF (AJ .GT. 1.0D-12) THEN
-           PHI   = PHI   / AJ
-           PHI_X = PHI_X / AJ
-       ELSE
-           PHI   = 0.0D0
-           PHI_X = 0.0D0
-       END IF
+!      移除最後的除法操作，與 OpenMP 版本保持一致
+!      IF (AJ .GT. 1.0D-12) THEN
+!          PHI   = PHI   / AJ
+!          PHI_X = PHI_X / AJ
+!      ELSE
+!          PHI   = 0.0D0
+!          PHI_X = 0.0D0
+!      END IF
       RETURN
       
     END SUBROUTINE

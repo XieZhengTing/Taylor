@@ -205,9 +205,15 @@ IF (SHSUP) THEN
             ! 計算歸一化距離
             DENOM = DIA(I) / AVG_WIN
             
-            ! 球形支撐域：DIA(I) 已經是歸一化距離
-            CALL MLS_KERNEL0(DIA(I), 1.0D0, CONT, PHI(I), PHIX_X, ISZERO, ierr_mls)
+            ! 計算歸一化距離
+            DENOM = DIA(I) / AVG_WIN
+            
+            ! 調用 MLS_KERNEL0，使用歸一化距離
+            CALL MLS_KERNEL0(DENOM, AVG_WIN, CONT, PHI(I), PHIX_X, ISZERO, ierr_mls)
+            
+            ! 球形支撐域的體積歸一化
             PHI(I) = PHI(I) / (AVG_WIN**3)
+
             IF (ierr_mls /= 0) THEN
                 SHP(I) = 0.0D0
                 SHPD(:,I) = 0.0D0
@@ -229,9 +235,9 @@ IF (SHSUP) THEN
                     DRDZ = (X(3) - GCOO(3,II))/AVG_WIN/DIA(I)
                 ENDIF
                 
-                PHI_X(I) = PHIX_X*DRDX
-                PHI_Y(I) = PHIX_X*DRDY
-                PHI_Z(I) = PHIX_X*DRDZ
+                PHI_X(I) = PHIX_X*DRDX/AVG_WIN
+                PHI_Y(I) = PHIX_X*DRDY/AVG_WIN
+                PHI_Z(I) = PHIX_X*DRDZ/AVG_WIN
      
 ELSE
             ! 張量積支撐域
@@ -241,7 +247,7 @@ ELSE
             ZMZI_OA(I) = (X(3) - GCOO(3,II)) / GWIN(3,II)
             
             ! 保持與 OpenMP 版本完全一致
-            CALL MLS_KERNEL0(ABS(XMXI_OA(I)), GWIN(1,II), CONT, PHIX, PHIX_X, ISZERO, ierr_mls)
+            CALL MLS_KERNEL0(ABS(XMXI_OA(I)), GWIN(1,II), CONT, PHIX, PHIX_X, ISZERO, ierr_mls)            
             IF (ierr_mls /= 0) THEN
                 SHP(I) = 0.0D0; SHPD(:,I) = 0.0D0; CYCLE;
             END IF
@@ -250,12 +256,14 @@ ELSE
                 SHP(I) = 0.0D0; SHPD(:,I) = 0.0D0; CYCLE;
             END IF
             CALL MLS_KERNEL0(ABS(ZMZI_OA(I)), GWIN(3,II), CONT, PHIZ, PHIZ_Z, ISZERO, ierr_mls)            
+            
             IF (ierr_mls /= 0) THEN
                 SHP(I) = 0.0D0; SHPD(:,I) = 0.0D0; CYCLE;
             END IF
 
-            ! 計算張量積（不除以體積，與 OpenMP 版本一致）
-            PHI(I) = PHIX*PHIY*PHIZ
+            ! 計算張量積並除以體積
+            DENOM = GWIN(1,II)*GWIN(2,II)*GWIN(3,II)
+            PHI(I) = PHIX*PHIY*PHIZ / DENOM
             
             ! 檢查歸一化座標是否在合理範圍內
             IF (I <= 3) THEN
@@ -1019,7 +1027,7 @@ SUBROUTINE MLS_KERNEL0(XN,WIN,CONT,PHI,PHIX,ISZERO, ierr)
     ISZERO = .FALSE.
     ierr = 0
     
-    ! 計算歸一化距離（與 OpenMP 版本一致）
+    ! 計算歸一化距離
     R = XN / WIN
     
     IF (CONT.EQ.3) THEN !CUBIC SPLINE
