@@ -61,8 +61,9 @@
                 PHI=  2.0D0/3.0D0    - 4.0D0*XSA**2  +  4.0D0*XSA**3
                 PHI_X=  - 8.0D0*XSA  +  12.0D0*XSA**2
             ELSEIF (XSA.LE.(1.0D0)) THEN
-                PHI=  4.0D0/3.0D0 -4.0D0*R +  4.0D0*R**2  - 4.0D0/3.0D0*R**3
-                PHI_X= -4.0D0 +  8.0D0*R  - 4.0D0*R**2
+            R = XSA  ! 或其他適當的歸一化距離變數
+            PHI = 4.0D0/3.0D0 -4.0D0*R + 4.0D0*R**2 - 4.0D0/3.0D0*R**3
+            PHI_X= -4.0D0 + 8.0D0*R - 4.0D0*R**2
             ELSE   
                 PHI= 0.0D0
                 PHI_X= 0.0D0

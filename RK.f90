@@ -202,17 +202,14 @@ IF (SHSUP) THEN
             ! 計算實際距離
             DIA(I) = SQRT(XMXI_OA(I)**2 + YMYI_OA(I)**2 + ZMZI_OA(I)**2)
             
-            ! 使用平均視窗大小
-            AVG_WIN = (GWIN(1,II) + GWIN(2,II) + GWIN(3,II)) / 3.0D0
+            ! 不需要平均視窗大小
+            ! AVG_WIN = (GWIN(1,II) + GWIN(2,II) + GWIN(3,II)) / 3.0D0
             
-            ! 計算歸一化距離
-            DENOM = DIA(I) / AVG_WIN
+            ! 不需要歸一化 - 與 OpenMP 版本一致
+            ! DENOM = DIA(I) / AVG_WIN
             
-            ! 計算歸一化距離
-            DENOM = DIA(I) / AVG_WIN
-            
-            ! 調用 MLS_KERNEL0，使用歸一化距離
-            CALL MLS_KERNEL0(DENOM, AVG_WIN, CONT, PHI(I), PHIX_X, ISZERO, ierr_mls)
+            ! 調用 MLS_KERNEL0，直接使用未歸一化距離（與 OpenMP 一致）
+            CALL MLS_KERNEL0(DIA(I), GWIN(1,II), CONT, PHI(I), PHIX_X, ISZERO, ierr_mls)
             
             ! 球形支撐域（不進行體積歸一化）
             !PHI(I) = PHI(I) / (AVG_WIN**3)
@@ -233,14 +230,14 @@ IF (SHSUP) THEN
             IF (IMPL.EQ.1) THEN
                 ! Implicit formulation (not implemented)
                 ELSE
-                    DRDX = (X(1) - GCOO(1,II))/AVG_WIN/DIA(I)
-                    DRDY = (X(2) - GCOO(2,II))/AVG_WIN/DIA(I)
-                    DRDZ = (X(3) - GCOO(3,II))/AVG_WIN/DIA(I)
+                    DRDX = (X(1) - GCOO(1,II))/GWIN(1,II)**2/DIA(I)
+                    DRDY = (X(2) - GCOO(2,II))/GWIN(2,II)**2/DIA(I)
+                    DRDZ = (X(3) - GCOO(3,II))/GWIN(3,II)**2/DIA(I)
                 ENDIF
                 
-                PHI_X(I) = PHIX_X*DRDX/AVG_WIN
-                PHI_Y(I) = PHIX_X*DRDY/AVG_WIN
-                PHI_Z(I) = PHIX_X*DRDZ/AVG_WIN
+                PHI_X(I) = PHIX_X*DRDX
+                PHI_Y(I) = PHIX_X*DRDY
+                PHI_Z(I) = PHIX_X*DRDZ
      
 ELSE
             ! 張量積支撐域
@@ -1034,7 +1031,7 @@ SUBROUTINE MLS_KERNEL0(XN,WIN,CONT,PHI,PHIX,ISZERO, ierr)
     ISZERO = .FALSE.
     ierr = 0
     
-    ! R = XN / WIN  ! 這行造成雙重歸一化，必須移除
+    ! 移除雙重歸一化 - XN 已經是歸一化的值
     R = XN  ! 直接使用已歸一化的輸入
     
     IF (CONT.EQ.3) THEN !CUBIC SPLINE
