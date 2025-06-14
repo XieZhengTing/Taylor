@@ -209,7 +209,9 @@ IF (SHSUP) THEN
             ! DENOM = DIA(I) / AVG_WIN
             
             ! 調用 MLS_KERNEL0，直接使用未歸一化距離（與 OpenMP 一致）
-            CALL MLS_KERNEL0(DIA(I), GWIN(1,II), CONT, PHI(I), PHIX_X, ISZERO, ierr_mls)
+            ! 球形支撐域需要歸一化距離
+            DENOM = DIA(I) / GWIN(1,II)  ! 使用第一個視窗維度作為參考
+            CALL MLS_KERNEL0(DENOM, 1.0D0, CONT, PHI(I), PHIX_X, ISZERO, ierr_mls)
             
             ! 球形支撐域（不進行體積歸一化）
             !PHI(I) = PHI(I) / (AVG_WIN**3)
@@ -241,22 +243,21 @@ IF (SHSUP) THEN
      
 ELSE
             ! 張量積支撐域
-            ! 重新計算歸一化座標（保持原始的歸一化）
+            ! 計算歸一化座標
             XMXI_OA(I) = (X(1) - GCOO(1,II)) / GWIN(1,II)
             YMYI_OA(I) = (X(2) - GCOO(2,II)) / GWIN(2,II)
             ZMZI_OA(I) = (X(3) - GCOO(3,II)) / GWIN(3,II)
             
-            ! 保持與 OpenMP 版本完全一致
-            CALL MLS_KERNEL0(ABS(XMXI_OA(I)), GWIN(1,II), CONT, PHIX, PHIX_X, ISZERO, ierr_mls)            
+            ! 關鍵：傳入已經歸一化的值，WIN 參數現在只是佔位符
+            CALL MLS_KERNEL0(ABS(XMXI_OA(I)), 1.0D0, CONT, PHIX, PHIX_X, ISZERO, ierr_mls)
             IF (ierr_mls /= 0) THEN
                 SHP(I) = 0.0D0; SHPD(:,I) = 0.0D0; CYCLE;
             END IF
-            CALL MLS_KERNEL0(ABS(YMYI_OA(I)), GWIN(2,II), CONT, PHIY, PHIY_Y, ISZERO, ierr_mls)
+            CALL MLS_KERNEL0(ABS(YMYI_OA(I)), 1.0D0, CONT, PHIY, PHIY_Y, ISZERO, ierr_mls)
             IF (ierr_mls /= 0) THEN
                 SHP(I) = 0.0D0; SHPD(:,I) = 0.0D0; CYCLE;
             END IF
-            CALL MLS_KERNEL0(ABS(ZMZI_OA(I)), GWIN(3,II), CONT, PHIZ, PHIZ_Z, ISZERO, ierr_mls)            
-            
+            CALL MLS_KERNEL0(ABS(ZMZI_OA(I)), 1.0D0, CONT, PHIZ, PHIZ_Z, ISZERO, ierr_mls)            
             IF (ierr_mls /= 0) THEN
                 SHP(I) = 0.0D0; SHPD(:,I) = 0.0D0; CYCLE;
             END IF
@@ -1026,23 +1027,26 @@ SUBROUTINE MLS_KERNEL0(XN,WIN,CONT,PHI,PHIX,ISZERO, ierr)
     LOGICAL, INTENT(OUT):: ISZERO
     INTEGER, INTENT(OUT) :: ierr
     
-    DOUBLE PRECISION :: R  ! 歸一化距離
+    DOUBLE PRECISION :: R, XSA
     
     ISZERO = .FALSE.
     ierr = 0
     
-    ! 移除雙重歸一化 - XN 已經是歸一化的值
-    R = XN  ! 直接使用已歸一化的輸入
+    ! 關鍵：XN 在張量積情況下已經是歸一化的，但在球形支撐域中不是
+    ! 需要根據調用情況決定是否歸一化
+    XSA = XN  ! 使用 XSA 作為工作變數，與 OpenMP 版本一致
     
     IF (CONT.EQ.3) THEN !CUBIC SPLINE
-        IF (R.LE.1.0D0) THEN
-            PHI = (1.0D0 - 6.0D0*R**2 + 8.0D0*R**3 - 3.0D0*R**4)
-            IF (R .GT. 1.0D-12) THEN
-                ! 對於歸一化輸入，不需要額外的 /WIN
-                PHIX = (-12.0D0*R + 24.0D0*R**2 - 12.0D0*R**3)
+        IF (XSA.LE.0.5D0) THEN
+            PHI = 2.0D0/3.0D0 - 4.0D0*XSA**2 + 4.0D0*XSA**3
+            IF (XSA .GT. 1.0D-12) THEN
+                PHIX = -8.0D0*XSA + 12.0D0*XSA**2
             ELSE
                 PHIX = 0.0D0
             END IF
+        ELSEIF (XSA.LE.1.0D0) THEN
+            PHI = 4.0D0/3.0D0 - 4.0D0*XSA + 4.0D0*XSA**2 - 4.0D0/3.0D0*XSA**3
+            PHIX = -4.0D0 + 8.0D0*XSA - 4.0D0*XSA**2
         ELSE
             PHI = 0.0D0
             PHIX = 0.0D0
