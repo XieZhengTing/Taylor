@@ -205,13 +205,12 @@ IF (SHSUP) THEN
             ! 不需要平均視窗大小
             ! AVG_WIN = (GWIN(1,II) + GWIN(2,II) + GWIN(3,II)) / 3.0D0
             
-            ! 不需要歸一化 - 與 OpenMP 版本一致
-            ! DENOM = DIA(I) / AVG_WIN
-            
-            ! 調用 MLS_KERNEL0，直接使用未歸一化距離（與 OpenMP 一致）
-            ! 球形支撐域需要歸一化距離
-            DENOM = DIA(I) / GWIN(1,II)  ! 使用第一個視窗維度作為參考
-            CALL MLS_KERNEL0(DENOM, 1.0D0, CONT, PHI(I), PHIX_X, ISZERO, ierr_mls)
+            ! 球形支撐域需要各方向歸一化
+            XMXI_OA(I) = (X(1) - GCOO(1,II)) / GWIN(1,II)
+            YMYI_OA(I) = (X(2) - GCOO(2,II)) / GWIN(2,II)
+            ZMZI_OA(I) = (X(3) - GCOO(3,II)) / GWIN(3,II)
+            DIA(I) = SQRT(XMXI_OA(I)**2 + YMYI_OA(I)**2 + ZMZI_OA(I)**2)
+            CALL MLS_KERNEL0(DIA(I), GWIN(1,II), CONT, PHI(I), PHIX_X, ISZERO, ierr_mls)
             
             ! 球形支撐域（不進行體積歸一化）
             !PHI(I) = PHI(I) / (AVG_WIN**3)
@@ -221,11 +220,11 @@ IF (SHSUP) THEN
                 SHPD(:,I) = 0.0D0
                 CYCLE
             END IF
-            
+
             ! 簡單除錯輸出
             IF (I <= 3) THEN
                 WRITE(*,*) 'DEBUG RK1 SHSUP: I=', I, ' DIA=', DIA(I)
-                WRITE(*,*) '  AVG_WIN=', AVG_WIN, ' DENOM=', DENOM
+                WRITE(*,*) '  AVG_WIN=', AVG_WIN
                 WRITE(*,*) '  PHI=', PHI(I)
             END IF
             
