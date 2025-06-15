@@ -271,28 +271,9 @@
                             NODES_IN_BIN,MAX_NEIGH,NODELIST_IN_BIN, &
                             NBINS,NBINSX,NBINSY,NBINSZ,ISPACE,JSPACE,KSPACE, &
                             GXDIST_MAX, GYDIST_MAX, GZDIST_MAX,GSM_LEN)
-         
-         ! 診斷GWIN統計
-         WRITE(*,*) 'DEBUG OpenMP HANDELER: GWIN statistics after SOFT_SEARCH'
-         WRITE(*,*) '  Number of nodes (GNUMP) = ', GNUMP
-         WRITE(*,*) '  Min GWIN X,Y,Z = ', MINVAL(GWIN(1,1:GNUMP)), MINVAL(GWIN(2,1:GNUMP)), MINVAL(GWIN(3,1:GNUMP))
-         WRITE(*,*) '  Max GWIN X,Y,Z = ', MAXVAL(GWIN(1,1:GNUMP)), MAXVAL(GWIN(2,1:GNUMP)), MAXVAL(GWIN(3,1:GNUMP))
-         WRITE(*,*) '  Avg GWIN X,Y,Z = ', SUM(GWIN(1,1:GNUMP))/GNUMP, SUM(GWIN(2,1:GNUMP))/GNUMP, SUM(GWIN(3,1:GNUMP))/GNUMP
-         
-         ! 輸出前10個節點的GWIN
-         WRITE(*,*) '  First 10 nodes GWIN:'
-         DO I = 1, MIN(10, GNUMP)
-             WRITE(*,*) '    Node ', I, ' GWIN=', GWIN(1,I), GWIN(2,I), GWIN(3,I)
-         END DO
-         
-         ! 計算並輸出最大鄰居數
-         WRITE(*,*) '  Max neighbors (GMAXN) = ', GMAXN
-         WRITE(*,*) '  Sample neighbor counts:'
-         DO I = 1, MIN(5, GNUMP)
-             WRITE(*,*) '    Node ', I, ' has ', GN(I), ' neighbors'
-         END DO
                             
-        !DEALLOCATE(ISPACE,JSPACE,KSPACE,NODES_IN_BIN,NODELIST_IN_BIN)   
+                            
+        !DEALLOCATE(ISPACE,JSPACE,KSPACE,NODES_IN_BIN,NODELIST_IN_BIN)       
           
         !!!CONTINUE
       END IF !CNT_SEARCH=MAX_CNT_SEARCH

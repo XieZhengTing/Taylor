@@ -72,20 +72,6 @@
     DOUBLE PRECISION:: XM_QLX,YM_QLY,ZM_QLZ
     DOUBLE PRECISION:: DENOM
     LOGICAL:: ISZERO
-    
-    ! 添加診斷變數
-    LOGICAL, SAVE :: FIRST_CALL = .TRUE.
-    INTEGER, SAVE :: DEBUG_COUNT = 0
-    DOUBLE PRECISION :: AVG_DIST
-    INTEGER :: J
-    
-    IF (FIRST_CALL) THEN
-        WRITE(*,*) 'DEBUG OpenMP RK1: First call'
-        WRITE(*,*) '  LN = ', LN
-        WRITE(*,*) '  CONT = ', CONT
-        WRITE(*,*) '  SHSUP = ', SHSUP
-        FIRST_CALL = .FALSE.
-    END IF
 
     !
     ! WE NEED TO BE CAREFUL NOT TO EVALUATE THE SINGULAR KERNAL AT THE NODE
@@ -124,34 +110,6 @@
     M_X = 0.0d0
     M_Y = 0.0d0
     M_Z = 0.0d0
-    
-    ! 診斷視窗大小和節點間距
-    IF (DEBUG_COUNT < 5 .AND. LN > 0) THEN
-        DEBUG_COUNT = DEBUG_COUNT + 1
-        WRITE(*,*) 'DEBUG OpenMP: Call #', DEBUG_COUNT, ' LN=', LN
-        
-        ! 輸出前3個鄰居的資訊
-        DO J = 1, MIN(3, LN)
-            II = LSTACK(J)
-            WRITE(*,*) '  Neighbor ', J, ' Node=', II
-            WRITE(*,*) '    Position: ', GCOO(1,II), GCOO(2,II), GCOO(3,II)
-            WRITE(*,*) '    Window: ', GWIN(1,II), GWIN(2,II), GWIN(3,II)
-            WRITE(*,*) '    Distance from X: ', &
-                      SQRT((X(1)-GCOO(1,II))**2 + (X(2)-GCOO(2,II))**2 + (X(3)-GCOO(3,II))**2)
-        END DO
-        
-        ! 計算平均節點間距
-        AVG_DIST = 0.0D0
-        DO J = 1, MIN(10, LN)
-            II = LSTACK(J)
-            AVG_DIST = AVG_DIST + SQRT((X(1)-GCOO(1,II))**2 + &
-                                      (X(2)-GCOO(2,II))**2 + &
-                                      (X(3)-GCOO(3,II))**2)
-        END DO
-        AVG_DIST = AVG_DIST / MIN(10, LN)
-        WRITE(*,*) '  Avg distance (first 10): ', AVG_DIST
-        WRITE(*,*) '  Window/Distance ratio: ', GWIN(1,LSTACK(1))/AVG_DIST
-    END IF
 
     DO I=1,LN
 
@@ -269,17 +227,6 @@
 
             END IF
             PHI_SUM = PHI_SUM + PHI(I)
-            
-            ! 在計算PHI後，輸出前幾個值
-            IF (DEBUG_COUNT <= 5 .AND. I <= 3) THEN
-                WRITE(*,*) '  DEBUG OpenMP PHI calc: I=', I, ' Node=', II
-                WRITE(*,*) '    Raw coords: ', (X(1)-GCOO(1,II)), (X(2)-GCOO(2,II)), (X(3)-GCOO(3,II))
-                WRITE(*,*) '    Normalized coords: ', XMXI_OA(I), YMYI_OA(I), ZMZI_OA(I)
-                IF (.NOT. SHSUP) THEN
-                    WRITE(*,*) '    PHIX=', PHIX, ' PHIY=', PHIY, ' PHIZ=', PHIZ
-                END IF
-                WRITE(*,*) '    PHI=', PHI(I)
-            END IF
         ENDIF
         DO J = 1, MSIZE
             DO K = 1, MSIZE
@@ -297,16 +244,6 @@
         CONTINUE
 
     END DO
-    
-    ! 輸出PHI_SUM診斷
-    IF (DEBUG_COUNT <= 5) THEN
-        WRITE(*,*) 'DEBUG OpenMP: Raw PHI_SUM = ', PHI_SUM
-        WRITE(*,*) '  First 5 PHI values: ', (PHI(J), J=1,MIN(5,LN))
-        WRITE(*,*) '  Sum of first 10: ', SUM(PHI(1:MIN(10,LN)))
-        IF (ABS(PHI_SUM - 1.0D0) > 0.1D0) THEN
-            WRITE(*,*) '  WARNING: PHI_SUM deviates from unity!'
-        END IF
-    END IF
 
     !
     ! GET M* IF QUASI-LINEAR
