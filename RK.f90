@@ -82,7 +82,7 @@ CONTAINS
     DOUBLE PRECISION:: YMYI_OA(LNMAX)
     DOUBLE PRECISION:: ZMZI_OA(LNMAX)
     DOUBLE PRECISION:: DIA(LNMAX)
-
+    DOUBLE PRECISION:: DIA_UNS
     DOUBLE PRECISION:: TEST
 
     DOUBLE PRECISION:: PHI_SUM,QL_PTS(3,6), QLX(3)
@@ -210,7 +210,7 @@ IF (SHSUP) THEN
             XMXI_OA(I) = (X(1) - GCOO(1,II)) / GWIN(1,II)
             YMYI_OA(I) = (X(2) - GCOO(2,II)) / GWIN(2,II)
             ZMZI_OA(I) = (X(3) - GCOO(3,II)) / GWIN(3,II)
-            DIA(I) = SQRT(XMXI_OA(I)**2 + YMYI_OA(I)**2 + ZMZI_OA(I)**2)␊
+            DIA(I) = SQRT(XMXI_OA(I)**2 + YMYI_OA(I)**2 + ZMZI_OA(I)**2)
             CALL MLS_KERNEL0(DIA_UNS, GWIN(1,II), CONT, PHI(I), PHIX_X, ISZERO, ierr_mls)
             
             ! 球形支撐域（不進行體積歸一化）
