@@ -155,10 +155,37 @@ END IF
     M_Y = 0.0d0
     M_Z = 0.0d0
 
-    ! 診斷第一個節點的視窗大小
+    ! 診斷視窗大小與節點間距的關係
+    DOUBLE PRECISION :: MIN_DIST, MAX_DIST, AVG_DIST
+    DOUBLE PRECISION :: DIST_TEMP
     IF (LN > 0) THEN
         II = LSTACK(1)
         WRITE(*,*) 'DEBUG: First neighbor - GWIN = ', GWIN(1,II), GWIN(2,II), GWIN(3,II)
+        
+        ! 計算節點間距統計
+        MIN_DIST = 1.0D10
+        MAX_DIST = 0.0D0
+        AVG_DIST = 0.0D0
+        DO I = 1, MIN(10, LN)  ! 檢查前10個鄰居
+            II = LSTACK(I)
+            DIST_TEMP = SQRT((X(1)-GCOO(1,II))**2 + (X(2)-GCOO(2,II))**2 + (X(3)-GCOO(3,II))**2)
+            MIN_DIST = MIN(MIN_DIST, DIST_TEMP)
+            MAX_DIST = MAX(MAX_DIST, DIST_TEMP)
+            AVG_DIST = AVG_DIST + DIST_TEMP
+        END DO
+        AVG_DIST = AVG_DIST / MIN(10, LN)
+        
+        ! 報告診斷資訊
+        WRITE(*,*) 'DEBUG: Node spacing statistics (first 10 neighbors):'
+        WRITE(*,*) '  Min distance = ', MIN_DIST
+        WRITE(*,*) '  Max distance = ', MAX_DIST
+        WRITE(*,*) '  Avg distance = ', AVG_DIST
+        WRITE(*,*) '  Window/Avg ratio = ', GWIN(1,II)/AVG_DIST, GWIN(2,II)/AVG_DIST, GWIN(3,II)/AVG_DIST
+        
+        ! 警告視窗大小可能不適當
+        IF (GWIN(1,II)/AVG_DIST < 3.0D0) THEN
+            WRITE(*,*) 'WARNING: Window size may be too small relative to node spacing!'
+        END IF
     END IF
     
     DO I=1,LN
@@ -335,29 +362,31 @@ ELSE
 
     END DO
     
+    ! 儲存原始PHI_SUM用於診斷
+    DOUBLE PRECISION :: PHI_SUM_RAW
+    PHI_SUM_RAW = PHI_SUM
+    
     ! 檢查並修正異常的 PHI_SUM
     IF (PHI_SUM > 1000.0D0) THEN
-        WRITE(*,*) 'ERROR: Abnormal PHI_SUM = ', PHI_SUM, ' at node with LN = ', LN
-        ! 重置為合理值以避免崩潰
-        PHI_SUM = 1.0D0
-        ! 重新歸一化 PHI 值
-        IF (PHI_SUM > 1.0D-12) THEN
-            DO I = 1, LN
-                PHI(I) = PHI(I) / PHI_SUM
-            END DO
-            PHI_SUM = 1.0D0
-        END IF
+        WRITE(*,*) 'ERROR: Raw PHI_SUM = ', PHI_SUM_RAW, ' at node with LN = ', LN
+        WRITE(*,*) '  Forcing normalization to avoid numerical issues'
     END IF
     
-    IF (ABS(PHI_SUM-1.0D0) > 1.0D-8) THEN
+    ! 歸一化PHI值
+    IF (ABS(PHI_SUM-1.0D0) > 1.0D-8 .AND. PHI_SUM > 1.0D-12) THEN
         DO I = 1, LN
             PHI(I) = PHI(I) / PHI_SUM
         END DO
         PHI_SUM = 1.0D0
     END IF
     
-    WRITE(*,*) 'DEBUG: PHI_SUM = ', PHI_SUM, ' (before normalization)'
+    ! 報告原始和歸一化後的值
+    IF (ABS(PHI_SUM_RAW - 1.0D0) > 0.1D0) THEN
+        WRITE(*,*) 'WARNING RK1: Raw PHI_SUM = ', PHI_SUM_RAW, ' LN = ', LN
+        WRITE(*,*) '  After normalization: PHI_SUM = ', PHI_SUM
+    END IF
     WRITE(*,*) 'DEBUG: Valid neighbors = ', VALID_NEIGHBORS, ' out of ', LN
+
     IF (ABS(PHI_SUM - 1.0D0) > 0.1D0) THEN
         WRITE(*,*) 'WARNING: Poor partition of unity, PHI_SUM = ', PHI_SUM
     END IF
@@ -1033,6 +1062,18 @@ SUBROUTINE MLS_KERNEL0(XN,CONT,PHI,PHIX,ISZERO, ierr)
             PHIX = 0.0D0
             ISZERO = .TRUE.
         END IF
+        
+        ! 體積歸一化（如果需要）
+        ! 對於3D張量積：體積 = (2*WIN)^3 = 8*WIN^3
+        ! 對於球形支撐：體積 = 4/3*PI*WIN^3
+        ! 目前暫時保留未歸一化，等待與OpenMP版本確認
+        ! IF (NEED_VOLUME_NORMALIZATION) THEN
+        !     DOUBLE PRECISION :: VOL_FACTOR
+        !     VOL_FACTOR = 8.0D0  ! 張量積情況
+        !     PHI = PHI / VOL_FACTOR
+        !     PHIX = PHIX / VOL_FACTOR
+        ! END IF
+        
     ELSE
         ! 不支援的核函數類型
         PHI = 0.0D0

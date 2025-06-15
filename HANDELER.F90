@@ -429,7 +429,34 @@ IF (DO_INTERP) THEN
                               NODES_IN_BIN,MAX_NEIGH,NODELIST_IN_BIN, &
                               NBINS,NBINSX,NBINSY,NBINSZ,ISPACE,JSPACE,KSPACE, &
                               GXDIST_MAX, GYDIST_MAX, GZDIST_MAX,GSM_LEN)
-             
+         ! --- 添加GWIN診斷 ---
+         WRITE(*,*) 'DEBUG HANDELER: GWIN statistics after SOFT_SEARCH'
+         WRITE(*,*) '  Number of nodes (GNUMP) = ', GNUMP
+         WRITE(*,*) '  Min GWIN X,Y,Z = ', MINVAL(GWIN(1,1:GNUMP)), MINVAL(GWIN(2,1:GNUMP)), MINVAL(GWIN(3,1:GNUMP))
+         WRITE(*,*) '  Max GWIN X,Y,Z = ', MAXVAL(GWIN(1,1:GNUMP)), MAXVAL(GWIN(2,1:GNUMP)), MAXVAL(GWIN(3,1:GNUMP))
+         WRITE(*,*) '  Avg GWIN X,Y,Z = ', SUM(GWIN(1,1:GNUMP))/GNUMP, SUM(GWIN(2,1:GNUMP))/GNUMP, SUM(GWIN(3,1:GNUMP))/GNUMP
+         
+         ! 檢查是否有過小的視窗
+         INTEGER :: SMALL_WIN_COUNT
+         SMALL_WIN_COUNT = 0
+         DO I = 1, GNUMP
+             IF (GWIN(1,I) < 1.0D-2 .OR. GWIN(2,I) < 1.0D-2 .OR. GWIN(3,I) < 1.0D-2) THEN
+                 SMALL_WIN_COUNT = SMALL_WIN_COUNT + 1
+                 IF (SMALL_WIN_COUNT <= 5) THEN  ! 只報告前5個
+                     WRITE(*,*) '  WARNING: Small window at node ', I, ' GWIN = ', GWIN(1,I), GWIN(2,I), GWIN(3,I)
+                 END IF
+             END IF
+         END DO
+         IF (SMALL_WIN_COUNT > 5) THEN
+             WRITE(*,*) '  ... and ', SMALL_WIN_COUNT-5, ' more nodes with small windows'
+         END IF
+         
+         ! 顯示典型的鄰居數量
+         WRITE(*,*) '  Max neighbors (GMAXN) = ', GMAXN
+         IF (GN(1) > 0) THEN
+             WRITE(*,*) '  Node 1 has ', GN(1), ' neighbors'
+         END IF
+                      
 ! --- Step 4: 完整同步所有修改過的資料回 GPU ---
 ! 關鍵：確保所有形狀函數相關資料都同步
 !$ACC UPDATE DEVICE(GN, GSTART, GSTACK, GMAXN, DIM_NN_LIST)
