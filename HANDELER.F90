@@ -140,7 +140,7 @@
       INTEGER(KIND=8) :: temp_dim_long
       LOGICAL :: NEED_SEARCH         ! MOVED: Declaration for search logic
       LOGICAL :: NEED_BIN_UPDATE     ! MOVED: Declaration for bin update logic
-      
+      INTEGER :: SMALL_WIN_COUNT     ! COUNT OF VERY SMALL WINDOWS      
 IF (DO_INTERP) THEN
     IF(.NOT. PERIDYNAMICS) THEN  !RKPM
         ! 先確保 GSTACK_SHP 已經計算
@@ -437,7 +437,7 @@ IF (DO_INTERP) THEN
          WRITE(*,*) '  Avg GWIN X,Y,Z = ', SUM(GWIN(1,1:GNUMP))/GNUMP, SUM(GWIN(2,1:GNUMP))/GNUMP, SUM(GWIN(3,1:GNUMP))/GNUMP
          
          ! 檢查是否有過小的視窗
-         INTEGER :: SMALL_WIN_COUNT
+
          SMALL_WIN_COUNT = 0
          DO I = 1, GNUMP
              IF (GWIN(1,I) < 1.0D-2 .OR. GWIN(2,I) < 1.0D-2 .OR. GWIN(3,I) < 1.0D-2) THEN
@@ -456,7 +456,7 @@ IF (DO_INTERP) THEN
          IF (GN(1) > 0) THEN
              WRITE(*,*) '  Node 1 has ', GN(1), ' neighbors'
          END IF
-                      
+
 ! --- Step 4: 完整同步所有修改過的資料回 GPU ---
 ! 關鍵：確保所有形狀函數相關資料都同步
 !$ACC UPDATE DEVICE(GN, GSTART, GSTACK, GMAXN, DIM_NN_LIST)

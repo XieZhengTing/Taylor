@@ -364,7 +364,6 @@ ELSE
     END DO
     
     ! 儲存原始PHI_SUM用於診斷
-    DOUBLE PRECISION :: PHI_SUM_RAW
     PHI_SUM_RAW = PHI_SUM
     
     ! 檢查並修正異常的 PHI_SUM
