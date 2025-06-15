@@ -2,7 +2,7 @@
          
        SUBROUTINE MLS_KERNEL0(XSA,AJ,ISPLINE,      & !INPUT
                              PHI,PHI_X,ISZERO)   !OUTPUT
-      !$ACC ROUTINE SEQ                       
+                             
       IMPLICIT NONE
        
       !GLOBAL VARIABLES
@@ -12,13 +12,12 @@
       
       !LOCAL VARIABLES
       DOUBLE PRECISION::XSA
-      DOUBLE PRECISION:: R  ! 添加局部變量 R      
       INTEGER::I,J,K,II,JJ,KK
       
       INTEGER::CL,L,FL,F2LPO
       LOGICAL:: ISZERO
       
-      ! 計算歸一化距離
+      !XSA = XSA/AJ
       ISZERO=.FALSE.
       
 !        IF (ISPLINE.GE.5) THEN
@@ -56,14 +55,15 @@
 !        END IF
 
         IF (ISPLINE.EQ.3) THEN
+            
             ! C3 CONTINUETY
+            
             IF (XSA.LE.(0.5D0)) THEN
                 PHI=  2.0D0/3.0D0    - 4.0D0*XSA**2  +  4.0D0*XSA**3
                 PHI_X=  - 8.0D0*XSA  +  12.0D0*XSA**2
             ELSEIF (XSA.LE.(1.0D0)) THEN
-            R = XSA  ! 或其他適當的歸一化距離變數
-            PHI = 4.0D0/3.0D0 -4.0D0*R + 4.0D0*R**2 - 4.0D0/3.0D0*R**3
-            PHI_X= -4.0D0 + 8.0D0*R - 4.0D0*R**2
+                PHI=  4.0D0/3.0D0 -4.0D0*XSA +  4.0D0*XSA**2  - 4.0D0/3.0D0*XSA**3
+                PHI_X= -4.0D0 +  8.0D0*XSA  - 4.0D0*XSA**2
             ELSE   
                 PHI= 0.0D0
                 PHI_X= 0.0D0
@@ -132,14 +132,9 @@
 !            PAUSE
         END IF
         
-!      移除最後的除法操作，與 OpenMP 版本保持一致
-!      IF (AJ .GT. 1.0D-12) THEN
-!          PHI   = PHI   / AJ
-!          PHI_X = PHI_X / AJ
-!      ELSE
-!          PHI   = 0.0D0
-!          PHI_X = 0.0D0
-!      END IF
+        !PHI = PHI / AJ
+      !  PHI_X = PHI_X / AJ
+      
       RETURN
       
     END SUBROUTINE
@@ -150,7 +145,6 @@
       
       
       SUBROUTINE FACTI(INTEG,FACT_INTEG)
-      !$ACC ROUTINE SEQ
       IMPLICIT NONE
       
       INTEGER::INTEG,FACT_INTEG

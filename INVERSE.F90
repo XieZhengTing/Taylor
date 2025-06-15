@@ -13,22 +13,14 @@
 	  !*                                                      *
 	  !********************************************************
     
-    MODULE INVERSE_MOD
-    IMPLICIT NONE
-    PRIVATE
-    PUBLIC :: INVERSE
-    PUBLIC :: INV3
-    PUBLIC :: M44INV
-    CONTAINS
-
-	SUBROUTINE INVERSE(A,N, AINV, ierr)
-	!$ACC ROUTINE SEQ
+    
+	SUBROUTINE INVERSE(A,N, AINV)
 	IMPLICIT NONE
-
+	
 	INTEGER, INTENT(IN):: N
 	DOUBLE PRECISION, INTENT(IN):: A(N,N)
 	DOUBLE PRECISION, INTENT(OUT):: AINV(N,N)
-	INTEGER, INTENT(OUT) :: ierr
+	
 	
 	INTEGER:: IS(N),JS(N), L, K, I, J
 	DOUBLE PRECISION T,D
@@ -36,7 +28,6 @@
 		AINV = A
 		
 	L=1
-	ierr = 0
 	DO 100 K=1,N
 		D=0.0D0
 		DO 10 I=K,N
@@ -49,7 +40,6 @@
 10	CONTINUE
 		IF(D+1.0D0 .EQ. 1.0D0) THEN
 			L=0
-			ierr = 1
 			!RETURN
 			GOTO 300
 		END IF
@@ -101,14 +91,12 @@
 300     CONTINUE
 
         IF (L.EQ.0) THEN
-          ! Error flag 'ierr' is already set.
-          ! The caller should check 'ierr'.
-          AINV = HUGE(0.0D0) ! Optionally set AINV to a value indicating error
+          CALL WARN('PROBLEM INVERTING MATRIX')
         END IF
 
 		RETURN
 		
-		END SUBROUTINE INVERSE
+		END SUBROUTINE
 		
 
         
@@ -128,9 +116,9 @@
 	  !*                                                      *
 	  !********************************************************
     
-      SUBROUTINE INV3 (A, AINV,ierr)
+      SUBROUTINE INV3 (A, AINV)
       ! THIS SUBROUTINE HAS BUG, COMMENTED, USE  INVERSE()
-	!$ACC ROUTINE SEQ
+   
 	  ! FUNCTION OF THIS SUBROUTINE:
 	  !
 	  ! COMPUTE THE INVERSE OF A 3X3 MATRIX
@@ -139,7 +127,6 @@
    
       DOUBLE PRECISION, INTENT(IN):: A(3,3)
       DOUBLE PRECISION, INTENT(OUT):: AINV(3,3)
-      INTEGER, INTENT(OUT) :: ierr
       DOUBLE PRECISION:: DET
    
       DET =   A(1,1)*A(2,2)*A(3,3)  &
@@ -148,22 +135,16 @@
             + A(1,2)*A(2,3)*A(3,1)  &
             + A(1,3)*A(2,1)*A(3,2)  &
             - A(1,3)*A(2,2)*A(3,1)
-      ierr = 0
-      IF (ABS(DET) > 1.0D-12) THEN ! Avoid division by zero or very small DET
-          AINV(1,1) =  (A(2,2)*A(3,3)-A(2,3)*A(3,2))/DET
-          AINV(2,1) = -(A(2,1)*A(3,3)-A(2,3)*A(3,1))/DET
-          AINV(3,1) =  (A(2,1)*A(3,2)-A(2,2)*A(3,1))/DET
-          AINV(1,2) = -(A(1,2)*A(3,3)-A(1,3)*A(3,2))/DET
-          AINV(2,2) =  (A(1,1)*A(3,3)-A(1,3)*A(3,1))/DET
-          AINV(3,2) = -(A(1,1)*A(3,2)-A(1,2)*A(3,1))/DET
-          AINV(1,3) =  (A(1,2)*A(2,3)-A(1,3)*A(2,2))/DET
-          AINV(2,3) = -(A(1,1)*A(2,3)-A(1,3)*A(2,1))/DET
-          AINV(3,3) =  (A(1,1)*A(2,2)-A(1,2)*A(2,1))/DET
-      ELSE
-          ierr = 1
-          AINV = HUGE(0.0D0) ! Indicate error / singular matrix
-          ! Consider adding an error flag parameter to the subroutine
-      ENDIF
+   
+      AINV(1,1) =  (A(2,2)*A(3,3)-A(2,3)*A(3,2))*DET
+      AINV(2,1) = -(A(2,1)*A(3,3)-A(2,3)*A(3,1))*DET
+      AINV(3,1) =  (A(2,1)*A(3,2)-A(2,2)*A(3,1))*DET
+      AINV(1,2) = -(A(1,2)*A(3,3)-A(1,3)*A(3,2))*DET
+      AINV(2,2) =  (A(1,1)*A(3,3)-A(1,3)*A(3,1))*DET
+      AINV(3,2) = -(A(1,1)*A(3,2)-A(1,2)*A(3,1))*DET
+      AINV(1,3) =  (A(1,2)*A(2,3)-A(1,3)*A(2,2))*DET
+      AINV(2,3) = -(A(1,1)*A(2,3)-A(1,3)*A(2,1))*DET
+      AINV(3,3) =  (A(1,1)*A(2,2)-A(1,2)*A(2,1))*DET
    
    
       RETURN
@@ -201,13 +182,12 @@
 
 
 
-      SUBROUTINE M44INV (A, AINV,ierr)
-	!$ACC ROUTINE SEQ
+      SUBROUTINE M44INV (A, AINV)
+
       IMPLICIT NONE
 
       DOUBLE PRECISION, DIMENSION(4,4), INTENT(IN)  :: A
       DOUBLE PRECISION, DIMENSION(4,4), INTENT(OUT) :: AINV
-      INTEGER, INTENT(OUT) :: ierr
 
       DOUBLE PRECISION :: DET
       DOUBLE PRECISION, DIMENSION(4,4) :: COFACTOR
@@ -235,16 +215,9 @@
       COFACTOR(4,2) = A(1,1)*(A(2,3)*A(3,4)-A(2,4)*A(3,3))+A(1,3)*(A(2,4)*A(3,1)-A(2,1)*A(3,4))+A(1,4)*(A(2,1)*A(3,3)-A(2,3)*A(3,1))
       COFACTOR(4,3) = A(1,1)*(A(2,4)*A(3,2)-A(2,2)*A(3,4))+A(1,2)*(A(2,1)*A(3,4)-A(2,4)*A(3,1))+A(1,4)*(A(2,2)*A(3,1)-A(2,1)*A(3,2))
       COFACTOR(4,4) = A(1,1)*(A(2,2)*A(3,3)-A(2,3)*A(3,2))+A(1,2)*(A(2,3)*A(3,1)-A(2,1)*A(3,3))+A(1,3)*(A(2,1)*A(3,2)-A(2,2)*A(3,1))
-      ierr = 0
-      IF (ABS(DET) > 1.0D-12) THEN ! Avoid division by zero or very small DET
-          AINV = TRANSPOSE(COFACTOR) / DET
-      ELSE
-          ierr = 1
-          AINV = HUGE(0.0D0) ! Indicate error / singular matrix
-          ! Consider adding an error flag parameter to the subroutine
-      ENDIF
+
+      AINV = TRANSPOSE(COFACTOR) / DET
 
       RETURN
 
-      END SUBROUTINE M44INV
-    END MODULE INVERSE_MOD
+      END SUBROUTINE

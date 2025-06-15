@@ -12,29 +12,12 @@
     !*     Copyright 2016 Michael C Hillman                 *
     !*                                                      *
     !********************************************************
-MODULE RK_PROCEDURES_MOD
-    USE INVERSE_MOD
-    USE FINT_FUNCTIONS
-    USE DETERMINANT_MOD
-    IMPLICIT NONE
-    PRIVATE
-    PUBLIC :: RK1
-    PUBLIC :: FILL_H
-    PUBLIC :: DERIV_H
-    PUBLIC :: UDFM_SHAPE_TENSOR
-    PUBLIC :: DFM_SHAPE_TENSOR
-    PUBLIC :: MLS_KERNEL0
-    PUBLIC :: HUGHES_WINGET 
-    PUBLIC :: D_HUGHES_WINGET 
-    PUBLIC :: ROTATE_TENSOR 
 
-CONTAINS
     SUBROUTINE RK1(X, DEG, MSIZE, CONT, IMPL, GCOO, GWIN, GNUMP, LSTACK, LN, LNMAX, EBCS,SELF_EBC, &
         QL, QL_COEF,QL_LEN,  &
         SHP, SHPD,SHSUP)
-    !$ACC ROUTINE SEQ
-!    USE INVERSE_MOD
-!    IMPLICIT NONE 
+
+    IMPLICIT NONE 
 
     DOUBLE PRECISION, INTENT(IN):: X(3)
     INTEGER, INTENT(IN):: DEG, MSIZE, CONT, GNUMP, LN, LNMAX
@@ -82,40 +65,28 @@ CONTAINS
     DOUBLE PRECISION:: YMYI_OA(LNMAX)
     DOUBLE PRECISION:: ZMZI_OA(LNMAX)
     DOUBLE PRECISION:: DIA(LNMAX)
+
     DOUBLE PRECISION:: TEST
-    
+
     DOUBLE PRECISION:: PHI_SUM,QL_PTS(3,6), QLX(3)
     DOUBLE PRECISION:: XM_QLX,YM_QLY,ZM_QLZ
     DOUBLE PRECISION:: DENOM
     LOGICAL:: ISZERO
-    DOUBLE PRECISION:: DET
-    INTEGER :: ierr_inv, ierr_mls
-    INTEGER :: VALID_NEIGHBORS
-    DOUBLE PRECISION :: MIN_DIST, MAX_DIST, AVG_DIST
-    DOUBLE PRECISION :: DIST_TEMP
-    DOUBLE PRECISION :: PHI_SUM_RAW
-! 簡單的除錯輸出（避免複雜格式）
-    LOGICAL, SAVE :: FIRST_RK1 = .TRUE.
-IF (FIRST_RK1) THEN
-    WRITE(*,*) 'DEBUG RK1: First call'
-    WRITE(*,*) '  LN = ', LN
-    WRITE(*,*) '  CONT = ', CONT
-    WRITE(*,*) '  SHSUP = ', SHSUP
-    WRITE(*,*) '  QL = ', QL
-    FIRST_RK1 = .FALSE.
-END IF
+    
+    ! 添加診斷變數
+    LOGICAL, SAVE :: FIRST_CALL = .TRUE.
+    INTEGER, SAVE :: DEBUG_COUNT = 0
+    DOUBLE PRECISION :: AVG_DIST
+    INTEGER :: J
+    
+    IF (FIRST_CALL) THEN
+        WRITE(*,*) 'DEBUG OpenMP RK1: First call'
+        WRITE(*,*) '  LN = ', LN
+        WRITE(*,*) '  CONT = ', CONT
+        WRITE(*,*) '  SHSUP = ', SHSUP
+        FIRST_CALL = .FALSE.
+    END IF
 
-    SHP(:) = 0.0D0
-    SHPD(:,:) = 0.0D0
-    
-    ! 初始化局部數組
-    PHI(:) = 0.0D0
-    PHI_X(:) = 0.0D0
-    PHI_Y(:) = 0.0D0
-    PHI_Z(:) = 0.0D0
-    
-    ! 初始化計數器
-    VALID_NEIGHBORS = 0
     !
     ! WE NEED TO BE CAREFUL NOT TO EVALUATE THE SINGULAR KERNAL AT THE NODE
     ! ALSO, WE NEED TO OUTPUT PHYSICAL DISPLACEMENTS!
@@ -145,11 +116,7 @@ END IF
     ! GET THE MOMENT MATRIX
     !
     !  dMx,dMy,dMz KC
-    WRITE(*,*) 'DEBUG RK1: Entry check'
-    WRITE(*,*) '  LN (number of neighbors) = ', LN
-    WRITE(*,*) '  CONT = ', CONT
-    WRITE(*,*) '  QL = ', QL
-    WRITE(*,*) '  SHSUP = ', SHSUP
+
     PHI_SUM = 0.0d0
     M_FULL = 0.0d0
     M_FULL_STAR = 0.0d0
@@ -157,45 +124,43 @@ END IF
     M_X = 0.0d0
     M_Y = 0.0d0
     M_Z = 0.0d0
-
-    ! 診斷視窗大小與節點間距的關係
-    IF (LN > 0) THEN
-        II = LSTACK(1)
-        WRITE(*,*) 'DEBUG: First neighbor - GWIN = ', GWIN(1,II), GWIN(2,II), GWIN(3,II)
+    
+    ! 診斷視窗大小和節點間距
+    IF (DEBUG_COUNT < 5 .AND. LN > 0) THEN
+        DEBUG_COUNT = DEBUG_COUNT + 1
+        WRITE(*,*) 'DEBUG OpenMP: Call #', DEBUG_COUNT, ' LN=', LN
         
-        ! 計算節點間距統計
-        MIN_DIST = 1.0D10
-        MAX_DIST = 0.0D0
+        ! 輸出前3個鄰居的資訊
+        DO J = 1, MIN(3, LN)
+            II = LSTACK(J)
+            WRITE(*,*) '  Neighbor ', J, ' Node=', II
+            WRITE(*,*) '    Position: ', GCOO(1,II), GCOO(2,II), GCOO(3,II)
+            WRITE(*,*) '    Window: ', GWIN(1,II), GWIN(2,II), GWIN(3,II)
+            WRITE(*,*) '    Distance from X: ', &
+                      SQRT((X(1)-GCOO(1,II))**2 + (X(2)-GCOO(2,II))**2 + (X(3)-GCOO(3,II))**2)
+        END DO
+        
+        ! 計算平均節點間距
         AVG_DIST = 0.0D0
-        DO I = 1, MIN(10, LN)  ! 檢查前10個鄰居
-            II = LSTACK(I)
-            DIST_TEMP = SQRT((X(1)-GCOO(1,II))**2 + (X(2)-GCOO(2,II))**2 + (X(3)-GCOO(3,II))**2)
-            MIN_DIST = MIN(MIN_DIST, DIST_TEMP)
-            MAX_DIST = MAX(MAX_DIST, DIST_TEMP)
-            AVG_DIST = AVG_DIST + DIST_TEMP
+        DO J = 1, MIN(10, LN)
+            II = LSTACK(J)
+            AVG_DIST = AVG_DIST + SQRT((X(1)-GCOO(1,II))**2 + &
+                                      (X(2)-GCOO(2,II))**2 + &
+                                      (X(3)-GCOO(3,II))**2)
         END DO
         AVG_DIST = AVG_DIST / MIN(10, LN)
-        
-        ! 報告診斷資訊
-        WRITE(*,*) 'DEBUG: Node spacing statistics (first 10 neighbors):'
-        WRITE(*,*) '  Min distance = ', MIN_DIST
-        WRITE(*,*) '  Max distance = ', MAX_DIST
-        WRITE(*,*) '  Avg distance = ', AVG_DIST
-        WRITE(*,*) '  Window/Avg ratio = ', GWIN(1,II)/AVG_DIST, GWIN(2,II)/AVG_DIST, GWIN(3,II)/AVG_DIST
-        
-        ! 警告視窗大小可能不適當
-        IF (GWIN(1,II)/AVG_DIST < 3.0D0) THEN
-            WRITE(*,*) 'WARNING: Window size may be too small relative to node spacing!'
-        END IF
+        WRITE(*,*) '  Avg distance (first 10): ', AVG_DIST
+        WRITE(*,*) '  Window/Distance ratio: ', GWIN(1,LSTACK(1))/AVG_DIST
     END IF
-    
+
     DO I=1,LN
 
         II = LSTACK(I)
         
-        IF (II.EQ.42) THEN
-            CONTINUE
-        END IF
+        
+                IF (II.EQ.42) THEN
+                CONTINUE
+                END IF
         !TODO: MAKE NORMALIZED
         XMXI_OA(I) = (X(1) -  GCOO(1,II))
         YMYI_OA(I) = (X(2) -  GCOO(2,II))
@@ -206,142 +171,116 @@ END IF
         CALL DERIV_H(XMXI_OA(I),YMYI_OA(I),ZMZI_OA(I),MSIZE,DEG,H_X,H_Y,H_Z)
 
 
-        ! 檢查視窗大小有效性並設定最小值
-        ! 防止過小的視窗導致 PHI_SUM 異常
-        IF (GWIN(1,II) <= 1.0D-3 .OR. GWIN(2,II) <= 1.0D-3 .OR. GWIN(3,II) <= 1.0D-3) THEN
-            ! 警告但不跳過，使用最小視窗大小
-            IF (I <= 5) THEN
-                WRITE(*,*) 'WARNING: Small GWIN detected at node ', II
-                WRITE(*,*) '  GWIN = ', GWIN(1,II), GWIN(2,II), GWIN(3,II)
-            END IF
-            ! 可以選擇設定最小值或跳過
-            ! 選項1：跳過
-            ! PHI(I) = 0.0D0; PHI_X(I) = 0.0D0; PHI_Y(I) = 0.0D0; PHI_Z(I) = 0.0D0
-            ! CYCLE
-            ! 選項2：繼續計算但發出警告
-        END IF
-        
-        ! 歸一化座標用於核函數評估
-        XMXI_OA(I) = (X(1) - GCOO(1,II)) / GWIN(1,II)
-        YMYI_OA(I) = (X(2) - GCOO(2,II)) / GWIN(2,II)
-        ZMZI_OA(I) = (X(3) - GCOO(3,II)) / GWIN(3,II)
+        XMXI_OA(I) = (X(1) -  GCOO(1,II)) /GWIN(1,II)
+        YMYI_OA(I) = (X(2) -  GCOO(2,II)) /GWIN(2,II)
+        ZMZI_OA(I) = (X(3) -  GCOO(3,II)) /GWIN(3,II)
 
-IF (SHSUP) THEN
-            ! 球形支撐域
-            DIA(I) = SQRT(XMXI_OA(I)**2 + YMYI_OA(I)**2 + ZMZI_OA(I)**2)
-            CALL MLS_KERNEL0(DIA(I), CONT, PHI(I), PHIX_X, ISZERO, ierr_mls)
-            
-            ! 球形支撐域（不進行體積歸一化）
-            !PHI(I) = PHI(I) / (AVG_WIN**3)
+        IF (SHSUP) THEN
+ !           DENOM = (GWIN(1,II)*GWIN(2,II)*GWIN(3,II))**(1.D0/3.D0)
+            DIA(I) = SQRT(XMXI_OA(I)**2+YMYI_OA(I)**2+ZMZI_OA(I)**2)
 
-            IF (ierr_mls /= 0) THEN
-                SHP(I) = 0.0D0
-                SHPD(:,I) = 0.0D0
-                CYCLE
-            END IF
-
-            ! 簡單除錯輸出
-            IF (I <= 3) THEN
-                WRITE(*,*) 'DEBUG RK1 SHSUP: I=', I, ' DIA=', DIA(I)
-                WRITE(*,*) '  GWIN=', GWIN(1,II), GWIN(2,II), GWIN(3,II)
-                WRITE(*,*) '  PHI=', PHI(I)
-            END IF
+            CALL MLS_KERNEL0(DIA(I),GWIN(1,II),CONT,PHI(I),PHIX_X,ISZERO)
             
             IF (IMPL.EQ.1) THEN
-                ! Implicit formulation (not implemented)
+
+            ELSE
+                IF  (DIA(I).LE.(1.0d-13)) THEN
+                    
+                   ! IF  (YMYI_OA(I).LE.(1.0d-13)) THEN
+            
+                        !IF  (ZMZI_OA(I).LE.(1.0d-13)) THEN
+                            DRDX = 0.0d0
+                            DRDY = 0.0d0
+                            DRDZ = 0.0d0
+                       ! ENDIF
+                    !ENDIF
                 ELSE
-                    DRDX = (X(1) - GCOO(1,II))/GWIN(1,II)**2/DIA(I)
-                    DRDY = (X(2) - GCOO(2,II))/GWIN(2,II)**2/DIA(I)
-                    DRDZ = (X(3) - GCOO(3,II))/GWIN(3,II)**2/DIA(I)
+                    DRDX = (X(1) -  GCOO(1,II))/GWIN(1,II)**2/DIA(I)
+                    DRDY = (X(2) -  GCOO(2,II))/GWIN(2,II)**2/DIA(I)
+                    DRDZ = (X(3) -  GCOO(3,II))/GWIN(3,II)**2/DIA(I)
                 ENDIF
                 
                 PHI_X(I) = PHIX_X*DRDX
                 PHI_Y(I) = PHIX_X*DRDY
                 PHI_Z(I) = PHIX_X*DRDZ
-     
-ELSE
-            ! 張量積支撐域（座標已在前面歸一化）
-            CALL MLS_KERNEL0(ABS(XMXI_OA(I)), CONT, PHIX, PHIX_X, ISZERO, ierr_mls)
-            IF (ierr_mls /= 0) THEN
-                SHP(I) = 0.0D0; SHPD(:,I) = 0.0D0; CYCLE;
-            END IF
-            CALL MLS_KERNEL0(ABS(YMYI_OA(I)), CONT, PHIY, PHIY_Y, ISZERO, ierr_mls)
-            IF (ierr_mls /= 0) THEN
-                SHP(I) = 0.0D0; SHPD(:,I) = 0.0D0; CYCLE;
-            END IF
-            CALL MLS_KERNEL0(ABS(ZMZI_OA(I)), CONT, PHIZ, PHIZ_Z, ISZERO, ierr_mls)
-            IF (ierr_mls /= 0) THEN
-                SHP(I) = 0.0D0; SHPD(:,I) = 0.0D0; CYCLE;
-            END IF
+            ENDIF
+            
+            PHI_SUM = PHI_SUM + PHI(I)
 
-            ! 計算張量積（不除以體積，與 OpenMP 版本一致）
+        ELSE
+
+
+            CALL MLS_KERNEL0(ABS(XMXI_OA(I)),GWIN(1,II),CONT,PHIX,PHIX_X,ISZERO)
+            CALL MLS_KERNEL0(ABS(YMYI_OA(I)),GWIN(2,II),CONT,PHIY,PHIY_Y,ISZERO)
+            CALL MLS_KERNEL0(ABS(ZMZI_OA(I)),GWIN(3,II),CONT,PHIZ,PHIZ_Z,ISZERO)
+
             !DENOM = GWIN(1,II)*GWIN(2,II)*GWIN(3,II)
             PHI(I) = PHIX*PHIY*PHIZ !/DENOM
-            
-            ! 檢查歸一化座標是否在合理範圍內
-            IF (I <= 3 .OR. (PHI(I) > 0.1D0 .AND. I <= 10)) THEN
-                WRITE(*,*) 'DEBUG RK1 TENSOR: I=', I, ' Node=', II
-                WRITE(*,*) '  Raw distance: ', (X(1)-GCOO(1,II)), (X(2)-GCOO(2,II)), (X(3)-GCOO(3,II))
-                WRITE(*,*) '  Window size: ', GWIN(1,II), GWIN(2,II), GWIN(3,II)
-                WRITE(*,*) '  Normalized: ', ABS(XMXI_OA(I)), ABS(YMYI_OA(I)), ABS(ZMZI_OA(I))
-                WRITE(*,*) '  PHIX=', PHIX, ' PHIY=', PHIY, ' PHIZ=', PHIZ
-                WRITE(*,*) '  PHI=', PHI(I)
-                ! 計算預期的貢獻
-                IF (LN > 0) THEN
-                    WRITE(*,*) '  Expected contribution to sum: PHI*LN ≈ ', PHI(I)*LN
-                END IF
-            END IF
 
-            IF (XMXI_OA(I).EQ.0) THEN
-                DRDX = 0.0d0
-            ELSE
-                DRDX = SIGN(1.0D0, XMXI_OA(I)) / GWIN(1,II)
-            ENDIF
 
-            IF (YMYI_OA(I).EQ.0) THEN
-                DRDY = 0.0d0
-            ELSE
-                DRDY = SIGN(1.0D0, YMYI_OA(I)) / GWIN(2,II)
-            ENDIF
 
-            IF (ZMZI_OA(I).EQ.0) THEN
-                DRDZ = 0.0d0
-            ELSE
-                DRDZ = SIGN(1.0D0, ZMZI_OA(I)) / GWIN(3,II)
-            ENDIF
+!            IF (IMPL.EQ.1) THEN
 
-            ! 應用 chain rule
-            PHI_X(I) = PHIX_X * PHIY * PHIZ * DRDX
-            PHI_Y(I) = PHIX * PHIY_Y * PHIZ * DRDY
-            PHI_Z(I) = PHIX * PHIY * PHIZ_Z * DRDZ
+!            ELSE
+                IF (XMXI_OA(I).EQ.0) THEN
+                    DRDX = 0.0d0
+                ELSEIF (XMXI_OA(I).GE.0) THEN
+                    DRDX = 1.0d0/GWIN(1,II)
+                ELSEIF (XMXI_OA(I).LE.0) THEN
+                    DRDX = -1.0d0/GWIN(1,II)
+                ENDIF
+
+                IF (YMYI_OA(I).EQ.0) THEN
+                    DRDY = 0.0d0
+                ELSEIF (YMYI_OA(I).GE.0) THEN
+                    DRDY = 1.0d0/GWIN(1,II)
+                ELSEIF (YMYI_OA(I).LE.0) THEN
+                    DRDY = -1.0d0/GWIN(1,II)
+                ENDIF
+
+                IF (ZMZI_OA(I).EQ.0) THEN
+                    DRDZ = 0.0d0
+                ELSEIF (ZMZI_OA(I).GE.0) THEN
+                    DRDZ = 1.0d0/GWIN(1,II)
+                ELSEIF (ZMZI_OA(I).LE.0) THEN
+                    DRDZ = -1.0d0/GWIN(1,II)
+                ENDIF
+
+                PHI_X(I) = PHIX_X*PHIY*PHIZ*DRDX
+                PHI_Y(I) = PHIX*PHIY_Y*PHIZ*DRDY
+                PHI_Z(I) = PHIX*PHIY*PHIZ_Z*DRDZ
+!            ENDIF
+
 
             !
             ! SINGULAR KERNAL
+            ! #TODO
             !
             IF (EBCS(II)) THEN
+
                 WINDOW_MOD = 1.0d0/(DSQRT(XMXI_OA(I)**2 + YMYI_OA(I)**2 + ZMZI_OA(I)**2) + 1.0E-015)
 
                 ! FOR DSHP
-                PHI_X(I) = PHI_X(I)*WINDOW_MOD - PHI(I)*WINDOW_MOD*WINDOW_MOD*WINDOW_MOD*XMXI_OA(I)/GWIN(1,II)
-                PHI_Y(I) = PHI_Y(I)*WINDOW_MOD - PHI(I)*WINDOW_MOD*WINDOW_MOD*WINDOW_MOD*YMYI_OA(I)/GWIN(2,II)
-                PHI_Z(I) = PHI_Z(I)*WINDOW_MOD - PHI(I)*WINDOW_MOD*WINDOW_MOD*WINDOW_MOD*ZMZI_OA(I)/GWIN(3,II)
+                PHI_X(I) = PHI_X(I)*WINDOW_MOD - PHI(I)*WINDOW_MOD*WINDOW_MOD*WINDOW_MOD*XMXI_OA(I)/GWIN(1,II)  ! x
+                PHI_Y(I) = PHI_Y(I)*WINDOW_MOD - PHI(I)*WINDOW_MOD*WINDOW_MOD*WINDOW_MOD*YMYI_OA(I)/GWIN(2,II)  ! y
+                PHI_Z(I) = PHI_Z(I)*WINDOW_MOD - PHI(I)*WINDOW_MOD*WINDOW_MOD*WINDOW_MOD*ZMZI_OA(I)/GWIN(3,II)  ! z
                 ! FOR SHAP
                 PHI(I) = PHI(I)*WINDOW_MOD
+
+            END IF
+            PHI_SUM = PHI_SUM + PHI(I)
+            
+            ! 在計算PHI後，輸出前幾個值
+            IF (DEBUG_COUNT <= 5 .AND. I <= 3) THEN
+                WRITE(*,*) '  DEBUG OpenMP PHI calc: I=', I, ' Node=', II
+                WRITE(*,*) '    Raw coords: ', (X(1)-GCOO(1,II)), (X(2)-GCOO(2,II)), (X(3)-GCOO(3,II))
+                WRITE(*,*) '    Normalized coords: ', XMXI_OA(I), YMYI_OA(I), ZMZI_OA(I)
+                IF (.NOT. SHSUP) THEN
+                    WRITE(*,*) '    PHIX=', PHIX, ' PHIY=', PHIY, ' PHIZ=', PHIZ
+                END IF
+                WRITE(*,*) '    PHI=', PHI(I)
             END IF
         ENDIF
-        
-        ! 檢查 PHI 值的合理性
-        IF (PHI(I) < 0.0D0 .OR. PHI(I) > 1.1D0) THEN
-            ! PHI 應該在 [0, 1] 範圍內
-            PHI(I) = 0.0D0
-        END IF
-        
-        ! 檢查這個鄰居是否在支撐域內（PHI > 0）
-        IF (PHI(I) > 1.0D-12) THEN
-            VALID_NEIGHBORS = VALID_NEIGHBORS + 1
-        END IF
-        
-        PHI_SUM = PHI_SUM + PHI(I)
         DO J = 1, MSIZE
             DO K = 1, MSIZE
                 M_FULL(J,K) = M_FULL(J,K) + H_FULL(J,1)*H_FULL(K,1)*PHI(I)
@@ -354,42 +293,21 @@ ELSE
 
             END DO
         END DO
-    !WRITE(*,*) 'DEBUG RK1: After neighbor loop - PHI_SUM = ', PHI_SUM, ' LN = ', LN
-    ! 移除過多的除錯輸出，只保留關鍵診斷
-    IF (ABS(PHI_SUM) < 1.0D-10 .OR. ABS(PHI_SUM - 1.0D0) > 0.1D0) THEN
-        WRITE(*,*) 'WARNING RK1: Abnormal PHI_SUM = ', PHI_SUM, ' LN = ', LN
-    END IF
+        
         CONTINUE
 
     END DO
     
-    ! 儲存原始PHI_SUM用於診斷
-    PHI_SUM_RAW = PHI_SUM
-    
-    ! 檢查並修正異常的 PHI_SUM
-    IF (PHI_SUM > 1000.0D0) THEN
-        WRITE(*,*) 'ERROR: Raw PHI_SUM = ', PHI_SUM_RAW, ' at node with LN = ', LN
-        WRITE(*,*) '  Forcing normalization to avoid numerical issues'
+    ! 輸出PHI_SUM診斷
+    IF (DEBUG_COUNT <= 5) THEN
+        WRITE(*,*) 'DEBUG OpenMP: Raw PHI_SUM = ', PHI_SUM
+        WRITE(*,*) '  First 5 PHI values: ', (PHI(J), J=1,MIN(5,LN))
+        WRITE(*,*) '  Sum of first 10: ', SUM(PHI(1:MIN(10,LN)))
+        IF (ABS(PHI_SUM - 1.0D0) > 0.1D0) THEN
+            WRITE(*,*) '  WARNING: PHI_SUM deviates from unity!'
+        END IF
     END IF
-    
-    ! 歸一化PHI值
-    IF (ABS(PHI_SUM-1.0D0) > 1.0D-8 .AND. PHI_SUM > 1.0D-12) THEN
-        DO I = 1, LN
-            PHI(I) = PHI(I) / PHI_SUM
-        END DO
-        PHI_SUM = 1.0D0
-    END IF
-    
-    ! 報告原始和歸一化後的值
-    IF (ABS(PHI_SUM_RAW - 1.0D0) > 0.1D0) THEN
-        WRITE(*,*) 'WARNING RK1: Raw PHI_SUM = ', PHI_SUM_RAW, ' LN = ', LN
-        WRITE(*,*) '  After normalization: PHI_SUM = ', PHI_SUM
-    END IF
-    WRITE(*,*) 'DEBUG: Valid neighbors = ', VALID_NEIGHBORS, ' out of ', LN
 
-    IF (ABS(PHI_SUM - 1.0D0) > 0.1D0) THEN
-        WRITE(*,*) 'WARNING: Poor partition of unity, PHI_SUM = ', PHI_SUM
-    END IF
     !
     ! GET M* IF QUASI-LINEAR
     !
@@ -447,38 +365,10 @@ ELSE
 
     END IF
 
-! 新增除錯：檢查 M_FULL 矩陣
-IF (LN > 0) THEN
-    CALL DETERMINANT(M_FULL, DET)
-    IF (ABS(DET) < 1.0D-12) THEN
-        WRITE(*,*) 'WARNING: RK1 - M_FULL nearly singular, DET = ', DET
-        WRITE(*,*) '  PHI_SUM = ', PHI_SUM
-        WRITE(*,*) '  LN = ', LN
-    END IF
-END IF
-
-IF (PHI_SUM < 1.0D-10) THEN
-    ! PHI_SUM 太小，矩陣可能奇異
-    WRITE(*,*) 'ERROR: PHI_SUM too small = ', PHI_SUM, ' LN = ', LN
-    ierr_inv = 1
-ELSE
     IF (MSIZE.EQ.4) THEN
-        CALL M44INV(M_FULL, MINV, ierr_inv)
+    CALL M44INV(M_FULL, MINV)
     ELSE
-        CALL INVERSE(M_FULL, MSIZE, MINV, ierr_inv)
-    END IF
-END IF
-    
-    ! 錯誤處理 - 確保不會因為 GPU 限制而改變行為
-    IF (ierr_inv /= 0) THEN 
-        ! 設定錯誤值但不停止執行（與 OpenMP 版本一致）
-        DO I=1,LNMAX
-            SHP(I) = 0.0D0
-            SHPD(1,I) = 0.0D0
-            SHPD(2,I) = 0.0D0
-            SHPD(3,I) = 0.0D0
-        END DO
-        RETURN
+    CALL INVERSE(M_FULL, MSIZE, MINV)
     END IF
     
     H0 = 0.0d0
@@ -554,12 +444,6 @@ END IF
 
         SHP(I) = C(1,1)*PHI(I)
 
-
-    IF (I <= 3) THEN
-        WRITE(*,*) 'DEBUG RK1 SHP: I=', I
-        WRITE(*,*) '  C11=', C(1,1), ' PHI=', PHI(I)
-        WRITE(*,*) '  SHP=', SHP(I)
-    END IF
 !        IF (IMPL.EQ.1) THEN
 
 !            CX = MATMUL(BX,H_FULL)
@@ -597,8 +481,6 @@ END IF
         CY = CY +SHPD(1,I)*GCOO(1,II)
     ENDDO
     CY = CY-1.0D0
-
-
     !IF(ABS(SUM(SHPD(1,1:LN)-0.D0).GT. 1.0E-03)) THEN
     !WRITE(*,*) 'SHPD1 ERROR: SUM = ', SUM(SHPD(1,1:LN))
     !PAUSE
@@ -641,7 +523,7 @@ END IF
 
 
     SUBROUTINE FILL_H(XMXI_OA,YMYI_OA,ZMZI_OA,MSIZE,DEG,H_FULL)
-    !$ACC ROUTINE SEQ
+
     IMPLICIT NONE
 
     DOUBLE PRECISION, INTENT(IN)::XMXI_OA,YMYI_OA,ZMZI_OA
@@ -685,7 +567,7 @@ END IF
     ! Derivative H function
 
     SUBROUTINE DERIV_H(XMXI_OA,YMYI_OA,ZMZI_OA,MSIZE,DEG,H_X,H_Y,H_Z)
-    !$ACC ROUTINE SEQ
+
     IMPLICIT NONE
 
     DOUBLE PRECISION, INTENT(IN)::XMXI_OA,YMYI_OA,ZMZI_OA
@@ -760,8 +642,7 @@ END IF
     SUBROUTINE UDFM_SHAPE_TENSOR(X, DEG, MSIZE, CONT, IMPL, GCOO, GVOL, GWIN, GNUMP, LSTACK, LN, LNMAX, EBCS,SELF_EBC, &
         QL, QL_COEF,QL_LEN,  &
         SHP, INVK_MATX)
-    !$ACC ROUTINE SEQ
-!    USE INVERSE_MOD
+
     !
     ! THIS SUBROUTINE IS TO FORM THE UNDEFORMED SHAPE TENSOR FOR PERIDYNAMICS AT THE FIRST STEP
     !
@@ -813,7 +694,6 @@ END IF
     DOUBLE PRECISION:: XMXI_OA(LNMAX)
     DOUBLE PRECISION:: YMYI_OA(LNMAX)
     DOUBLE PRECISION:: ZMZI_OA(LNMAX)
-    DOUBLE PRECISION:: DIA(LNMAX)
 
     DOUBLE PRECISION:: TEST
 
@@ -824,14 +704,11 @@ END IF
     DOUBLE PRECISION:: K_MATX(MSIZE-1,MSIZE-1)
     !
     LOGICAL:: ISZERO
-    INTEGER :: ierr_inv, ierr_mls
-    INTEGER :: VALID_NEIGHBORS
+
     !
     ! KEEP SOME OF THE STATEMENT FOR LATER USE, SUCH AS SINGULAR KERNEL, QL
     ! #TODO
-    ierr_inv = 0
-    ierr_mls = 0
-    VALID_NEIGHBORS = 0
+    !
     !IF (SELF_EBC) THEN
     IF (.FALSE.) THEN
         DO I=1,LN
@@ -864,18 +741,6 @@ END IF
     M_X = 0.0d0
     M_Y = 0.0d0
     M_Z = 0.0d0
-    
-    ! 初始化所有 PHI 相關陣列
-    DO I = 1, LNMAX
-        PHI(I) = 0.0D0
-        PHI_X(I) = 0.0D0
-        PHI_Y(I) = 0.0D0
-        PHI_Z(I) = 0.0D0
-        XMXI_OA(I) = 0.0D0
-        YMYI_OA(I) = 0.0D0
-        ZMZI_OA(I) = 0.0D0
-        DIA(I) = 0.0D0
-    END DO
 
     K_MATX = 0.d0
 
@@ -895,34 +760,12 @@ END IF
         YMYI_OA(I) = -(X(2) -  GCOO(2,II)) /GWIN(2,II)
         ZMZI_OA(I) = -(X(3) -  GCOO(3,II)) /GWIN(3,II)
 
-        CALL MLS_KERNEL0(ABS(XMXI_OA(I)), CONT,PHIX,PHIX_X,ISZERO, ierr_mls)
-        IF (ierr_mls /= 0) THEN
-            SHP(I) = 0.0D0; CYCLE;
-        END IF
-        CALL MLS_KERNEL0(ABS(YMYI_OA(I)), CONT,PHIY,PHIY_Y,ISZERO, ierr_mls)
-        IF (ierr_mls /= 0) THEN
-            SHP(I) = 0.0D0; CYCLE;
-        END IF
-        CALL MLS_KERNEL0(ABS(ZMZI_OA(I)), CONT,PHIZ,PHIZ_Z,ISZERO, ierr_mls)
-        IF (ierr_mls /= 0) THEN 
-            ! Handle MLS_KERNEL0 error
-            SHP(I) = HUGE(0.0D0); CYCLE;
-        END IF
+        CALL MLS_KERNEL0(ABS(XMXI_OA(I)),GWIN(1,II),CONT,PHIX,PHIX_X,ISZERO)
+        CALL MLS_KERNEL0(ABS(YMYI_OA(I)),GWIN(2,II),CONT,PHIY,PHIY_Y,ISZERO)
+        CALL MLS_KERNEL0(ABS(ZMZI_OA(I)),GWIN(3,II),CONT,PHIZ,PHIZ_Z,ISZERO)
 
-! 不除以體積（與 OpenMP 版本一致）
-PHI(I) = PHIX*PHIY*PHIZ
-
-            IF (I <= 5) THEN
-                WRITE(*,*) 'DEBUG UDFM_SHAPE_TENSOR: I=', I, ' II=', II
-                WRITE(*,*) '  XMXI_OA=', ABS(XMXI_OA(I)), ' PHIX=', PHIX
-                WRITE(*,*) '  YMYI_OA=', ABS(YMYI_OA(I)), ' PHIY=', PHIY
-                WRITE(*,*) '  ZMZI_OA=', ABS(ZMZI_OA(I)), ' PHIZ=', PHIZ
-                WRITE(*,*) '  PHI=', PHI(I)
-            END IF
-        IF (PHI(I) > 1.0D-12) THEN
-            VALID_NEIGHBORS = VALID_NEIGHBORS + 1
-        END IF
-            PHI_SUM = PHI_SUM + PHI(I)
+        !DENOM = GWIN(1,II)*GWIN(2,II)*GWIN(3,II)
+        PHI(I) = PHIX*PHIY*PHIZ !/DENOM
 
         DO J = 1,MSIZE-1
             DO K = 1,MSIZE-1
@@ -939,12 +782,7 @@ PHI(I) = PHIX*PHIY*PHIZ
     END DO
 
 
-    CALL INVERSE(K_MATX, MSIZE-1, INVK_MATX, ierr_inv)
-    IF (ierr_inv /= 0) THEN 
-        ! 處理 K_MATX 求逆失敗的情況 (e.g., INVK_MATX = HUGE(0.0D0); RETURN)
-        INVK_MATX = HUGE(0.0D0); RETURN;
-    END IF
-
+    CALL INVERSE(K_MATX, MSIZE-1, INVK_MATX)
 
 
     RETURN
@@ -954,7 +792,7 @@ PHI(I) = PHIX*PHIY*PHIZ
 
     SUBROUTINE DFM_SHAPE_TENSOR(X_0,X_t, DEG, MSIZE, CONT, GCOO, GVOL, GWIN, GNUMP, LSTACK, LN, LNMAX,  &
         LCOO_CUURENT, SHP, S_MATX)
-    !$ACC ROUTINE SEQ
+
     !
     ! THIS SUBROUTINE IS TO FORM THE DEFORMED SHAPE TENSOR FOR PERIDYNAMICS AT THE FIRST STEP
     !
@@ -1030,245 +868,3 @@ PHI(I) = PHIX*PHIY*PHIZ
 
     RETURN
     END SUBROUTINE
-SUBROUTINE MLS_KERNEL0(XN,CONT,PHI,PHIX,ISZERO, ierr)
-    !$ACC ROUTINE SEQ
-    IMPLICIT NONE
-    DOUBLE PRECISION, INTENT(IN):: XN  ! 已歸一化的距離
-    INTEGER, INTENT(IN):: CONT
-    DOUBLE PRECISION, INTENT(OUT):: PHI,PHIX
-    LOGICAL, INTENT(OUT):: ISZERO
-    INTEGER, INTENT(OUT) :: ierr
-    
-    DOUBLE PRECISION :: XSA
-    
-    ISZERO = .FALSE.
-    ierr = 0
-    
-    XSA = XN  ! 輸入已經歸一化
-    
-    IF (CONT.EQ.3) THEN !CUBIC SPLINE
-        IF (XSA.LE.0.5D0) THEN
-            PHI = 2.0D0/3.0D0 - 4.0D0*XSA**2 + 4.0D0*XSA**3
-            IF (XSA .GT. 1.0D-12) THEN
-                PHIX = -8.0D0*XSA + 12.0D0*XSA**2
-            ELSE
-                PHIX = 0.0D0
-            END IF
-        ELSEIF (XSA.LE.1.0D0) THEN
-            PHI = 4.0D0/3.0D0 - 4.0D0*XSA + 4.0D0*XSA**2 - 4.0D0/3.0D0*XSA**3
-            PHIX = -4.0D0 + 8.0D0*XSA - 4.0D0*XSA**2
-        ELSE
-            PHI = 0.0D0
-            PHIX = 0.0D0
-            ISZERO = .TRUE.
-        END IF
-        
-        ! 體積歸一化（如果需要）
-        ! 對於3D張量積：體積 = (2*WIN)^3 = 8*WIN^3
-        ! 對於球形支撐：體積 = 4/3*PI*WIN^3
-        ! 目前暫時保留未歸一化，等待與OpenMP版本確認
-        ! IF (NEED_VOLUME_NORMALIZATION) THEN
-        !     DOUBLE PRECISION :: VOL_FACTOR
-        !     VOL_FACTOR = 8.0D0  ! 張量積情況
-        !     PHI = PHI / VOL_FACTOR
-        !     PHIX = PHIX / VOL_FACTOR
-        ! END IF
-        
-    ELSE
-        ! 不支援的核函數類型
-        PHI = 0.0D0
-        PHIX = 0.0D0
-        ierr = 1
-    END IF
-    
-    RETURN
-END SUBROUTINE MLS_KERNEL0
-
-
-	  SUBROUTINE HUGHES_WINGET(LMAT, & !IN
-                        ROT,STRAIN,D) !OUT
-	  !$ACC ROUTINE SEQ
-	  ! FUNCTION OF THIS SUBROUTINE:
-	  !
-	  ! COMPUTE THE ROTATION AND STRAIN TENSORS USING
-	  ! THE SO-CALLED HUGHES-WINGET ALGORITHM
-	  !
-      ! USE FINT_FUNCTIONS ! 已在模組層級 USE
-      ! IMPLICIT NONE ! 已在模組層級定義
-	  !
-	  !GLOBAL IN-OUT
-	  DOUBLE PRECISION, INTENT(IN):: LMAT(3,3)
-	  DOUBLE PRECISION, INTENT(OUT):: ROT(3,3),STRAIN(6)
-      INTEGER :: ierr_inv
-	  !LOCAL VARIABLES
-	  DOUBLE PRECISION:: INV_LMAT(3,3) ! 未被使用
-	  DOUBLE PRECISION:: IDENT(3,3)
-	  DOUBLE PRECISION:: A(3,3),IW(3,3),IW_INV(3,3)
-	  DOUBLE PRECISION:: A_INV(3,3)
-	  DOUBLE PRECISION:: G(3,3)
-	  DOUBLE PRECISION:: G_T(3,3)
-	  DOUBLE PRECISION:: E(3,3),W(3,3)
-      DOUBLE PRECISION:: D(6)
-	  DATA IDENT/ 1.0d0, 0.0d0, 0.0d0, &
-	                  0.0d0, 1.0d0, 0.0d0, &
-	                  0.0d0, 0.0d0, 1.0d0/
-	  !
-	  ! GET A=(I + 0.5*L)^-1
-	  !
-	  A = IDENT + 0.5d0*LMAT
-	  !
-      !CALL INVERSE(A, 3, A_INV)
-	  CALL INV3 (A, A_INV, ierr_inv) ! INV3 來自 INVERSE_MOD
-      IF (ierr_inv /= 0) THEN 
-        ROT = 0.0D0; STRAIN = 0.0D0; D = 0.0D0; RETURN;
-      END IF
-
-
-
-	  !
-	  ! GET G = L*A
-	  !
-	  G = MATMUL(LMAT,A_INV)
-	  G_T=TRANSPOSE(G)
-	  !
-	  ! GET W = 1/2*(G-G^T)
-	  ! GET E = 1/2*(G+G^T)
-	  !
-	  W =    0.5d0*(G - G_T)
-      
-      !ROT = I + (I-0.5D*W)^-1*W
-      IW = IDENT-0.5D0*W
-	  CALL INV3 (IW, IW_INV, ierr_inv)
-      IF (ierr_inv /= 0) THEN 
-        ROT = 0.0D0; STRAIN = 0.0D0; D = 0.0D0; RETURN;
-      END IF
-
-
-      !CALL INVERSE(IW, 3, IW_INV)
-      ROT = IDENT + MATMUL(IW_INV,W)
-      
-      
-	  E = 0.5d0*(G + G_T)
-	  !
-	  STRAIN = TENSOR_2_VTENSOR(E) ! TENSOR_2_VTENSOR 來自 FINT_FUNCTIONS
-      D=STRAIN
-	  !
-      !TIMES FACT 2 FOR THE SHEAR COMPONENTS, TO BE CONSISTANT WITH THE STRAIN DEFINITION
-      !
-      STRAIN(4) = 2.D0*STRAIN(4)
-      STRAIN(5) = 2.D0*STRAIN(5)
-      STRAIN(6) = 2.D0*STRAIN(6)
-      !WRITE(*,*)'FACT 2'
-	  RETURN
-	  END SUBROUTINE HUGHES_WINGET
-	  
-    
-	  SUBROUTINE D_HUGHES_WINGET(LMAT,DLMAT, & !IN
-	                           ROT,DSTRAIN) !OUT
-	  !$ACC ROUTINE SEQ
-	  ! FUNCTION OF THIS SUBROUTINE:
-	  !
-	  ! COMPUTE THE ROTATION AND STRAIN TENSORS USING
-	  ! THE SO-CALLED HUGHES-WINGET ALGORITHM
-	  !
-      ! USE FINT_FUNCTIONS ! 已在模組層級 USE
-      ! IMPLICIT NONE ! 已在模組層級定義
-	  !
-	  !GLOBAL IN-OUT
-	  DOUBLE PRECISION, INTENT(IN):: LMAT(3,3)
-	  DOUBLE PRECISION, INTENT(IN):: DLMAT(3,3)
-	  DOUBLE PRECISION, INTENT(OUT):: ROT(3,3) ! ROT 未被賦值
-	  DOUBLE PRECISION, INTENT(OUT):: DSTRAIN(6)
-      INTEGER :: ierr_inv
-	  !
-	  !LOCAL VARIABLES
-	  DOUBLE PRECISION:: INV_LMAT(3,3) ! 未被使用
-	  DOUBLE PRECISION:: IDENT(3,3)
-	  DOUBLE PRECISION:: A(3,3),DA(3,3) ! IW, IW_INV 在此未使用
-	  DOUBLE PRECISION:: A_INV(3,3), IDA(3,3), TEMP1(3,3), TEMP2(3,3)
-	  DOUBLE PRECISION:: DG(3,3)
-	  DOUBLE PRECISION:: DG_T(3,3)
-	  DOUBLE PRECISION:: DE(3,3)
-	  DATA IDENT/ 1.0d0, 0.0d0, 0.0d0, &
-	                  0.0d0, 1.0d0, 0.0d0, &
-	                  0.0d0, 0.0d0, 1.0d0/
-	  !
-	  ! GET A=(I + 0.5*L)^-1
-	  !
-	  A = IDENT + 0.5d0*LMAT
-	  !
-	  CALL INV3 (A, A_INV, ierr_inv) ! INV3 來自 INVERSE_MOD
-      IF (ierr_inv /= 0) THEN 
-        DSTRAIN = 0.0D0; ROT = 0.0D0; RETURN;
-      END IF
-
-
-      
-      !CALL INVERSE(A, 3, A_INV)
-      
-	  !
-	  ! GET A,i
-	  !
-	  !!DA = 0.5d0*A
-	  DA = 0.5d0*DLMAT
-      
-	  !
-	  ! GET INV(A,i)
-	  !
-	  IDA = MATMUL(-A_INV,DA)
-	  IDA = MATMUL(IDA,A_INV)
-	  !
-	  ! GET TEMP MATS
-	  !
-	  !!TEMP1 = MATMUL(DLMAT,A)
-	  !!TEMP2 = MATMUL(LMAT,DA)
-      
-	  TEMP1 = MATMUL(DLMAT,A_INV)
-	  TEMP2 = MATMUL(LMAT,IDA)
-      
-      
-	  !
-	  ! DG = DL*A + L*DA
-	  !
-	  DG = TEMP1 + TEMP2
-	  DG_T=TRANSPOSE(DG)
-	  !
-	  ! GET DW = 1/2*(DG-DG^T)
-	  ! GET DE = 1/2*(DG+DG^T)
-	  !
-	  DE = 0.5d0*(DG + DG_T)
-	  !!DE = DG + DG_T
-      
-	  !
-	  DSTRAIN = TENSOR_2_VTENSOR(DE) ! TENSOR_2_VTENSOR 來自 FINT_FUNCTIONS
-	  !
-      !TIMES FACT 2 FOR THE SHEAR COMPONENTS, TO BE CONSISTANT WITH THE STRAIN DEFINITION
-      !
-      DSTRAIN(4) = 2.D0*DSTRAIN(4)
-      DSTRAIN(5) = 2.D0*DSTRAIN(5)
-      DSTRAIN(6) = 2.D0*DSTRAIN(6)
-      ! 注意：輸出參數 ROT 在此子常式中並未被賦值。
-      ! 如果不需要輸出 ROT，應從參數列表中移除。
-      ROT = 0.0D0
-	  RETURN
-	  END SUBROUTINE D_HUGHES_WINGET
-
-      SUBROUTINE ROTATE_TENSOR(TRANSFORMATION_MATRIX_6X6, TENSOR_VOIGT_INOUT)
-      !$ACC ROUTINE SEQ
-      ! IMPLICIT NONE ! 已在模組層級定義
-      ! FUNCTION OF THIS SUBROUTINE:
-      ! ROTATE A (VOIGT NOTATION) TENSOR USING A GIVEN 6X6 TRANSFORMATION MATRIX
-      !
-      DOUBLE PRECISION, INTENT(IN)    :: TRANSFORMATION_MATRIX_6X6(6,6)
-      DOUBLE PRECISION, INTENT(INOUT) :: TENSOR_VOIGT_INOUT(6)
-
-      !LOCAL VARIABLES
-      DOUBLE PRECISION :: TEMP_TENSOR_VOIGT(6)
-
-      ! S_rotated_voigt = T_transformation * S_voigt_old
-      TEMP_TENSOR_VOIGT = MATMUL(TRANSFORMATION_MATRIX_6X6, TENSOR_VOIGT_INOUT)
-      TENSOR_VOIGT_INOUT = TEMP_TENSOR_VOIGT
-
-      RETURN
-      END SUBROUTINE ROTATE_TENSOR
-END MODULE RK_PROCEDURES_MOD
