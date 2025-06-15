@@ -82,16 +82,14 @@ CONTAINS
     DOUBLE PRECISION:: YMYI_OA(LNMAX)
     DOUBLE PRECISION:: ZMZI_OA(LNMAX)
     DOUBLE PRECISION:: DIA(LNMAX)
-    DOUBLE PRECISION:: DIA_UNS
     DOUBLE PRECISION:: TEST
-
+    
     DOUBLE PRECISION:: PHI_SUM,QL_PTS(3,6), QLX(3)
     DOUBLE PRECISION:: XM_QLX,YM_QLY,ZM_QLZ
     DOUBLE PRECISION:: DENOM
     LOGICAL:: ISZERO
     DOUBLE PRECISION:: DET
     INTEGER :: ierr_inv, ierr_mls
-    DOUBLE PRECISION :: AVG_WIN
 INTEGER :: VALID_NEIGHBORS
 ! 簡單的除錯輸出（避免複雜格式）
     LOGICAL, SAVE :: FIRST_RK1 = .TRUE.
@@ -192,26 +190,15 @@ END IF
             CYCLE
         END IF
         
-        ! 計算實際距離（不要過早歸一化）
-        XMXI_OA(I) = X(1) - GCOO(1,II)
-        YMYI_OA(I) = X(2) - GCOO(2,II)
-        ZMZI_OA(I) = X(3) - GCOO(3,II)
-        DIA_UNS = SQRT(XMXI_OA(I)**2 + YMYI_OA(I)**2 + ZMZI_OA(I)**2)
+        ! 歸一化座標用於核函數評估
+        XMXI_OA(I) = (X(1) - GCOO(1,II)) / GWIN(1,II)
+        YMYI_OA(I) = (X(2) - GCOO(2,II)) / GWIN(2,II)
+        ZMZI_OA(I) = (X(3) - GCOO(3,II)) / GWIN(3,II)
 
 IF (SHSUP) THEN
             ! 球形支撐域
-            ! 計算實際距離
             DIA(I) = SQRT(XMXI_OA(I)**2 + YMYI_OA(I)**2 + ZMZI_OA(I)**2)
-            
-            ! 不需要平均視窗大小
-            ! AVG_WIN = (GWIN(1,II) + GWIN(2,II) + GWIN(3,II)) / 3.0D0
-            
-            ! 球形支撐域需要各方向歸一化
-            XMXI_OA(I) = (X(1) - GCOO(1,II)) / GWIN(1,II)
-            YMYI_OA(I) = (X(2) - GCOO(2,II)) / GWIN(2,II)
-            ZMZI_OA(I) = (X(3) - GCOO(3,II)) / GWIN(3,II)
-            DIA(I) = SQRT(XMXI_OA(I)**2 + YMYI_OA(I)**2 + ZMZI_OA(I)**2)
-            CALL MLS_KERNEL0(DIA_UNS, GWIN(1,II), CONT, PHI(I), PHIX_X, ISZERO, ierr_mls)
+            CALL MLS_KERNEL0(DIA(I), GWIN(1,II), CONT, PHI(I), PHIX_X, ISZERO, ierr_mls)
             
             ! 球形支撐域（不進行體積歸一化）
             !PHI(I) = PHI(I) / (AVG_WIN**3)
@@ -225,7 +212,7 @@ IF (SHSUP) THEN
             ! 簡單除錯輸出
             IF (I <= 3) THEN
                 WRITE(*,*) 'DEBUG RK1 SHSUP: I=', I, ' DIA=', DIA(I)
-                WRITE(*,*) '  AVG_WIN=', AVG_WIN
+                WRITE(*,*) '  GWIN=', GWIN(1,II), GWIN(2,II), GWIN(3,II)
                 WRITE(*,*) '  PHI=', PHI(I)
             END IF
             
@@ -242,21 +229,16 @@ IF (SHSUP) THEN
                 PHI_Z(I) = PHIX_X*DRDZ
      
 ELSE
-            ! 張量積支撐域
-            ! 計算歸一化座標與原始距離
-            XMXI_OA(I) = (X(1) - GCOO(1,II)) / GWIN(1,II)
-            YMYI_OA(I) = (X(2) - GCOO(2,II)) / GWIN(2,II)
-            ZMZI_OA(I) = (X(3) - GCOO(3,II)) / GWIN(3,II)
-
-            CALL MLS_KERNEL0(ABS(X(1)-GCOO(1,II)), GWIN(1,II), CONT, PHIX, PHIX_X, ISZERO, ierr_mls)
+            ! 張量積支撐域（座標已在前面歸一化）
+            CALL MLS_KERNEL0(ABS(XMXI_OA(I)), GWIN(1,II), CONT, PHIX, PHIX_X, ISZERO, ierr_mls)
             IF (ierr_mls /= 0) THEN
                 SHP(I) = 0.0D0; SHPD(:,I) = 0.0D0; CYCLE;
             END IF
-            CALL MLS_KERNEL0(ABS(X(2)-GCOO(2,II)), GWIN(2,II), CONT, PHIY, PHIY_Y, ISZERO, ierr_mls)
+            CALL MLS_KERNEL0(ABS(YMYI_OA(I)), GWIN(2,II), CONT, PHIY, PHIY_Y, ISZERO, ierr_mls)
             IF (ierr_mls /= 0) THEN
                 SHP(I) = 0.0D0; SHPD(:,I) = 0.0D0; CYCLE;
             END IF
-            CALL MLS_KERNEL0(ABS(X(3)-GCOO(3,II)), GWIN(3,II), CONT, PHIZ, PHIZ_Z, ISZERO, ierr_mls)
+            CALL MLS_KERNEL0(ABS(ZMZI_OA(I)), GWIN(3,II), CONT, PHIZ, PHIZ_Z, ISZERO, ierr_mls)
             IF (ierr_mls /= 0) THEN
                 SHP(I) = 0.0D0; SHPD(:,I) = 0.0D0; CYCLE;
             END IF
@@ -796,7 +778,6 @@ END IF
     DOUBLE PRECISION:: YMYI_OA(LNMAX)
     DOUBLE PRECISION:: ZMZI_OA(LNMAX)
     DOUBLE PRECISION:: DIA(LNMAX)
-    DOUBLE PRECISION:: DIA_UNS
 
     DOUBLE PRECISION:: TEST
 
@@ -878,15 +859,15 @@ END IF
         YMYI_OA(I) = -(X(2) -  GCOO(2,II)) /GWIN(2,II)
         ZMZI_OA(I) = -(X(3) -  GCOO(3,II)) /GWIN(3,II)
 
-        CALL MLS_KERNEL0(ABS(X(1)-GCOO(1,II)), GWIN(1,II), CONT,PHIX,PHIX_X,ISZERO, ierr_mls)
+        CALL MLS_KERNEL0(ABS(XMXI_OA(I)), GWIN(1,II), CONT,PHIX,PHIX_X,ISZERO, ierr_mls)
         IF (ierr_mls /= 0) THEN
             SHP(I) = 0.0D0; CYCLE;
         END IF
-        CALL MLS_KERNEL0(ABS(X(2)-GCOO(2,II)), GWIN(2,II), CONT,PHIY,PHIY_Y,ISZERO, ierr_mls)
+        CALL MLS_KERNEL0(ABS(YMYI_OA(I)), GWIN(2,II), CONT,PHIY,PHIY_Y,ISZERO, ierr_mls)
         IF (ierr_mls /= 0) THEN
             SHP(I) = 0.0D0; CYCLE;
         END IF
-        CALL MLS_KERNEL0(ABS(X(3)-GCOO(3,II)), GWIN(3,II), CONT,PHIZ,PHIZ_Z,ISZERO, ierr_mls)
+        CALL MLS_KERNEL0(ABS(ZMZI_OA(I)), GWIN(3,II), CONT,PHIZ,PHIZ_Z,ISZERO, ierr_mls)
         IF (ierr_mls /= 0) THEN 
             ! Handle MLS_KERNEL0 error
             SHP(I) = HUGE(0.0D0); CYCLE;
@@ -1022,14 +1003,13 @@ SUBROUTINE MLS_KERNEL0(XN,WIN,CONT,PHI,PHIX,ISZERO, ierr)
     LOGICAL, INTENT(OUT):: ISZERO
     INTEGER, INTENT(OUT) :: ierr
     
-    DOUBLE PRECISION :: R, XSA
+    DOUBLE PRECISION :: XSA
     
     ISZERO = .FALSE.
     ierr = 0
     
-    ! 關鍵：XN 在張量積情況下已經是歸一化的，但在球形支撐域中不是
-    ! 需要根據調用情況決定是否歸一化
-    XSA = XN / WIN  ! 使用視窗長度進行歸一化
+    ! XN 現在總是已歸一化的輸入
+    XSA = XN  ! 不再進行歸一化
     
     IF (CONT.EQ.3) THEN !CUBIC SPLINE
         IF (XSA.LE.0.5D0) THEN
