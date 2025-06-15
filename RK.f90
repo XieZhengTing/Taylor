@@ -178,16 +178,19 @@ END IF
         CALL DERIV_H(XMXI_OA(I),YMYI_OA(I),ZMZI_OA(I),MSIZE,DEG,H_X,H_Y,H_Z)
 
 
-        ! 檢查視窗大小有效性
-        IF (GWIN(1,II) <= 1.0D-10 .OR. GWIN(2,II) <= 1.0D-10 .OR. GWIN(3,II) <= 1.0D-10) THEN
-            ! 不能在 GPU 核心中使用 WRITE 語句
-            ! 使用預設最小視窗大小而非完全跳過
-            PHI(I) = 0.0D0
-            PHI_X(I) = 0.0D0
-            PHI_Y(I) = 0.0D0
-            PHI_Z(I) = 0.0D0
-            ! 考慮不要完全跳過，但目前先保持原邏輯
-            CYCLE
+        ! 檢查視窗大小有效性並設定最小值
+        ! 防止過小的視窗導致 PHI_SUM 異常
+        IF (GWIN(1,II) <= 1.0D-3 .OR. GWIN(2,II) <= 1.0D-3 .OR. GWIN(3,II) <= 1.0D-3) THEN
+            ! 警告但不跳過，使用最小視窗大小
+            IF (I <= 5) THEN
+                WRITE(*,*) 'WARNING: Small GWIN detected at node ', II
+                WRITE(*,*) '  GWIN = ', GWIN(1,II), GWIN(2,II), GWIN(3,II)
+            END IF
+            ! 可以選擇設定最小值或跳過
+            ! 選項1：跳過
+            ! PHI(I) = 0.0D0; PHI_X(I) = 0.0D0; PHI_Y(I) = 0.0D0; PHI_Z(I) = 0.0D0
+            ! CYCLE
+            ! 選項2：繼續計算但發出警告
         END IF
         
         ! 歸一化座標用於核函數評估
@@ -198,7 +201,7 @@ END IF
 IF (SHSUP) THEN
             ! 球形支撐域
             DIA(I) = SQRT(XMXI_OA(I)**2 + YMYI_OA(I)**2 + ZMZI_OA(I)**2)
-            CALL MLS_KERNEL0(DIA(I), GWIN(1,II), CONT, PHI(I), PHIX_X, ISZERO, ierr_mls)
+            CALL MLS_KERNEL0(DIA(I), CONT, PHI(I), PHIX_X, ISZERO, ierr_mls)
             
             ! 球形支撐域（不進行體積歸一化）
             !PHI(I) = PHI(I) / (AVG_WIN**3)
@@ -230,15 +233,15 @@ IF (SHSUP) THEN
      
 ELSE
             ! 張量積支撐域（座標已在前面歸一化）
-            CALL MLS_KERNEL0(ABS(XMXI_OA(I)), GWIN(1,II), CONT, PHIX, PHIX_X, ISZERO, ierr_mls)
+            CALL MLS_KERNEL0(ABS(XMXI_OA(I)), CONT, PHIX, PHIX_X, ISZERO, ierr_mls)
             IF (ierr_mls /= 0) THEN
                 SHP(I) = 0.0D0; SHPD(:,I) = 0.0D0; CYCLE;
             END IF
-            CALL MLS_KERNEL0(ABS(YMYI_OA(I)), GWIN(2,II), CONT, PHIY, PHIY_Y, ISZERO, ierr_mls)
+            CALL MLS_KERNEL0(ABS(YMYI_OA(I)), CONT, PHIY, PHIY_Y, ISZERO, ierr_mls)
             IF (ierr_mls /= 0) THEN
                 SHP(I) = 0.0D0; SHPD(:,I) = 0.0D0; CYCLE;
             END IF
-            CALL MLS_KERNEL0(ABS(ZMZI_OA(I)), GWIN(3,II), CONT, PHIZ, PHIZ_Z, ISZERO, ierr_mls)
+            CALL MLS_KERNEL0(ABS(ZMZI_OA(I)), CONT, PHIZ, PHIZ_Z, ISZERO, ierr_mls)
             IF (ierr_mls /= 0) THEN
                 SHP(I) = 0.0D0; SHPD(:,I) = 0.0D0; CYCLE;
             END IF
@@ -248,13 +251,17 @@ ELSE
             PHI(I) = PHIX*PHIY*PHIZ !/DENOM
             
             ! 檢查歸一化座標是否在合理範圍內
-            IF (I <= 3) THEN
-                WRITE(*,*) 'DEBUG RK1 TENSOR: I=', I
+            IF (I <= 3 .OR. (PHI(I) > 0.1D0 .AND. I <= 10)) THEN
+                WRITE(*,*) 'DEBUG RK1 TENSOR: I=', I, ' Node=', II
                 WRITE(*,*) '  Raw distance: ', (X(1)-GCOO(1,II)), (X(2)-GCOO(2,II)), (X(3)-GCOO(3,II))
                 WRITE(*,*) '  Window size: ', GWIN(1,II), GWIN(2,II), GWIN(3,II)
                 WRITE(*,*) '  Normalized: ', ABS(XMXI_OA(I)), ABS(YMYI_OA(I)), ABS(ZMZI_OA(I))
                 WRITE(*,*) '  PHIX=', PHIX, ' PHIY=', PHIY, ' PHIZ=', PHIZ
                 WRITE(*,*) '  PHI=', PHI(I)
+                ! 計算預期的貢獻
+                IF (LN > 0) THEN
+                    WRITE(*,*) '  Expected contribution to sum: PHI*LN ≈ ', PHI(I)*LN
+                END IF
             END IF
 
             IF (XMXI_OA(I).EQ.0) THEN
@@ -859,15 +866,15 @@ END IF
         YMYI_OA(I) = -(X(2) -  GCOO(2,II)) /GWIN(2,II)
         ZMZI_OA(I) = -(X(3) -  GCOO(3,II)) /GWIN(3,II)
 
-        CALL MLS_KERNEL0(ABS(XMXI_OA(I)), GWIN(1,II), CONT,PHIX,PHIX_X,ISZERO, ierr_mls)
+        CALL MLS_KERNEL0(ABS(XMXI_OA(I)), CONT,PHIX,PHIX_X,ISZERO, ierr_mls)
         IF (ierr_mls /= 0) THEN
             SHP(I) = 0.0D0; CYCLE;
         END IF
-        CALL MLS_KERNEL0(ABS(YMYI_OA(I)), GWIN(2,II), CONT,PHIY,PHIY_Y,ISZERO, ierr_mls)
+        CALL MLS_KERNEL0(ABS(YMYI_OA(I)), CONT,PHIY,PHIY_Y,ISZERO, ierr_mls)
         IF (ierr_mls /= 0) THEN
             SHP(I) = 0.0D0; CYCLE;
         END IF
-        CALL MLS_KERNEL0(ABS(ZMZI_OA(I)), GWIN(3,II), CONT,PHIZ,PHIZ_Z,ISZERO, ierr_mls)
+        CALL MLS_KERNEL0(ABS(ZMZI_OA(I)), CONT,PHIZ,PHIZ_Z,ISZERO, ierr_mls)
         IF (ierr_mls /= 0) THEN 
             ! Handle MLS_KERNEL0 error
             SHP(I) = HUGE(0.0D0); CYCLE;
@@ -994,10 +1001,10 @@ PHI(I) = PHIX*PHIY*PHIZ
 
     RETURN
     END SUBROUTINE
-SUBROUTINE MLS_KERNEL0(XN,WIN,CONT,PHI,PHIX,ISZERO, ierr)
+SUBROUTINE MLS_KERNEL0(XN,CONT,PHI,PHIX,ISZERO, ierr)
     !$ACC ROUTINE SEQ
     IMPLICIT NONE
-    DOUBLE PRECISION, INTENT(IN):: XN,WIN
+    DOUBLE PRECISION, INTENT(IN):: XN  ! 已歸一化的距離
     INTEGER, INTENT(IN):: CONT
     DOUBLE PRECISION, INTENT(OUT):: PHI,PHIX
     LOGICAL, INTENT(OUT):: ISZERO
@@ -1008,8 +1015,7 @@ SUBROUTINE MLS_KERNEL0(XN,WIN,CONT,PHI,PHIX,ISZERO, ierr)
     ISZERO = .FALSE.
     ierr = 0
     
-    ! XN 現在總是已歸一化的輸入
-    XSA = XN  ! 不再進行歸一化
+    XSA = XN  ! 輸入已經歸一化
     
     IF (CONT.EQ.3) THEN !CUBIC SPLINE
         IF (XSA.LE.0.5D0) THEN
