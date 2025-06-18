@@ -226,6 +226,25 @@
     !
     TIME = 0.0d0
     STEP_NUM = 0
+
+    ! OpenACC: Begin GPU data region for main time integration loop
+    !
+    !$ACC DATA CREATE(LOCAL_STATE, LOCAL_STRESS, LOCAL_STRAIN, LOCAL_STRAIN_EQ, &
+    !$ACC&            LOCAL_DX_STRESS, LOCAL_DY_STRESS, LOCAL_DZ_STRESS, &
+    !$ACC&            LOCAL_H_STRESS, LOCAL_S_STRESS, &
+    !$ACC&            LOCAL_FINT, LOCAL_FEXT, LOCAL_FINT_NMO, LOCAL_FEXT_NMO, &
+    !$ACC&            LOCAL_ACL, LOCAL_VEL, LOCAL_DSP, &
+    !$ACC&            LOCAL_ACL_PHY, LOCAL_VEL_PHY, LOCAL_DINC_PHY, &
+    !$ACC&            LOCAL_DSP_TOT, LOCAL_DSP_TOT_PHY, &
+    !$ACC&            LOCAL_PRFORCE, TOTAL_FORCE) &
+    !$ACC&     COPYIN(LOCAL_COO, LOCAL_COO_CURRENT, LOCAL_MASS, &
+    !$ACC&            LOCAL_EBC, LOCAL_NONZERO_EBC, LOCAL_EBC_NODES, &
+    !$ACC&            LOCAL_SM_LEN, LOCAL_SM_AREA, LOCAL_SM_VOL, &
+    !$ACC&            LOCAL_WIN, LOCAL_VOL, LOCAL_NSNI_FAC, &
+    !$ACC&            LOCAL_MAT_TYPE, LOCAL_PROP, LOCAL_BODY_ID, &
+    !$ACC&            LOCAL_CHAR_DIST, LOCAL_WAVE_VEL, &
+    !$ACC&            LOCAL_X_MOM, LOCAL_Y_MOM, LOCAL_Z_MOM)
+
     !
     !******************************************OUTPUT******************************************
     !
@@ -348,11 +367,17 @@
         IF (LINIT.AND.(AUTO_TS)) THEN
             !WE DONT HAVE A TIME STEP ESTIMATE YET
             LOCAL_DSP = 0.0d0
+            !$ACC UPDATE DEVICE(LOCAL_DSP)
         ELSE
             !PREDICT THE DISPLACEMENT INCREMENT AND VELOCITY FROM THE PREVIOUS ACCELERATION
-            LOCAL_DSP = DLT * LOCAL_VEL + DLT**2 * 0.5d0 * LOCAL_ACL
-            LOCAL_DSP_TOT = LOCAL_DSP_TOT + LOCAL_DSP
-            LOCAL_VEL = LOCAL_VEL + DLT * 0.5d0 * LOCAL_ACL
+            !$ACC PARALLEL LOOP PRESENT(LOCAL_DSP, LOCAL_VEL, LOCAL_ACL, LOCAL_DSP_TOT, DLT)
+            DO I = 1, 3*TOTAL_LOCAL_SIZE
+                LOCAL_DSP(I) = DLT * LOCAL_VEL(I) + DLT**2 * 0.5d0 * LOCAL_ACL(I)
+                LOCAL_DSP_TOT(I) = LOCAL_DSP_TOT(I) + LOCAL_DSP(I)
+                LOCAL_VEL(I) = LOCAL_VEL(I) + DLT * 0.5d0 * LOCAL_ACL(I)
+            END DO
+            !$ACC END PARALLEL LOOP
+            !$ACC UPDATE DEVICE(LOCAL_DSP, LOCAL_DSP_TOT, LOCAL_VEL)
         END IF
 
 
@@ -656,6 +681,12 @@
         IF (TIME.GT.TIME_END) EXIT
         !
     END DO
+
+    !
+    ! End OpenACC data region - copy results back to host
+    !
+    !$ACC END DATA
+    !
 
 	!GC
 	DEALLOCATE(MODEL_ELCON)

@@ -1,0 +1,10 @@
+ ===== HANDELER DIAGNOSTICS =====
+ GNUMP =         1950
+ GWIN statistics:
+   Min:    2.4147970000000002E-003   2.5750532500000002E-003   2.6927092499999983E-003
+   Max:    4.2686984999999993E-003   4.3155419999999995E-003   2.6927999999999987E-003
+   Avg:    3.2439192838461654E-003   3.2189547983718005E-003   2.6927297100001048E-003
+ Neighbor count statistics:
+   Min neighbors:           72
+   Max neighbors:          280
+   Avg neighbors:          166

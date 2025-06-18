@@ -155,6 +155,11 @@
 	  ALLOCATE(GSTACK_DSHP(3,DIM_NN_LIST))  
 	  ALLOCATE(GSTACK_DDSHP(6,DIM_NN_LIST)) 
       AlLOCATE(GINVK(3,3,GNUMP))
+
+      ! OpenACC: Create GPU data for neighbor lists
+      !
+      !$ACC ENTER DATA CREATE(GN, GSTART, GSTACK, GSTACK_SHP, GSTACK_DSHP, GSTACK_DDSHP, GINVK)
+
 	  CNT_SEARCH = 0.0d0
       SEARCHCOUNT=PDSEARCH
       END IF
@@ -271,7 +276,10 @@
                             NODES_IN_BIN,MAX_NEIGH,NODELIST_IN_BIN, &
                             NBINS,NBINSX,NBINSY,NBINSZ,ISPACE,JSPACE,KSPACE, &
                             GXDIST_MAX, GYDIST_MAX, GZDIST_MAX,GSM_LEN)
-                            
+
+         ! Update neighbor lists on GPU after search
+         !
+         !$ACC UPDATE DEVICE(GN, GSTART, GSTACK)                            
                             
         !DEALLOCATE(ISPACE,JSPACE,KSPACE,NODES_IN_BIN,NODELIST_IN_BIN)       
           

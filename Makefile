@@ -1,4 +1,4 @@
-FC              =    gfortran
+FC              =    nvfortran
 OPLEVEL         =   -O3
 LDFLAGS := -lnetcdff -lexoIIv2for32 -lexodus -lnetcdf
 EXDIR           =   /usr/local
@@ -9,7 +9,7 @@ NETCDFDIRLIB    =   $(NETCDFDIR)/lib
 NETCDFDIRINC    =   $(NETCDFDIR)/include
 
 
-FFLAGS  =   $(OPLEVEL)  $(EXSWITCH) -L $(EXDIRLIB) -I $(EXDIRINC) -I $(NETCDFDIRINC) -L $(NETCDFDIRLIB) -fopenmp -ffree-line-length-none
+FFLAGS  =   $(OPLEVEL)  $(EXSWITCH) -L $(EXDIRLIB) -I $(EXDIRINC) -I $(NETCDFDIRINC) -L $(NETCDFDIRLIB) -acc -gpu=cc75 -Minfo=accel -mp
 SRCS1=$(wildcard *.f)
 SRCS2=$(wildcard *.F)
 SRCS3=$(wildcard *.F90)
