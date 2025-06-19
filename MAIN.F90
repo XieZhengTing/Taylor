@@ -403,16 +403,24 @@
 
 
         LOCAL_DSP_TOT_PHY = LOCAL_DSP_TOT_PHY + LOCAL_DINC_PHY
+
+        ! Ensure LOCAL_DSP_TOT_PHY is on GPU for coordinate update
+        !$ACC UPDATE DEVICE(LOCAL_DSP_TOT_PHY)
+        
         !
         ! LIKELY HAVE TO UPDATE GHOSTS HERE FOR GHOST SCHEMES, THESE ARRAYS
         ! SHOULD BE DIFFERENT SIZES THEN #TODO
         !
+        !$ACC PARALLEL LOOP PRESENT(LOCAL_COO_CURRENT, LOCAL_COO, LOCAL_DSP_TOT_PHY)
         DO I=1,LOCAL_NUMP
             DO J=1,3
                 LOCAL_COO_CURRENT(J,I) = LOCAL_COO(J,I) + LOCAL_DSP_TOT_PHY((I-1)*3+J)
             END DO
         END DO
+        !$ACC END PARALLEL LOOP
 
+        ! Sync updated coordinates back to host
+        !$ACC UPDATE HOST(LOCAL_COO_CURRENT)
 
         !TEST HUGHS-WINDET ROTATION ALGORITHM, LATER SHOULD BE REMOVED
         !CALL ROTATION_TEST(LOCAL_DSP,LOCAL_COO,LOCAL_NUMP,TIME,DLT)
@@ -458,6 +466,9 @@
         IF (PDSTIME.NE.0.0D0) PDSEARCH=CEILING(PDSTIME/DLT) 
 
         DO I=1,LOCAL_NUMP
+
+            ! Note: This loop contains reductions (TOTAL_FORCE)
+            ! Will be handled in Step 3 with proper reduction clauses
 
             DO J=1,3
 
