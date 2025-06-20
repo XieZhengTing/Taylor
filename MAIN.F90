@@ -402,8 +402,9 @@
 
 
 
+        !$ACC UPDATE HOST(LOCAL_DINC_PHY, LOCAL_VEL_PHY, LOCAL_ACL_PHY)
         LOCAL_DSP_TOT_PHY = LOCAL_DSP_TOT_PHY + LOCAL_DINC_PHY
-
+        
         ! Ensure LOCAL_DSP_TOT_PHY is on GPU for coordinate update
         !$ACC UPDATE DEVICE(LOCAL_DSP_TOT_PHY)
         
