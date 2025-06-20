@@ -135,7 +135,8 @@
             END DO 
           END DO
         END DO	
-        !$ACC END PARALLEL LOOP			
+        !$ACC END PARALLEL LOOP
+        !$ACC UPDATE HOST(GDINC_PHY, GVEL_PHY, GACL_PHY)
         ELSE  !PERIDYNAMICS
             !$ACC PARALLEL LOOP PRESENT(GDINC_PHY, GVEL_PHY, GACL_PHY, &
             !$ACC&                      GDINC, GVEL, GACL)
@@ -145,6 +146,7 @@
                 GACL_PHY(I) = GACL(I)
             END DO
             !$ACC END PARALLEL LOOP
+            !$ACC UPDATE HOST(GDINC_PHY, GVEL_PHY, GACL_PHY)
         
         ENDIF
 				
@@ -289,7 +291,7 @@
 
          ! Update neighbor lists on GPU after search
          !
-         !$ACC UPDATE DEVICE(GN, GSTART, GSTACK)                            
+         !$ACC UPDATE DEVICE(GN, GSTART, GSTACK, GSTACK_SHP, GSTACK_DSHP, GSTACK_DDSHP)                           
                             
         !DEALLOCATE(ISPACE,JSPACE,KSPACE,NODES_IN_BIN,NODELIST_IN_BIN)       
           
