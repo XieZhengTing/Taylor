@@ -113,12 +113,6 @@
       
       IF (DO_INTERP) THEN
 		IF(.NOT. PERIDYNAMICS) THEN  !RKPM  
-
-        !$ACC PARALLEL LOOP PRESENT(GDINC_PHY, GVEL_PHY, GACL_PHY, &
-        !$ACC&                      GSTACK_SHP, GSTACK, GSTART, GN, &
-        !$ACC&                      GDINC, GVEL, GACL) &
-        !$ACC&              PRIVATE(LSTART, M, MM, SHPT)
-
         DO I=1,GNUMP
 		  LSTART = GSTART(I)
           DO K = 1, 3
@@ -137,19 +131,10 @@
             END DO 
           END DO
         END DO		
-
-        !$ACC END PARALLEL LOOP		
-
         ELSE  !PERIDYNAMICS
-
-            !$ACC PARALLEL LOOP PRESENT(GDINC_PHY, GVEL_PHY, GACL_PHY, &
-            !$ACC&                      GDINC, GVEL, GACL)
-            DO I = 1, 3*GNUMP
-                GDINC_PHY(I) = GDINC(I)
-                GVEL_PHY(I) = GVEL(I)
-                GACL_PHY(I) = GACL(I)
-            END DO
-            !$ACC END PARALLEL LOOP
+            GDINC_PHY = GDINC
+            GVEL_PHY = GVEL
+            GACL_PHY = GACL
         
         ENDIF
 				
