@@ -1237,8 +1237,7 @@ XNORM(1:3) =0.D0
 
 
     END DO !INTEGRATION POINT (NODE) LOOP
-    !$OMP END DO
-    !$OMP END PARALLEL
+    !$ACC END PARALLEL LOOP
 
     ! Synchronize shape functions to GPU after CPU updates
     !$ACC UPDATE DEVICE(GSTACK_SHP, GSTACK_DSHP)
