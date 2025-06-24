@@ -15,6 +15,7 @@
     
     
 	SUBROUTINE INVERSE(A,N, AINV)
+      !$ACC ROUTINE SEQ	
 	IMPLICIT NONE
 	
 	INTEGER, INTENT(IN):: N
@@ -117,6 +118,7 @@
 	  !********************************************************
     
       SUBROUTINE INV3 (A, AINV)
+	 !$ACC ROUTINE SEQ 
       ! THIS SUBROUTINE HAS BUG, COMMENTED, USE  INVERSE()
    
 	  ! FUNCTION OF THIS SUBROUTINE:

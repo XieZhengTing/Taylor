@@ -39,6 +39,20 @@
     USE omp_lib
     !
     IMPLICIT NONE
+    ! Interface for routines executed inside the OpenACC region
+    INTERFACE
+        SUBROUTINE DETERMINANT(A, DET)
+            !$ACC ROUTINE SEQ
+            DOUBLE PRECISION, INTENT(IN)  :: A(3,3)
+            DOUBLE PRECISION, INTENT(OUT) :: DET
+        END SUBROUTINE DETERMINANT
+
+        SUBROUTINE INV3(A, AINV)
+            !$ACC ROUTINE SEQ
+            DOUBLE PRECISION, INTENT(IN)  :: A(3,3)
+            DOUBLE PRECISION, INTENT(OUT) :: AINV(3,3)
+        END SUBROUTINE INV3
+    END INTERFACE
     !
     !
     !
