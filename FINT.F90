@@ -251,18 +251,26 @@
 		END IF
 		
 		
-    !$OMP PARALLEL DEFAULT(FIRSTPRIVATE) SHARED( GNUMP, GCOO, GCOO_CUURENT, GWIN, GSM_LEN, GSM_VOL, GSM_AREA, GN, GSTART, &
-    !$OMP                                       DIM_NN_LIST, GSTACK, GSTACK_SHP, GSTACK_DSHP, GSTACK_DDSHP, GINVK, &
-    !$OMP                                       GCHAR_DIST,GMAX_WVEL, GMAXN, GGHOST, GEBC_NODES, GVOL, GNSNI_FAC, &
-    !$OMP                                       GSTRESS, LOCAL_DX_STRESS, LOCAL_DY_STRESS, LOCAL_DZ_STRESS, &
-    !$OMP                                       GSTRAIN, &
-    !$OMP                                       GSTATE, GPROP, GDINC,GDINC_TOT, GMAT_TYPE, FINT, DLT_FINT, FINT_TEMP, FEXT_TEMP, &
-    !$OMP                                       GINT_WORK_TEMP,GINT_WORK,GSTRAIN_EQ)
-
-    ID_RANK = OMP_get_thread_num()  !OMPJOE
-
-    !$OMP DO
-    DO I = 1, GNUMP
+    !$ACC PARALLEL LOOP GANG VECTOR PRESENT(GNUMP, GCOO, GCOO_CUURENT, GWIN, GSM_LEN, GSM_VOL, GSM_AREA, GN, GSTART, &
+    !$ACC&                                  DIM_NN_LIST, GSTACK, GSTACK_SHP, GSTACK_DSHP, GSTACK_DDSHP, GINVK, &
+    !$ACC&                                  GCHAR_DIST, GMAX_WVEL, GMAXN, GGHOST, GEBC_NODES, GVOL, GNSNI_FAC, &
+    !$ACC&                                  GSTRESS, LOCAL_DX_STRESS, LOCAL_DY_STRESS, LOCAL_DZ_STRESS, &
+    !$ACC&                                  GSTRAIN, GSTATE, GPROP, GDINC, GDINC_TOT, GMAT_TYPE, &
+    !$ACC&                                  FINT_TEMP, FEXT_TEMP, GINT_WORK_TEMP, GSTRAIN_EQ, &
+    !$ACC&                                  MODEL_BODYFORCE, MODEL_BODY_ID, DLT, LINIT, LFINITE_STRAIN, &
+    !$ACC&                                  LLAGRANGIAN, RK_DEGREE, RK_PSIZE, RK_CONT, RK_IMPL, &
+    !$ACC&                                  QL, QL_COEF, QL_LEN, SHSUP, ITYPE_INT, IGRAVITY) &
+    !$ACC&        PRIVATE(I, J, K, L, JJ, LCOO, LCOO_T, VOL, LWIN, LSM_LEN, LN, LSTART, &
+    !$ACC&                LGHOST, LVOL, LPROP, LMAT_TYPE, LOCAL_BODY_ID, SELF_EBC, &
+    !$ACC&                LSTRESS, LSTRAIN, LSTATE, LSTACK, LDINC, LDINC_TOT, &
+    !$ACC&                LCOO_CUURENT, LCOONE, SHP, SHPD, SHPDTMP, FMAT, IFMAT, &
+    !$ACC&                DET, LMAT, STRAIN, ELAS_MAT, LSTRESS_PREDICTOR, &
+    !$ACC&                ROT, D, STRESS_INC, STRAIN_INC, POISS, YOUNG, BULK, SHEAR, &
+    !$ACC&                DENSITY, PMOD, BMAT, BMAT_T, FINT3, FINT3_EXT, &
+    !$ACC&                FBOD, FGRAV, LBOD, MAG_FINT, ID_RANK)
+     DO I = 1, GNUMP
+        ! For GPU, use gang/vector index instead of OpenMP thread ID
+        ID_RANK = MOD(I-1, NCORES_INPUT) + 1
         !
         !
         !GRAB NODE INFORMATION FROM LIST
