@@ -80,9 +80,9 @@
         PTEMP=LPROP(2)*(JT-1.0D0)*JT
 
     CASE DEFAULT
-        ! Material type not supported.  This routine executes on the GPU
-        ! so we cannot call the host-only EXIT_PROGRAM routine here.
-        ERROR STOP 'NOT A HYPERELASTIC MATERIAL'
+        ! Material type not supported. Caller aborts on host.
+        LSTRESS = 0.0D0
+        RETURN
 
     END SELECT
 
