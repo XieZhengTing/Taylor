@@ -17,7 +17,30 @@
         QL, QL_COEF,QL_LEN,  &
         SHP, SHPD,SHSUP)
     !$acc routine seq
-    IMPLICIT NONE 
+    IMPLICIT NONE
+    ! Interface for device routines used within OpenACC regions
+    INTERFACE
+        SUBROUTINE MLS_KERNEL0(XSA, AJ, ISPLINE, PHI, PHI_X, ISZERO)
+            !$ACC ROUTINE SEQ
+            DOUBLE PRECISION, INTENT(IN)  :: XSA, AJ
+            INTEGER, INTENT(IN)           :: ISPLINE
+            DOUBLE PRECISION, INTENT(OUT) :: PHI, PHI_X
+            LOGICAL, INTENT(OUT)          :: ISZERO
+        END SUBROUTINE MLS_KERNEL0
+
+        SUBROUTINE M44INV(A, AINV)
+            !$ACC ROUTINE SEQ
+            DOUBLE PRECISION, INTENT(IN)  :: A(4,4)
+            DOUBLE PRECISION, INTENT(OUT) :: AINV(4,4)
+        END SUBROUTINE M44INV
+
+        SUBROUTINE INVERSE(A, N, AINV)
+            !$ACC ROUTINE SEQ
+            INTEGER, INTENT(IN)           :: N
+            DOUBLE PRECISION, INTENT(IN)  :: A(N,N)
+            DOUBLE PRECISION, INTENT(OUT) :: AINV(N,N)
+        END SUBROUTINE INVERSE
+    END INTERFACE
 
     DOUBLE PRECISION, INTENT(IN):: X(3)
     INTEGER, INTENT(IN):: DEG, MSIZE, CONT, GNUMP, LN, LNMAX
