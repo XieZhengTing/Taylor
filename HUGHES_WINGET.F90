@@ -15,6 +15,7 @@
 
 	  SUBROUTINE HUGHES_WINGET(LMAT, & !IN
 	                           ROT,STRAIN,D) !OUT
+      !$ACC ROUTINE SEQ
 	  !
 	  ! FUNCTION OF THIS SUBROUTINE:
 	  !
@@ -83,6 +84,7 @@
 
 	  SUBROUTINE D_HUGHES_WINGET(LMAT,DLMAT, & !IN
 	                           ROT,DSTRAIN) !OUT
+       !$ACC ROUTINE SEQ
 	  !
 	  ! FUNCTION OF THIS SUBROUTINE:
 	  !
