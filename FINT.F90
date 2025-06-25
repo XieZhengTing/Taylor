@@ -322,8 +322,18 @@
     ALLOCATE(FEXT_TEMP(NCORES_INPUT,3,GNUMP))
     FEXT_TEMP = 0.D0
 
-    ALLOCATE(GINT_WORK_TEMP(NCORES_INPUT))
-    GINT_WORK_TEMP = 0.0d0
+      ALLOCATE(GINT_WORK_TEMP(NCORES_INPUT))
+      GINT_WORK_TEMP = 0.0d0
+
+      ! Check material properties on the host before entering the
+      ! accelerator region. Hyperelastic materials require LPROP(1) = 3.
+      DO I = 1, GNUMP
+          IF (GMAT_TYPE(I) .EQ. 5) THEN
+              IF (INT(GPROP(1,I)) .NE. 3) THEN
+                  CALL EXIT_PROGRAM('NOT A HYPERELASTIC MATERIAL', 1)
+              END IF
+          END IF
+      END DO
 
     ! OpenACC: Create temporary arrays on GPU
     !
@@ -894,11 +904,8 @@
         LSTRESS_PREDICTOR = LSTRESS + MATMUL(ELAS_MAT,STRAIN)
         !
 
-        IF (LMAT_TYPE.EQ.5) THEN
-            IF (INT(LPROP(1)) .NE. 3) THEN
-                CALL EXIT_PROGRAM('NOT A HYPERELASTIC MATERIAL',1)
-            END IF
-            CALL HYPERELASTIC(LPROP,LSTRESS,FMAT,LSTRAIN)
+         IF (LMAT_TYPE.EQ.5) THEN
+             CALL HYPERELASTIC(LPROP,LSTRESS,FMAT,LSTRAIN)
         ELSE
             CALL CONSTITUTION(LSTRESS_PREDICTOR,LMAT_TYPE, LSTRAIN, STRAIN, LPROP, DLT, FMAT, & !IN
         LSTATE, LSTRESS, L_H_STRESS, L_S_STRESS) !IN/OUT, OUT
