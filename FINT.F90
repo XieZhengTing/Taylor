@@ -52,6 +52,21 @@
             DOUBLE PRECISION, INTENT(IN)  :: A(3,3)
             DOUBLE PRECISION, INTENT(OUT) :: AINV(3,3)
         END SUBROUTINE INV3
+        SUBROUTINE RK1(X, DEG, MSIZE, CONT, IMPL, GCOO, GWIN, GNUMP, &
+                       LSTACK, LN, LNMAX, EBCS, SELF_EBC, QL, QL_COEF, &
+                       QL_LEN, SHP, SHPD, SHSUP)
+            !$ACC ROUTINE SEQ
+            DOUBLE PRECISION, INTENT(IN)  :: X(3)
+            INTEGER, INTENT(IN)           :: DEG, MSIZE, CONT, GNUMP, LN, LNMAX
+            INTEGER, INTENT(IN)           :: LSTACK(LNMAX)
+            LOGICAL, INTENT(IN)           :: EBCS(GNUMP)
+            LOGICAL, INTENT(IN)           :: SELF_EBC
+            DOUBLE PRECISION, INTENT(IN)  :: GCOO(3,GNUMP), GWIN(3,GNUMP)
+            LOGICAL, INTENT(IN)           :: QL, SHSUP
+            DOUBLE PRECISION, INTENT(IN)  :: QL_COEF, QL_LEN
+            DOUBLE PRECISION, INTENT(OUT) :: SHP(LNMAX)
+            DOUBLE PRECISION, INTENT(OUT) :: SHPD(3,LNMAX)
+        END SUBROUTINE RK1    
     END INTERFACE
     !
     !
