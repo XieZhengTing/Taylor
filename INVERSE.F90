@@ -14,16 +14,24 @@
 	  !********************************************************
     
     
-	SUBROUTINE INVERSE(A,N, AINV, OK)
+	SUBROUTINE INVERSE(A,N, AINV)
       !$ACC ROUTINE SEQ	
         IMPLICIT NONE
-      INTEGER, INTENT(IN):: N
-      DOUBLE PRECISION, INTENT(IN):: A(N,N)
-      DOUBLE PRECISION, INTENT(OUT):: AINV(N,N)
-      LOGICAL, INTENT(OUT), OPTIONAL :: OK
 
-      INTEGER:: IS(N),JS(N), L, K, I, J
-      DOUBLE PRECISION T,D
+        INTERFACE
+            SUBROUTINE WARN(STRING_LINE)
+                !$ACC ROUTINE SEQ
+                CHARACTER(*) :: STRING_LINE
+            END SUBROUTINE WARN
+        END INTERFACE
+
+        INTEGER, INTENT(IN):: N
+        DOUBLE PRECISION, INTENT(IN):: A(N,N)
+        DOUBLE PRECISION, INTENT(OUT):: AINV(N,N)
+	
+	
+	INTEGER:: IS(N),JS(N), L, K, I, J
+	DOUBLE PRECISION T,D
 	
 		AINV = A
 		
@@ -90,8 +98,8 @@
 
 300     CONTINUE
 
-        IF (PRESENT(OK)) THEN
-          OK = L .NE. 0
+        IF (L.EQ.0) THEN
+          CALL WARN('PROBLEM INVERTING MATRIX')
         END IF
 
 		RETURN

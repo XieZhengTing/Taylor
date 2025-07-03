@@ -150,8 +150,7 @@
 	  LOGICAL:: LINIT
 	  DOUBLE PRECISION:: FMAT(3,3), IFMAT(3,3),X_0(3),X_t(3), DX_t(3,1), PKSTRESS(3,3), TEMP_STRESS(3,3), DX_t_J(3,1)
 	  DOUBLE PRECISION, ALLOCATABLE:: FINT_TEMP(:,:,:)
-	  DOUBLE PRECISION:: DET     
-	  LOGICAL :: INV_OK 
+	  DOUBLE PRECISION:: DET      
       !DOUBLE PRECISION:: FINT_TEMP(20,3,GNUMP)
       INTEGER:: ID_RANK
       
@@ -400,9 +399,8 @@
                    !F = S*invK
                    FMAT = MATMUL(FMAT, INVK)
                    
-                CALL DETERMINANT(FMAT,DET)
-                CALL INVERSE(FMAT, 3, IFMAT, INV_OK)
-                IF (.NOT. INV_OK) CALL WARN('PROBLEM INVERTING MATRIX')
+                CALL DETERMINANT(FMAT,DET) 
+                CALL INVERSE(FMAT, 3, IFMAT) 
                 
 		    END IF
     		

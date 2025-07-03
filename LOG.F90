@@ -43,8 +43,11 @@
      
      
       SUBROUTINE WARN(STRING_LINE)
+<<<<<<< HEAD
 
 
+=======
+>>>>>>> a5f824d (問題 2：子程式需要 ACC ROUTINE 指令)
 	  !
 	  ! FUNCTION OF THIS SUBROUTINE:
 	  !
