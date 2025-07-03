@@ -943,14 +943,14 @@
 
         GSTRAIN_EQ(I) = ( GSTRAIN_EQ(I) *2/3)**0.5
 
-        ID_RANK = OMP_get_thread_num()
+        ID_RANK = MOD(I-1, NCORES_INPUT) + 1
         IF (LFINITE_STRAIN) THEN
             DO J = 1, 6
             
                  GINT_WORK_TEMP(ID_RANK+1) = GINT_WORK_TEMP(ID_RANK+1) + 0.5d0*D(J)*(2*LSTRESS(J)-STRESS_INC(J))*VOL*DET
             END DO
         ELSE
-        ID_RANK = OMP_get_thread_num()
+        ID_RANK = MOD(I-1, NCORES_INPUT) + 1
             DO J = 1, 6
                 GINT_WORK_TEMP(ID_RANK+1) = GINT_WORK_TEMP(ID_RANK+1) + 0.5d0*STRAIN_INC(J)*STRESS_INC(J)*VOL*DET
             END DO
@@ -1215,7 +1215,7 @@ XNORM(1:3) =0.D0
             END DO
 
             DO K = 1, 3
-                ID_RANK = OMP_get_thread_num()  !OMPJOE
+                ID_RANK = MOD(I-1, NCORES_INPUT) + 1
 
                 FINT_TEMP(ID_RANK+1,K,JJ) = FINT_TEMP(ID_RANK+1,K,JJ) + FINT3(K)*VOL*DET
 
