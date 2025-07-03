@@ -15,8 +15,9 @@
 	  
 	  
 	  
-          SUBROUTINE CONSTITUTION(LSTRESS_PREDICTOR, LMAT_TYPE, LSTRAIN, STRAIN, LPROP, DLT, FMAT, & !IN
-                                  LSTATE, LSTRESS, S_STRESS, H_STRESS) !IN/OUT, OUT
+      SUBROUTINE CONSTITUTION(LSTRESS_PREDICTOR, LMAT_TYPE, LSTRAIN, STRAIN, LPROP, DLT, FMAT, & !IN
+                                  LSTATE, LSTRESS, S_STRESS, H_STRESS, FAILED) !IN/OUT, OUT
+
 		!$ACC ROUTINE SEQ
 	  !
 	  ! FUNCTION OF THIS SUBROUTINE:
@@ -36,6 +37,7 @@
 	  DOUBLE PRECISION, INTENT(IN):: DLT !GC 
 	  DOUBLE PRECISION, INTENT(IN):: FMAT(3,3) !GC
 	  DOUBLE PRECISION, INTENT (INOUT)::S_STRESS(6), H_STRESS(6) !GC 
+	  LOGICAL, INTENT(OUT) :: FAILED
 	  !
 	  ! LOCAL
 	  !
@@ -44,6 +46,7 @@
 	  !******************** EXECUTABLE CODE ********************
 	  !*********************************************************
 	  !
+      FAILED = .FALSE.
       SELECT CASE (LMAT_TYPE)
 	  
 	    CASE(1)
@@ -52,11 +55,11 @@
 		  !
 		  LSTRESS = LSTRESS_PREDICTOR
 		  !
-        CASE(2)
-		  !
-		  !VON MISES PLASTICITY WITH EXPOENTIAL HARDENING
-		  !
-          CALL VON_MISES(LSTRESS, LSTRAIN, LSTRESS_PREDICTOR, LSTATE, LPROP)
+          CASE(2)
+                    !
+                    !VON MISES PLASTICITY WITH EXPOENTIAL HARDENING
+                    !
+            CALL VON_MISES(LSTRESS, LSTRAIN, LSTRESS_PREDICTOR, LSTATE, LPROP, FAILED)
 		  !
         CASE(3)
           !
@@ -70,18 +73,19 @@
 		  !
 		  CALL VISCO_ELASTIC(LPROP, DLT, FMAT, LSTRESS, H_STRESS, S_STRESS)
 		  !
-        CASE(6)
+          CASE(6)
+                    !
+                    !VON MISES PLASTICITY WITH EXPOENTIAL HARDENING AND ISOTROPIC DAMAGE
+                    !
+            CALL VON_MISES_DAM(LSTRESS, LSTRAIN, STRAIN, LSTRESS_PREDICTOR, LSTATE, LPROP, FAILED)
+
 		  !
-		  !VON MISES PLASTICITY WITH EXPOENTIAL HARDENING AND ISOTROPIC DAMAGE
 		  !
-          CALL VON_MISES_DAM(LSTRESS, LSTRAIN, STRAIN, LSTRESS_PREDICTOR, LSTATE, LPROP)
-		  !
-		  !
-		CASE DEFAULT
-		  !
-		  !SOMETHING WENT WRONG
-		  !
-		  CALL EXIT_PROGRAM('INVALID MATERIAL TYPE IN SUBROUTINE CONSTITUTION',1)
+                  CASE DEFAULT
+                    !
+                    !SOMETHING WENT WRONG
+                    !
+                    FAILED = .TRUE.
 		  !
       END SELECT
 		

@@ -20,7 +20,7 @@
 
         INTERFACE
             SUBROUTINE WARN(STRING_LINE)
-                !$ACC ROUTINE SEQ
+
                 CHARACTER(*) :: STRING_LINE
             END SUBROUTINE WARN
         END INTERFACE
