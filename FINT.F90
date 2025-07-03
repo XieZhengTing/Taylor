@@ -40,26 +40,7 @@
     !
     IMPLICIT NONE
 
-    ! Interface for routines executed inside the OpenACC region
-    INTERFACE
-        FUNCTION FORM_CMAT(LPROP) RESULT(CMAT)
-            !$ACC ROUTINE SEQ
-            DOUBLE PRECISION, INTENT(IN) :: LPROP(30)
-            DOUBLE PRECISION :: CMAT(6,6)
-        END FUNCTION FORM_CMAT
-        
-        FUNCTION BULK_MOD(YOUNG, POISS)
-            !$ACC ROUTINE SEQ
-            DOUBLE PRECISION, INTENT(IN) :: YOUNG, POISS
-            DOUBLE PRECISION :: BULK_MOD
-        END FUNCTION BULK_MOD
-        
-        FUNCTION SHEAR_MOD(YOUNG, POISS)
-            !$ACC ROUTINE SEQ
-            DOUBLE PRECISION, INTENT(IN) :: YOUNG, POISS
-            DOUBLE PRECISION :: SHEAR_MOD
-        END FUNCTION SHEAR_MOD
-    END INTERFACE
+
 
     ! Interface for routines executed inside the OpenACC region
     INTERFACE
