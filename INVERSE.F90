@@ -99,7 +99,9 @@
 300     CONTINUE
 
         IF (L.EQ.0) THEN
-          CALL WARN('PROBLEM INVERTING MATRIX')
+          ! Cannot call WARN on GPU, handle error silently
+          ! In GPU version, just return with AINV as is
+          RETURN
         END IF
 
 		RETURN
