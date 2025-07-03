@@ -30,14 +30,18 @@
               DOUBLE PRECISION, INTENT(IN)  :: A(3,3)
               DOUBLE PRECISION, INTENT(OUT) :: DET
           END SUBROUTINE DETERMINANT
-          SUBROUTINE INVERSE(A, N, AINV, OK)
-              !$ACC ROUTINE SEQ
-              INTEGER, INTENT(IN)           :: N
-              DOUBLE PRECISION, INTENT(IN)  :: A(N,N)
-              DOUBLE PRECISION, INTENT(OUT) :: AINV(N,N)
-			  LOGICAL, INTENT(OUT), OPTIONAL :: OK
-          END SUBROUTINE INVERSE
-      END INTERFACE
+        SUBROUTINE INVERSE(A, N, AINV, OK)
+            !$ACC ROUTINE SEQ
+            INTEGER, INTENT(IN)           :: N
+            DOUBLE PRECISION, INTENT(IN)  :: A(N,N)
+            DOUBLE PRECISION, INTENT(OUT) :: AINV(N,N)
+                        LOGICAL, INTENT(OUT), OPTIONAL :: OK
+        END SUBROUTINE INVERSE
+        SUBROUTINE WARN(STRING_LINE)
+            !$ACC ROUTINE SEQ
+            CHARACTER(*), INTENT(IN) :: STRING_LINE
+        END SUBROUTINE WARN
+    END INTERFACE
       !
 
 	  !

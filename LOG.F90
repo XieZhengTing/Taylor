@@ -43,6 +43,7 @@
      
      
       SUBROUTINE WARN(STRING_LINE)
+          !$ACC ROUTINE SEQ
 
 	  !
 	  ! FUNCTION OF THIS SUBROUTINE:
