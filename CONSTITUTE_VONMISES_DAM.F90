@@ -26,6 +26,7 @@
 	  ! ROTATE A (VOIGT NOTATION) TENSOR USING GIVEN ROTATION MATRIX
 	  !
       USE FINT_FUNCTIONS
+	  USE GPU_ERROR
       !
 	  IMPLICIT NONE
 	  !
@@ -163,8 +164,10 @@
           IF(I.EQ.20) THEN
              !!WRITE(*,*)"TOO MANY ITERATIONS IN PlASTICITY, EQIT"
              !!PAUSE
-             CALL EXIT_PROGRAM('PLASTICITY MATERIAL MODEL DID NOT CONVERGE',0)
-             STOP
+         CALL SET_GPU_ERROR('VON_MISES_DAM_CONVERGE', 0)
+         ! Set error code 1 for convergence failure
+         GPU_ERROR_FLAG = 1
+         RETURN
           ENDIF
       ELSE  !CONVERGED
             !WRITE(*,*)"CONVERGED"
