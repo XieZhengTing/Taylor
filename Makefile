@@ -32,7 +32,7 @@ FINT_FUNCTIONS.o FINT_FUNCTIONS.mod : FINT_FUNCTIONS.F90
 MODEL.o MODEL.mod : MODEL.F90
 	$(FC) $(FFLAGS) -c -o $@ $<
 GPU_ERROR.o GPU_ERROR.mod : GPU_ERROR.F90
-	$(FC) $(FFLAGS) -c -o $@ $
+	$(FC) $(FFLAGS) -c -o $@ $<
 %.o: %.f90 FINT_FUNCTIONS.mod GPU_ERROR.mod
 	$(FC) $(FFLAGS) -c $< -o $@
 %.o: %.F90 FINT_FUNCTIONS.mod GPU_ERROR.mod
