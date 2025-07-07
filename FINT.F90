@@ -372,7 +372,10 @@
     !$ACC&                DET, LMAT, STRAIN, ELAS_MAT, LSTRESS_PREDICTOR, &
     !$ACC&                ROT, D, STRESS_INC, STRAIN_INC, POISS, YOUNG, BULK, SHEAR, &
     !$ACC&                DENSITY, PMOD, BMAT, BMAT_T, FINT3, FINT3_EXT, &
-    !$ACC&                FBOD, FGRAV, LBOD, MAG_FINT, ID_RANK)
+    !$ACC&                FBOD, FGRAV, LBOD, MAG_FINT, ID_RANK, &
+    !$ACC&                XNORM, SHPDD_SM, XMAP, YMAP, ZMAP, XLMAT, YLMAT, ZLMAT, &
+    !$ACC&                DX_STRAIN, DY_STRAIN, DZ_STRAIN, B_TEMP, B_INV_TEMP, &
+    !$ACC& 
      DO I = 1, GNUMP
         ! For GPU, use gang/vector index instead of OpenMP thread ID
         ID_RANK = MOD(I-1, NCORES_INPUT) + 1
