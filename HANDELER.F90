@@ -156,8 +156,10 @@
       !CALL THE NODE SEARCH ROUTINE HERE IF NEEDED
       IF ((LINIT).OR.(.NOT.LLAGRANGIAN)) THEN
       
-	  DIM_NN_LIST=GNUMP*1000            
-	  GMAXN=GNUMP    
+        DIM_NN_LIST=GNUMP*1000
+        GMAXN=GNUMP
+
+        !$ACC ENTER DATA COPYIN(DIM_NN_LIST, GMAXN)
       
       IF (LINIT) THEN
       ALLOCATE(GN(GNUMP)) 
@@ -291,7 +293,8 @@
 
          ! Update neighbor lists on GPU after search
          !
-         !$ACC UPDATE DEVICE(GN, GSTART, GSTACK, GSTACK_SHP, GSTACK_DSHP, GSTACK_DDSHP)                           
+         !$ACC UPDATE DEVICE(GN, GSTART, GSTACK, GSTACK_SHP, GSTACK_DSHP, GSTACK_DDSHP)
+         !$ACC UPDATE DEVICE(DIM_NN_LIST, GMAXN)                       
                             
         !DEALLOCATE(ISPACE,JSPACE,KSPACE,NODES_IN_BIN,NODELIST_IN_BIN)       
           

@@ -238,7 +238,10 @@
 !$ACC&     LOCAL_WIN, LOCAL_VOL, LOCAL_NSNI_FAC,           &
 !$ACC&     LOCAL_MAT_TYPE, LOCAL_PROP, LOCAL_BODY_ID,       &
 !$ACC&     LOCAL_CHAR_DIST, LOCAL_WAVE_VEL,                &
-!$ACC&     LOCAL_X_MOM, LOCAL_Y_MOM, LOCAL_Z_MOM)          &
+!$ACC&     MODEL_BODYFORCE,                                &
+!$ACC&     LINIT,                                         &
+!$ACC&     LOCAL_X_MOM, LOCAL_Y_MOM, LOCAL_Z_MOM,          &
+!$ACC&     LFINITE_STRAIN, LLAGRANGIAN)                     &
 !$ACC& COPY(                                               &!← 在離開 region 時自動拷回以下更新結果
 !$ACC&     LOCAL_STATE, LOCAL_STRESS, LOCAL_STRAIN, LOCAL_STRAIN_EQ, &
 !$ACC&     LOCAL_DX_STRESS, LOCAL_DY_STRESS, LOCAL_DZ_STRESS,     &
@@ -301,6 +304,7 @@
     !
     TIME_COUNTER = 0.0d0
     LINIT = .TRUE.
+    !$ACC UPDATE DEVICE(LINIT)
     LINIT_TIME = .TRUE.
     SIM_TIME_1 = 0.0d0
     CALL CPU_TIME(REAL_TIME_0)
@@ -694,6 +698,7 @@
         TIMER_STEPS = TIMER_STEPS + 1
         !
         LINIT = .FALSE.
+        !$ACC UPDATE DEVICE(LINIT)
 
 
         WRITE(120,*) TIME
