@@ -157,7 +157,8 @@
       IF ((LINIT).OR.(.NOT.LLAGRANGIAN)) THEN
       
         DIM_NN_LIST=GNUMP*1000
-        GMAXN=GNUMP
+        !GMAXN=GNUMP
+        GMAXN=MIN(GNUMP, 500)
 
         !$ACC ENTER DATA COPYIN(DIM_NN_LIST, GMAXN)
       
