@@ -220,20 +220,20 @@
     INTEGER:: LSTART              !LOCATION OF START IN STACK
     INTEGER:: LGHOST              !FLAG FOR GHOST NODES (GHOST = 1)
     INTEGER, PARAMETER :: MAX_NEIGHBORS = 500  ! 固定最大鄰居數
-    INTEGER:: LSTACK(MAX_NEIGHBORS)       !LOCAL LIST/STACK OF NEIGHBORS
+    INTEGER, ALLOCATABLE :: LSTACK(:,:)   !LOCAL LIST/STACK OF NEIGHBORS per thread
     INTEGER:: LN                  !NUMBER OF NEIGHBORS FOR A NODE
     DOUBLE PRECISION:: LVOL       !VOLUME OF A NODE
-    DOUBLE PRECISION:: SHP(MAX_NEIGHBORS), SHPD(3,MAX_NEIGHBORS), SHPD_TRASH(3,MAX_NEIGHBORS)       !SHAPE FUNCTIONS AND GRADIENTS
-    DOUBLE PRECISION:: SHPDTMP(3,MAX_NEIGHBORS)       !TEMPORARY SHAPE FUNCTIONS AND GRADIENTS
+    DOUBLE PRECISION, ALLOCATABLE :: SHP(:,:), SHPD(:,:,:), SHPD_TRASH(:,:,:) !SHAPE FUNCTIONS AND GRADIENTS
+    DOUBLE PRECISION, ALLOCATABLE :: SHPDTMP(:,:,:)   !TEMPORARY SHAPE FUNCTIONS AND GRADIENTS
 
-    DOUBLE PRECISION:: SHPD_SM(3,MAX_NEIGHBORS)        !SHAPE FUNCTION SMOOTHED GRADIENTS
-    DOUBLE PRECISION:: SHPDD_SM(6,MAX_NEIGHBORS)       !SHAPE FUNCTION SMOOTHED SMOOTHED GRADIENTS
+    DOUBLE PRECISION, ALLOCATABLE :: SHPD_SM(:,:,:)
+    DOUBLE PRECISION, ALLOCATABLE :: SHPDD_SM(:,:,:)
     DOUBLE PRECISION:: SHPDTEMP(9) !TEMPORARY VARIABLE FOR SHAPES FOR STABILZIATION
-    DOUBLE PRECISION:: SHP6(GMAXN,6), SHPD6(3,GMAXN,6) !SHAPE FUNCTION AND SM. GRAD. AT SMOOTHING POINTS
+    DOUBLE PRECISION, ALLOCATABLE :: SHP6(:,:,:), SHPD6(:,:,:,:)
     DOUBLE PRECISION:: LMAT(3,3) !INCREMENTAL DEFORMATION GRADIENT WITH RESPECT TO THE CURRENT TIME STEP
-    DOUBLE PRECISION:: LDINC(3,GMAXN),LDINC_TOT(3,GMAXN)       !DISPLACEMENT INCREMENT (PREDICTOR) OF A NODESTRAIN
-    DOUBLE PRECISION:: LCOO_CUURENT(3,GMAXN)  !CURRENT COORDINATES OF THE NEIGBORS
-    DOUBLE PRECISION:: LCOONE(3,GMAXN)  !ORIGINAL COORDINATES OF THE NEIGBORS
+    DOUBLE PRECISION, ALLOCATABLE :: LDINC(:,:,:),LDINC_TOT(:,:,:)
+    DOUBLE PRECISION, ALLOCATABLE :: LCOO_CUURENT(:,:,:)
+    DOUBLE PRECISION, ALLOCATABLE :: LCOONE(:,:,:)
     DOUBLE PRECISION:: B_TEMP(3,3), B_INV_TEMP(3,3) !GC
     DOUBLE PRECISION:: STRAIN(6)       !INCREMENTALLY OBJECTIVE STRAIN
     DOUBLE PRECISION:: ELAS_MAT(6,6)
@@ -328,6 +328,14 @@
 
       ALLOCATE(GINT_WORK_TEMP(NCORES_INPUT))
       GINT_WORK_TEMP = 0.0d0
+      ALLOCATE(LSTACK(MAX_NEIGHBORS,NCORES_INPUT))
+      ALLOCATE(SHP(MAX_NEIGHBORS,NCORES_INPUT))
+      ALLOCATE(SHPD(3,MAX_NEIGHBORS,NCORES_INPUT))
+      ALLOCATE(SHPDTMP(3,MAX_NEIGHBORS,NCORES_INPUT))
+      ALLOCATE(LDINC(3,GMAXN,NCORES_INPUT))
+      ALLOCATE(LDINC_TOT(3,GMAXN,NCORES_INPUT))
+      ALLOCATE(LCOO_CUURENT(3,GMAXN,NCORES_INPUT))
+      ALLOCATE(LCOONE(3,GMAXN,NCORES_INPUT))
 
       ! Check material properties on the host before entering the
       ! accelerator region. Hyperelastic materials require LPROP(1) = 3.
@@ -341,7 +349,9 @@
 
     ! OpenACC: Create temporary arrays on GPU
     !
-    !$ACC ENTER DATA CREATE(FINT_TEMP, FEXT_TEMP, GINT_WORK_TEMP)
+    !$ACC ENTER DATA CREATE(FINT_TEMP, FEXT_TEMP, GINT_WORK_TEMP, &
+    !$ACC&                       LSTACK, SHP, SHPD, SHPDTMP, LDINC, LDINC_TOT, &
+    !$ACC&                       LCOO_CUURENT, LCOONE)
     !$ACC UPDATE DEVICE(FINT_TEMP, FEXT_TEMP, GINT_WORK_TEMP)
     !$ACC ENTER DATA COPYIN(GGHOST)
     !$ACC ENTER DATA COPYIN(RK_DEGREE, RK_PSIZE, RK_CONT, RK_IMPL, &
@@ -426,44 +436,44 @@
         ! GET THE NEIGHBOR LIST
         !
         DO J = 1, LN
-            LSTACK(J) = GSTACK(LSTART+J-1)
+            LSTACK(J,ID_RANK) = GSTACK(LSTART+J-1)
         END DO
         !
         ! GET THE INCREMENTS OF DISPLACEMENTS FOR NEIGHBORS
         !
         DO J = 1, LN
-            JJ = LSTACK(J)
-            LDINC(1,J) = GDINC((JJ-1)*3+1)
-            LDINC(2,J) = GDINC((JJ-1)*3+2)
-            LDINC(3,J) = GDINC((JJ-1)*3+3)
+            JJ = LSTACK(J,ID_RANK)
+            LDINC(1,J,ID_RANK) = GDINC((JJ-1)*3+1)
+            LDINC(2,J,ID_RANK) = GDINC((JJ-1)*3+2)
+            LDINC(3,J,ID_RANK) = GDINC((JJ-1)*3+3)
         END DO
         !
         ! GET THE GENERALIZED DISPLACEMENTS FOR NEIGHBORS
         !
         DO J = 1, LN
-            JJ = LSTACK(J)
-            LDINC_TOT(1,J) = GDINC_TOT((JJ-1)*3+1)
-            LDINC_TOT(2,J) = GDINC_TOT((JJ-1)*3+2)
-            LDINC_TOT(3,J) = GDINC_TOT((JJ-1)*3+3)
+            JJ = LSTACK(J,ID_RANK)
+            LDINC_TOT(1,J,ID_RANK) = GDINC_TOT((JJ-1)*3+1)
+            LDINC_TOT(2,J,ID_RANK) = GDINC_TOT((JJ-1)*3+2)
+            LDINC_TOT(3,J,ID_RANK) = GDINC_TOT((JJ-1)*3+3)
         END DO
         !
         ! GET THE ORIGINAL COORDINATES FOR NEIGHBORS
         !
         DO J = 1, LN
-            JJ = LSTACK(J)
-            LCOONE(1,J) = GCOO(1,JJ)
-            LCOONE(2,J) = GCOO(2,JJ)
-            LCOONE(3,J) = GCOO(3,JJ)
+            JJ = LSTACK(J,ID_RANK)
+            LCOONE(1,J,ID_RANK) = GCOO(1,JJ)
+            LCOONE(2,J,ID_RANK) = GCOO(2,JJ)
+            LCOONE(3,J,ID_RANK) = GCOO(3,JJ)
         END DO
         !
         !
         ! GET THE CURRENT COORDINATES FOR NEIGHBORS
         !
         DO J = 1, LN
-            JJ = LSTACK(J)
-            LCOO_CUURENT(1,J) = GCOO_CUURENT(1,JJ)
-            LCOO_CUURENT(2,J) = GCOO_CUURENT(2,JJ)
-            LCOO_CUURENT(3,J) = GCOO_CUURENT(3,JJ)
+            JJ = LSTACK(J,ID_RANK)
+            LCOO_CUURENT(1,J,ID_RANK) = GCOO_CUURENT(1,JJ)
+            LCOO_CUURENT(2,J,ID_RANK) = GCOO_CUURENT(2,JJ)
+            LCOO_CUURENT(3,J,ID_RANK) = GCOO_CUURENT(3,JJ)
         END DO
         !
         !IF IT IS LAGRANGIAN AND IT IS NOT THE FIRST STEP, RECALL SHAPE FUNCTIONS
@@ -521,15 +531,15 @@
                 !
                 IF (LLAGRANGIAN) THEN
 
-                    CALL RK1(LCOO, RK_DEGREE, RK_PSIZE, RK_CONT, RK_IMPL,GCOO, GWIN, GNUMP, LSTACK, LN, GMAXN, GEBC_NODES,SELF_EBC, &
+                    CALL RK1(LCOO, RK_DEGREE, RK_PSIZE, RK_CONT, RK_IMPL,GCOO, GWIN, GNUMP, LSTACK(:,ID_RANK), LN, GMAXN, GEBC_NODES,SELF_EBC, &
                         QL, QL_COEF,QL_LEN, &
-                        SHP, SHPD,SHSUP)
+                        SHP(:,ID_RANK), SHPD(:,:,ID_RANK),SHSUP)
 
 
                 ELSE !GCOO_CUURENT
-                    CALL RK1(LCOO_T, RK_DEGREE, RK_PSIZE, RK_CONT, RK_IMPL,GCOO_CUURENT, GWIN, GNUMP, LSTACK, LN, GMAXN, GEBC_NODES,SELF_EBC, &
+                    CALL RK1(LCOO_T, RK_DEGREE, RK_PSIZE, RK_CONT, RK_IMPL,GCOO_CUURENT, GWIN, GNUMP, LSTACK(:,ID_RANK), LN, GMAXN, GEBC_NODES,SELF_EBC, &
                         QL, QL_COEF,QL_LEN, &
-                        SHP, SHPD, SHSUP)
+                        SHP(:,ID_RANK), SHPD(:,:,ID_RANK), SHSUP)
                     
                     ! CALCULATE THE DEFORMATION GRADIENT
                     B_TEMP = 0.D0
@@ -545,12 +555,12 @@
                     !
                     ! STORE THE SHP FOR PHY DISPLACEMENT/VEL CACULATION FOR DNI
                     !
-                    DO J = 1, LN
-                        GSTACK_SHP(LSTART+J-1) = SHP(J)
-                        GSTACK_DSHP(1,LSTART+J-1) = SHPD(1,J)
-                        GSTACK_DSHP(2,LSTART+J-1) = SHPD(2,J)
-                        GSTACK_DSHP(3,LSTART+J-1) = SHPD(3,J)
-                    END DO
+                      DO J = 1, LN
+                          GSTACK_SHP(LSTART+J-1) = SHP(J,ID_RANK)
+                          GSTACK_DSHP(1,LSTART+J-1) = SHPD(1,J,ID_RANK)
+                          GSTACK_DSHP(2,LSTART+J-1) = SHPD(2,J,ID_RANK)
+                          GSTACK_DSHP(3,LSTART+J-1) = SHPD(3,J,ID_RANK)
+                      END DO
 
                 END IF
 
@@ -698,10 +708,10 @@
             IF ((LLAGRANGIAN).AND.(LINIT)) THEN
 
                 DO J = 1, LN
-                    GSTACK_SHP(LSTART+J-1) = SHP(J)
-                    GSTACK_DSHP(1,LSTART+J-1) = SHPD(1,J)
-                    GSTACK_DSHP(2,LSTART+J-1) = SHPD(2,J)
-                    GSTACK_DSHP(3,LSTART+J-1) = SHPD(3,J)
+            GSTACK_SHP(LSTART+J-1) = SHP(J,ID_RANK)
+            GSTACK_DSHP(1,LSTART+J-1) = SHPD(1,J,ID_RANK)
+            GSTACK_DSHP(2,LSTART+J-1) = SHPD(2,J,ID_RANK)
+            GSTACK_DSHP(3,LSTART+J-1) = SHPD(3,J,ID_RANK)
                 END DO
 
                 IF (LFINITE_STRAIN) THEN
@@ -715,14 +725,14 @@
                     DO K = 1, 3
                         DO L = 1, 3
                             DO J = 1, LN
-                                FMAT(K,L) = FMAT(K,L) +  SHPD(L,J)*LDINC_TOT(K,J)
+                                FMAT(K,L) = FMAT(K,L) +  SHPD(L,J,ID_RANK)*LDINC_TOT(K,J,ID_RANK)
                             END DO !J = 1, LN (COMPUTE THE INCREMENTAL DEFORMATION GRADIENT)
                         END DO
                     END DO
                     CALL DETERMINANT(FMAT,DET)
                     !
-                    SHPDTMP(:,1:LN)=SHPD(:,1:LN)
-                    SHPD(:,1:LN) = 0.0d0
+                      SHPDTMP(:,1:LN,ID_RANK)=SHPD(:,1:LN,ID_RANK)
+                      SHPD(:,1:LN,ID_RANK) = 0.0d0
 
 
                     !CALL INVERSE(FMAT, 3, IFMAT)
@@ -730,9 +740,9 @@
 
                     DO J = 1, LN
                         DO K = 1, 3
-                            SHPD(1,J) = SHPD(1,J) + SHPDTMP(K,J)*IFMAT(K,1)
-                            SHPD(2,J) = SHPD(2,J) + SHPDTMP(K,J)*IFMAT(K,2)
-                            SHPD(3,J) = SHPD(3,J) + SHPDTMP(K,J)*IFMAT(K,3)
+                              SHPD(1,J,ID_RANK) = SHPD(1,J,ID_RANK) + SHPDTMP(K,J,ID_RANK)*IFMAT(K,1)
+                              SHPD(2,J,ID_RANK) = SHPD(2,J,ID_RANK) + SHPDTMP(K,J,ID_RANK)*IFMAT(K,2)
+                              SHPD(3,J,ID_RANK) = SHPD(3,J,ID_RANK) + SHPDTMP(K,J,ID_RANK)*IFMAT(K,3)
 
                         END DO
 
@@ -1211,10 +1221,10 @@ XNORM(1:3) =0.D0
             
 
             !GRAVITY
-            FGRAV = SHP(J) * IGRAVITY*DENSITY
-            
+            FGRAV = SHP(J,ID_RANK) * IGRAVITY*DENSITY
+
             !BODY FORCE
-            FBOD = SHP(J) * LBOD*DENSITY
+            FBOD = SHP(J,ID_RANK) * LBOD*DENSITY
                         
             FINT3_EXT = FBOD + FGRAV
 
@@ -1450,7 +1460,8 @@ XNORM(1:3) =0.D0
     !
     ! OpenACC: Clean up temporary GPU arrays
     !
-    !$ACC EXIT DATA DELETE(FINT_TEMP, FEXT_TEMP, GINT_WORK_TEMP)
+    !$ACC EXIT DATA DELETE(FINT_TEMP, FEXT_TEMP, GINT_WORK_TEMP, LSTACK, SHP, SHPD, SHPDTMP, LDINC, LDINC_TOT, LCOO_CUURENT, LCOONE)
+
 
     !$ACC EXIT DATA DELETE(RK_DEGREE, RK_PSIZE, RK_CONT, RK_IMPL, &
     !$ACC&                   LLAGRANGIAN, QL, QL_COEF, QL_LEN, SHSUP, &
@@ -1459,6 +1470,7 @@ XNORM(1:3) =0.D0
     DEALLOCATE(FINT_TEMP)
     DEALLOCATE(FEXT_TEMP)
     DEALLOCATE(GINT_WORK_TEMP)
+    DEALLOCATE(LSTACK, SHP, SHPD, SHPDTMP, LDINC, LDINC_TOT, LCOO_CUURENT, LCOONE)
     RETURN
     END SUBROUTINE
 
