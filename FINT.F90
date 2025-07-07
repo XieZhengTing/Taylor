@@ -345,20 +345,26 @@
 
         IF (LINIT) THEN
           ALLOCATE(GWIN0(3,GNUMP))
-		  GWIN0 = GWIN
+          GWIN0 = GWIN
           !$ACC ENTER DATA COPYIN(GWIN0)
-		END IF
-		
-		
-    !$ACC PARALLEL LOOP GANG VECTOR PRESENT(GCOO, GCOO_CUURENT, GWIN, GSM_LEN, GSM_VOL, GSM_AREA, GN, GSTART, &
-    !$ACC&                                  DIM_NN_LIST, GSTACK, GSTACK_SHP, GSTACK_DSHP, GSTACK_DDSHP, GINVK, &
-    !$ACC&                                  GCHAR_DIST, GMAX_WVEL, GMAXN, GGHOST, GEBC_NODES, GVOL, GNSNI_FAC, &
-    !$ACC&                                  GSTRESS, LOCAL_DX_STRESS, LOCAL_DY_STRESS, LOCAL_DZ_STRESS, &
-    !$ACC&                                  GSTRAIN, GSTATE, GPROP, GDINC, GDINC_TOT, GMAT_TYPE, &
-    !$ACC&                                  FINT_TEMP, FEXT_TEMP, GINT_WORK_TEMP, GSTRAIN_EQ, &
-    !$ACC&                                  MODEL_BODYFORCE, MODEL_BODY_ID, DLT, LINIT, LFINITE_STRAIN, &
-    !$ACC&                                  LLAGRANGIAN, RK_DEGREE, RK_PSIZE, RK_CONT, RK_IMPL, &
-    !$ACC&                                  QL, QL_COEF, QL_LEN, SHSUP, ITYPE_INT, IGRAVITY) &
+        END IF
+        
+    ! Copy scalar values for GPU kernel
+    !$ACC SERIAL
+    !$ACC END SERIAL
+    
+    !$ACC PARALLEL LOOP GANG VECTOR DEFAULT(NONE) &
+    !$ACC&        PRESENT(GCOO, GCOO_CUURENT, GWIN, GSM_LEN, GSM_VOL, GSM_AREA, GN, GSTART, &
+    !$ACC&                GSTACK, GSTACK_SHP, GSTACK_DSHP, GSTACK_DDSHP, GINVK, &
+    !$ACC&                GCHAR_DIST, GMAX_WVEL, GGHOST, GEBC_NODES, GVOL, GNSNI_FAC, &
+    !$ACC&                GSTRESS, LOCAL_DX_STRESS, LOCAL_DY_STRESS, LOCAL_DZ_STRESS, &
+    !$ACC&                GSTRAIN, GSTATE, GPROP, GDINC, GDINC_TOT, GMAT_TYPE, &
+    !$ACC&                FINT_TEMP, FEXT_TEMP, GINT_WORK_TEMP, GSTRAIN_EQ, &
+    !$ACC&                MODEL_BODYFORCE, MODEL_BODY_ID) &
+    !$ACC&        PRESENT(GWIN0) IF(LINIT) &
+    !$ACC&        COPYIN(DIM_NN_LIST, GMAXN, GNUMP, DLT, LINIT, NCORES_INPUT) &
+    !$ACC&        COPYIN(LFINITE_STRAIN, LLAGRANGIAN, RK_DEGREE, RK_PSIZE, RK_CONT, RK_IMPL) &
+    !$ACC&        COPYIN(QL, QL_COEF, QL_LEN, SHSUP, ITYPE_INT, IGRAVITY) &
     !$ACC&        PRIVATE(I, J, K, L, JJ, LCOO, LCOO_T, VOL, LWIN, LSM_LEN, LN, LSTART, &
     !$ACC&                LGHOST, LVOL, LPROP, LMAT_TYPE, LOCAL_BODY_ID, SELF_EBC, &
     !$ACC&                LSTRESS, LSTRAIN, LSTATE, LSTACK, LDINC, LDINC_TOT, &
