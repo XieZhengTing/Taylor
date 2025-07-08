@@ -346,6 +346,7 @@
     !$ACC ENTER DATA COPYIN(RK_DEGREE, RK_PSIZE, RK_CONT, RK_IMPL, &
     !$ACC&                     LLAGRANGIAN, QL, QL_COEF, QL_LEN, SHSUP, &
     !$ACC&                     ITYPE_INT, IGRAVITY)
+    !$ACC ENTER DATA COPYIN(LINIT, LFINITE_STRAIN)
 
         IF (LINIT) THEN
           ALLOCATE(GWIN0(3,GNUMP))
@@ -354,13 +355,14 @@
 		END IF
 		
 		
-    !$ACC PARALLEL LOOP GANG VECTOR PRESENT(GCOO, GCOO_CUURENT, GWIN, GSM_LEN, GSM_VOL, GSM_AREA, GN, GSTART, &
+    !$ACC PARALLEL LOOP GANG VECTOR COPYIN(LINIT, LFINITE_STRAIN) &
+    !$ACC&                          PRESENT(GCOO, GCOO_CUURENT, GWIN, GSM_LEN, GSM_VOL, GSM_AREA, GN, GSTART, &
     !$ACC&                                  DIM_NN_LIST, GSTACK, GSTACK_SHP, GSTACK_DSHP, GSTACK_DDSHP, GINVK, &
     !$ACC&                                  GCHAR_DIST, GMAX_WVEL, GMAXN, GGHOST, GEBC_NODES, GVOL, GNSNI_FAC, &
     !$ACC&                                  GSTRESS, LOCAL_DX_STRESS, LOCAL_DY_STRESS, LOCAL_DZ_STRESS, &
     !$ACC&                                  GSTRAIN, GSTATE, GPROP, GDINC, GDINC_TOT, GMAT_TYPE, &
     !$ACC&                                  FINT_TEMP, FEXT_TEMP, GINT_WORK_TEMP, GSTRAIN_EQ, &
-    !$ACC&                                  MODEL_BODYFORCE, MODEL_BODY_ID, DLT, LINIT, LFINITE_STRAIN, &
+    !$ACC&                                  MODEL_BODYFORCE, MODEL_BODY_ID, DLT, &
     !$ACC&                                  LLAGRANGIAN, RK_DEGREE, RK_PSIZE, RK_CONT, RK_IMPL, &
     !$ACC&                                  QL, QL_COEF, QL_LEN, SHSUP, ITYPE_INT, IGRAVITY) &
     !$ACC&        PRIVATE(I, J, K, L, JJ, LCOO, LCOO_T, VOL, LWIN, LSM_LEN, LN, LSTART, &
