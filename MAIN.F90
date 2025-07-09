@@ -710,14 +710,14 @@
         IF (TIME.GT.TIME_END) EXIT
         !
     END DO
-
+    !
+    ! Additional verification for critical arrays
+    !$ACC UPDATE HOST(LOCAL_STRESS, LOCAL_STRAIN, LOCAL_STATE, LOCAL_STRAIN_EQ)
     !
     ! End OpenACC data region - copy results back to host
     !
     !$ACC END DATA
-    !
-    ! Additional verification for critical arrays
-    !$ACC UPDATE HOST(LOCAL_STRESS, LOCAL_STRAIN, LOCAL_STATE, LOCAL_STRAIN_EQ)
+
 	!GC
 	DEALLOCATE(MODEL_ELCON)
 	
