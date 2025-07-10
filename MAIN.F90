@@ -254,7 +254,7 @@
 !$ACC&     LOCAL_ACL, LOCAL_DSP,                                   &
 !$ACC&     LOCAL_ACL_PHY, LOCAL_VEL_PHY, LOCAL_DINC_PHY,           &
 !$ACC&     LOCAL_DSP_TOT, LOCAL_DSP_TOT_PHY,                       &
-!$ACC&     LOCAL_PRFORCE, TOTAL_FORCE)
+!$ACC&     LOCAL_PRFORCE, TOTAL_FORCE)                      &
 !$ACC& COPYIN(LOCAL_VEL)  ! Ensure initial velocity is copied to GPU
 
    ! Debug: Check initial velocities before time integration
