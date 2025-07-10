@@ -112,7 +112,19 @@
       DOUBLE PRECISION, SAVE:: CNT_SEARCH
       
       IF (DO_INTERP) THEN
-		IF(.NOT. PERIDYNAMICS) THEN  !RKPM  
+		IF(.NOT. PERIDYNAMICS) THEN  !RKPM
+
+       ! CRITICAL: Ensure neighbor data is current on GPU
+       ! This is necessary because initial CREATE may leave data uninitialized
+       !$ACC UPDATE DEVICE(GN, GSTART, GSTACK, GSTACK_SHP)
+       
+       ! Debug: Verify neighbor data before interpolation
+       PRINT *, '=== NEIGHBOR DATA CHECK ==='
+       PRINT *, 'First 3 nodes neighbor count (GN):', GN(1:3)       IF (GN(1) > 0) THEN
+           PRINT *, 'Node 1 first neighbor:', GSTACK(GSTART(1))
+           PRINT *, 'Node 1 first shape function:', GSTACK_SHP(GSTART(1))
+       END IF
+
         !$ACC PARALLEL LOOP PRESENT(GDINC_PHY, GVEL_PHY, GACL_PHY, &
         !$ACC&                      GSTACK_SHP, GSTACK, GSTART, GN, &
         !$ACC&                      GDINC, GVEL, GACL) &
