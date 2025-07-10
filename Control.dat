@@ -121,6 +121,9 @@ BAR
 *OUTPUT VARIABLES
 all
 
+*FEM OUTPUT
+#LFEM_OUTPUT  (1 = write FEM cells)
+1
 
 ##possible parameters:
 

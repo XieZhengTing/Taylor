@@ -102,6 +102,15 @@
       INTEGER:: IMAT_TYPE
       LOGICAL:: LOTSOFO
       ! 
+ ! Debug output
+ PRINT *, '=== VTK OUTPUT DEBUG ==='
+ PRINT *, 'LFEM_OUTPUT =', LFEM_OUTPUT
+ PRINT *, 'MODEL_NUMEL =', MODEL_NUMEL
+ IF (ALLOCATED(MODEL_ELCON)) THEN
+     PRINT *, 'MODEL_ELCON is allocated'
+ ELSE
+     PRINT *, 'ERROR: MODEL_ELCON is NOT allocated!'
+ END IF
       !exodusStep = CURRENT OUTPUT STEP
       
       
