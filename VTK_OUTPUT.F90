@@ -109,6 +109,13 @@
  PRINT *, 'MODEL_NUMEL =', MODEL_NUMEL
  IF (ALLOCATED(MODEL_ELCON_MOD)) THEN
      PRINT *, 'MODEL_ELCON is allocated'
+     ! Print sample connectivity data
+     IF (MODEL_NUMEL .GT. 0) THEN
+         PRINT *, 'First element connectivity:', MODEL_ELCON(:,1)
+         PRINT *, 'Min node index:', MINVAL(MODEL_ELCON)
+         PRINT *, 'Max node index:', MAXVAL(MODEL_ELCON)
+         PRINT *, 'Expected range: 1 to', MODEL_NUMP
+     END IF
  ELSE
      PRINT *, 'ERROR: MODEL_ELCON is NOT allocated!'
  END IF

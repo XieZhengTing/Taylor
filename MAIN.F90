@@ -244,7 +244,8 @@
 !$ACC&     MODEL_BODYFORCE,                                &
 !$ACC&     LINIT,                                         &
 !$ACC&     LOCAL_X_MOM, LOCAL_Y_MOM, LOCAL_Z_MOM,          &
-!$ACC&     LFINITE_STRAIN, LLAGRANGIAN)                     &
+!$ACC&     LFINITE_STRAIN, LLAGRANGIAN,                    &
+!$ACC&     MODEL_ELCON, MODEL_NUMEL)                       &
 !$ACC& COPY(                                               &!← 在離開 region 時自動拷回以下更新結果
 !$ACC&     LOCAL_STATE, LOCAL_STRESS, LOCAL_STRAIN, LOCAL_STRAIN_EQ, &
 !$ACC&     LOCAL_DX_STRESS, LOCAL_DY_STRESS, LOCAL_DZ_STRESS,     &
@@ -433,7 +434,12 @@
 
         ! Sync updated coordinates back to host
         !$ACC UPDATE HOST(LOCAL_COO_CURRENT)
-
+ ! Update all arrays needed for VTK output
+ !$ACC UPDATE HOST(LOCAL_DSP_TOT_PHY)
+ !$ACC UPDATE HOST(LOCAL_STRESS, LOCAL_STRAIN, LOCAL_STATE, LOCAL_STRAIN_EQ)
+ !$ACC UPDATE HOST(LOCAL_H_STRESS, LOCAL_S_STRESS)
+ ! CRITICAL: Update MODEL_ELCON for element connectivity output
+ !$ACC UPDATE HOST(MODEL_ELCON)
         !TEST HUGHS-WINDET ROTATION ALGORITHM, LATER SHOULD BE REMOVED
         !CALL ROTATION_TEST(LOCAL_DSP,LOCAL_COO,LOCAL_NUMP,TIME,DLT)
         !
@@ -639,7 +645,10 @@
             ! CALL THE SUBROUTINE TO OUTPUT TO THE VTK FILE
             !
             IF (HPC_SCHEME.EQ.1) THEN
-
+     ! Ensure all data is synchronized before output
+     !$ACC UPDATE HOST(LOCAL_DSP_TOT_PHY, LOCAL_VEL_PHY, LOCAL_ACL_PHY)
+     !$ACC UPDATE HOST(LOCAL_STRESS, LOCAL_STRAIN, LOCAL_STATE, LOCAL_STRAIN_EQ)
+     !$ACC UPDATE HOST(MODEL_ELCON)
                 IF (UNF_OUTPUT) THEN
                     call UNF_OUTPUT_STEP_VTK(exodusStep,LOCAL_NUMP,MODEL_NUMEL, MODEL_ELCON, LOCAL_COO_CURRENT,MODEL_NODE_IDS,LOCAL_DSP_TOT_PHY,LOCAL_VEL_PHY, &
                         LOCAL_ACL_PHY, LOCAL_FINT, LOCAL_EBC,  LOCAL_BODY_ID,  LOCAL_MAT_TYPE,  LOCAL_COO,    &
