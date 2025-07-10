@@ -251,10 +251,23 @@
 !$ACC&     LOCAL_DX_STRESS, LOCAL_DY_STRESS, LOCAL_DZ_STRESS,     &
 !$ACC&     LOCAL_H_STRESS, LOCAL_S_STRESS,                         &
 !$ACC&     LOCAL_FINT, LOCAL_FEXT, LOCAL_FINT_NMO, LOCAL_FEXT_NMO, &
-!$ACC&     LOCAL_ACL, LOCAL_VEL, LOCAL_DSP,                         &
+!$ACC&     LOCAL_ACL, LOCAL_DSP,                                   &
 !$ACC&     LOCAL_ACL_PHY, LOCAL_VEL_PHY, LOCAL_DINC_PHY,           &
 !$ACC&     LOCAL_DSP_TOT, LOCAL_DSP_TOT_PHY,                       &
 !$ACC&     LOCAL_PRFORCE, TOTAL_FORCE)
+!$ACC& COPYIN(LOCAL_VEL)  ! Ensure initial velocity is copied to GPU
+
+   ! Debug: Check initial velocities before time integration
+   PRINT *, '=== INITIAL VELOCITY CHECK ==='
+   PRINT *, 'First 5 nodes Z-velocity (should be -373 for Taylor bar):'
+   DO I = 1, MIN(5, LOCAL_NUMP)
+       PRINT '(A,I4,A,3E15.5)', 'Node', I, ' Vel:', &
+           LOCAL_VEL((I-1)*3+1), LOCAL_VEL((I-1)*3+2), LOCAL_VEL((I-1)*3+3)
+   END DO
+   PRINT *, 'Max absolute velocity:', MAXVAL(ABS(LOCAL_VEL))
+   
+   ! CRITICAL: Ensure initial velocities are on GPU
+   !$ACC UPDATE DEVICE(LOCAL_VEL)
 
     !
     !******************************************OUTPUT******************************************
@@ -392,6 +405,16 @@
         !$ACC END PARALLEL LOOP
         !$ACC WAIT(1)                             !← 確保非同步計算完成
         !$ACC UPDATE HOST(LOCAL_DSP, LOCAL_DSP_TOT, LOCAL_VEL)  !← 把 GPU 計算結果拷回主機
+     ! Debug: Check if predictor is working
+        IF (STEPS .LE. 2) THEN
+            PRINT *, '=== PREDICTOR CHECK (Step', STEPS, ') ==='
+            PRINT *, 'Time step DLT:', DLT
+            PRINT *, 'First node after predictor:'
+            PRINT *, '  Vel:', LOCAL_VEL(1:3)
+            PRINT *, '  Accel:', LOCAL_ACL(1:3)
+            PRINT *, '  Disp incr:', LOCAL_DSP(1:3)
+            PRINT *, '  Total disp:', LOCAL_DSP_TOT(1:3)
+        END IF
      END IF
 
 
@@ -415,8 +438,18 @@
 
 
         !$ACC UPDATE HOST(LOCAL_DINC_PHY, LOCAL_VEL_PHY, LOCAL_ACL_PHY)
+ ! Debug: Check PHY variables
+ IF (STEPS .LE. 2) THEN
+     PRINT *, '=== PHY VARIABLES CHECK (Step', STEPS, ') ==='
+     PRINT *, 'LOCAL_DINC_PHY (first 3):', LOCAL_DINC_PHY(1:3)
+     PRINT *, 'Before update - LOCAL_DSP_TOT_PHY:', LOCAL_DSP_TOT_PHY(1:3)
+ END IF
         LOCAL_DSP_TOT_PHY = LOCAL_DSP_TOT_PHY + LOCAL_DINC_PHY
-        
+
+ IF (STEPS .LE. 2) THEN
+     PRINT *, 'After update - LOCAL_DSP_TOT_PHY:', LOCAL_DSP_TOT_PHY(1:3)
+ END IF
+
         ! Ensure LOCAL_DSP_TOT_PHY is on GPU for coordinate update
         !$ACC UPDATE DEVICE(LOCAL_DSP_TOT_PHY)
         
@@ -559,7 +592,19 @@
                     LOCAL_PRFORCE(J,I) = 0.0d0
 
                 END IF
-                            
+
+               ! Debug: Check forces for first few nodes
+               IF (I .LE. 3 .AND. STEPS .LE. 2) THEN
+                   IF (J .EQ. 1) THEN
+                       PRINT '(A,I3,A)', '=== Node ', I, ' forces ==='
+                       PRINT *, '  EBC:', LOCAL_EBC(:,I)
+                       PRINT *, '  FINT:', LOCAL_FINT((I-1)*3+1:I*3)
+                       PRINT *, '  FEXT:', LOCAL_FEXT((I-1)*3+1:I*3)
+                       PRINT *, '  Mass:', LOCAL_MASS((I-1)*3+1:I*3)
+                       PRINT *, '  Accel:', LOCAL_ACL((I-1)*3+1:I*3)
+                   END IF
+               END IF
+
             TOTAL_FORCE(J,LOCAL_BODY_ID(I))=TOTAL_FORCE(J,LOCAL_BODY_ID(I))+LOCAL_PRFORCE(J,I)
 
             END DO
