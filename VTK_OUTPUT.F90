@@ -142,6 +142,13 @@
 	  !
       !NOW OUTPUT THE POINTS
       !
+ ! Debug: Check coordinates being written
+ PRINT *, '=== WRITING COORDINATES TO VTK ==='
+ PRINT *, 'First 3 nodes being written:'
+ DO I = 1, MIN(3, MODEL_NUMP)
+     PRINT '(A,I4,A,3E15.5)', 'Node', I, ':', MODEL_COO_CURRENT(:,I)
+ END DO
+
       DO I=1,MODEL_NUMP
         WRITE(50,'(3E13.5)') MODEL_COO_CURRENT(1,I), MODEL_COO_CURRENT(2,I), MODEL_COO_CURRENT(3,I)
       END DO

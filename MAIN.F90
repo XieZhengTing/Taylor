@@ -434,12 +434,32 @@
 
         ! Sync updated coordinates back to host
         !$ACC UPDATE HOST(LOCAL_COO_CURRENT)
+
+ ! Debug: Verify coordinate update
+ IF (MOD(STEPS, 16) .EQ. 0) THEN
+     PRINT *, '=== COORDINATE UPDATE CHECK (Step', STEPS, ') ==='
+     PRINT *, 'Sample displacement:', LOCAL_DSP_TOT_PHY(1:3)
+     PRINT *, 'Original coord:', LOCAL_COO(:,1)
+     PRINT *, 'Current coord:', LOCAL_COO_CURRENT(:,1)
+ END IF
+
  ! Update all arrays needed for VTK output
  !$ACC UPDATE HOST(LOCAL_DSP_TOT_PHY)
  !$ACC UPDATE HOST(LOCAL_STRESS, LOCAL_STRAIN, LOCAL_STATE, LOCAL_STRAIN_EQ)
  !$ACC UPDATE HOST(LOCAL_H_STRESS, LOCAL_S_STRESS)
  ! CRITICAL: Update MODEL_ELCON for element connectivity output
  !$ACC UPDATE HOST(MODEL_ELCON)
+
+ ! Debug: Check coordinate values before VTK output
+ PRINT *, '=== COORDINATE CHECK BEFORE VTK OUTPUT ==='
+ PRINT *, 'First 3 nodes coordinates:'
+ DO I = 1, 3
+     PRINT '(A,I4,A,3E15.5)', 'Node', I, ':', LOCAL_COO_CURRENT(:,I)
+ END DO
+ PRINT *, 'Min/Max X:', MINVAL(LOCAL_COO_CURRENT(1,:)), MAXVAL(LOCAL_COO_CURRENT(1,:))
+ PRINT *, 'Min/Max Y:', MINVAL(LOCAL_COO_CURRENT(2,:)), MAXVAL(LOCAL_COO_CURRENT(2,:))
+ PRINT *, 'Min/Max Z:', MINVAL(LOCAL_COO_CURRENT(3,:)), MAXVAL(LOCAL_COO_CURRENT(3,:))
+
         !TEST HUGHS-WINDET ROTATION ALGORITHM, LATER SHOULD BE REMOVED
         !CALL ROTATION_TEST(LOCAL_DSP,LOCAL_COO,LOCAL_NUMP,TIME,DLT)
         !
