@@ -430,9 +430,6 @@
 
         ! Sync updated coordinates back to host
         !$ACC UPDATE HOST(LOCAL_COO_CURRENT)
-         ! Update all arrays needed for VTK output
-         !$ACC UPDATE HOST(LOCAL_STRESS, LOCAL_STRAIN, LOCAL_STATE, LOCAL_STRAIN_EQ)
-         !$ACC UPDATE HOST(LOCAL_H_STRESS, LOCAL_S_STRESS)
 
         !TEST HUGHS-WINDET ROTATION ALGORITHM, LATER SHOULD BE REMOVED
         !CALL ROTATION_TEST(LOCAL_DSP,LOCAL_COO,LOCAL_NUMP,TIME,DLT)
@@ -710,13 +707,12 @@
         IF (TIME.GT.TIME_END) EXIT
         !
     END DO
-    !
-    ! Additional verification for critical arrays
-    !$ACC UPDATE HOST(LOCAL_STRESS, LOCAL_STRAIN, LOCAL_STATE, LOCAL_STRAIN_EQ)
+
     !
     ! End OpenACC data region - copy results back to host
     !
     !$ACC END DATA
+    !
 
 	!GC
 	DEALLOCATE(MODEL_ELCON)
