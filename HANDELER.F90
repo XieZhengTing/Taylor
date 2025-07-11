@@ -120,7 +120,8 @@
        
        ! Debug: Verify neighbor data before interpolation
        PRINT *, '=== NEIGHBOR DATA CHECK ==='
-       PRINT *, 'First 3 nodes neighbor count (GN):', GN(1:3)       IF (GN(1) > 0) THEN
+       PRINT *, 'First 3 nodes neighbor count (GN):', GN(1:3)       
+       IF (GN(1) > 0) THEN
            PRINT *, 'Node 1 first neighbor:', GSTACK(GSTART(1))
            PRINT *, 'Node 1 first shape function:', GSTACK_SHP(GSTART(1))
        END IF
