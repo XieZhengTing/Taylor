@@ -114,17 +114,17 @@
       IF (DO_INTERP) THEN
 		IF(.NOT. PERIDYNAMICS) THEN  !RKPM
 
-       ! CRITICAL: Ensure neighbor data is current on GPU
-       ! This is necessary because initial CREATE may leave data uninitialized
-       !$ACC UPDATE DEVICE(GN, GSTART, GSTACK, GSTACK_SHP)
+      !  ! CRITICAL: Ensure neighbor data is current on GPU
+      !  ! This is necessary because initial CREATE may leave data uninitialized
+      !  !$ACC UPDATE DEVICE(GN, GSTART, GSTACK, GSTACK_SHP)
        
-       ! Debug: Verify neighbor data before interpolation
-       PRINT *, '=== NEIGHBOR DATA CHECK ==='
-       PRINT *, 'First 3 nodes neighbor count (GN):', GN(1:3)       
-       IF (GN(1) > 0) THEN
-           PRINT *, 'Node 1 first neighbor:', GSTACK(GSTART(1))
-           PRINT *, 'Node 1 first shape function:', GSTACK_SHP(GSTART(1))
-       END IF
+      !  ! Debug: Verify neighbor data before interpolation
+      !  PRINT *, '=== NEIGHBOR DATA CHECK ==='
+      !  PRINT *, 'First 3 nodes neighbor count (GN):', GN(1:3)       
+      !  IF (GN(1) > 0) THEN
+      !      PRINT *, 'Node 1 first neighbor:', GSTACK(GSTART(1))
+      !      PRINT *, 'Node 1 first shape function:', GSTACK_SHP(GSTART(1))
+      !  END IF
 
         !$ACC PARALLEL LOOP PRESENT(GDINC_PHY, GVEL_PHY, GACL_PHY, &
         !$ACC&                      GSTACK_SHP, GSTACK, GSTART, GN, &
@@ -185,6 +185,10 @@
 
       ! OpenACC: Create GPU data for neighbor lists
       !
+   ! Initialize to zero to avoid accessing random values
+   GSTACK_SHP = 0.0d0
+   GSTACK_DSHP = 0.0d0
+   GSTACK_DDSHP = 0.0d0
       !$ACC ENTER DATA CREATE(GN, GSTART, GSTACK, GSTACK_SHP, GSTACK_DSHP, GSTACK_DDSHP, GINVK)
 
 	  CNT_SEARCH = 0.0d0

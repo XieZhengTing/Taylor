@@ -1344,8 +1344,11 @@ XNORM(1:3) =0.D0
     END DO !INTEGRATION POINT (NODE) LOOP
     !$ACC END PARALLEL LOOP
 
-    ! Synchronize shape functions to GPU after CPU updates
-    !$ACC UPDATE DEVICE(GSTACK_SHP, GSTACK_DSHP)
+   ! Synchronize shape functions from GPU to CPU after GPU computation
+   !$ACC UPDATE HOST(GSTACK_SHP, GSTACK_DSHP, GSTACK_DDSHP)
+   
+   ! Also sync other important arrays computed on GPU
+   !$ACC UPDATE HOST(GSTRESS, GSTRAIN, GSTATE, GSTRAIN_EQ)
 
     !$OMP PARALLEL PRIVATE(ID_RANK) SHARED(NCORES_INPUT,GINT_WORK_TEMP)
     GINT_WORK =  GINT_WORK+SUM(GINT_WORK_TEMP(1:NCORES_INPUT))
