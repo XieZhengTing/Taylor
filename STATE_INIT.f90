@@ -127,7 +127,7 @@
                 LOCAL_EBC_NODES(I) = .TRUE.
            ELSEIF (LOCAL_EBC(J,I).EQ.2) THEN  ! 處理非零邊界條件
                LOCAL_VEL((I-1)*3 + J) = LOCAL_NONZERO_EBC(J,I)
-               LOCAL_EBC_NODES(I) = .TRUE
+               LOCAL_EBC_NODES(I) = .TRUE.
 	        ELSE
                 LOCAL_VEL((I-1)*3 + J) = MODEL_VINIT(J,II)
 	        END IF
