@@ -22,6 +22,7 @@
     IMPLICIT NONE
     !
     INTEGER:: I, J, M, ITEMP, I_STEP, STEP_NUM
+   INTEGER:: NUM_EBC
     !
     !
     INTEGER:: GHOST_NUMP, TOTAL_LOCAL_NUMP, TOTAL_LOCAL_SIZE
@@ -147,6 +148,10 @@
  ! Debug and sync LFEM_OUTPUT for OpenACC
  PRINT *, 'MAIN: LFEM_OUTPUT after PRE_CONTROL =', LFEM_OUTPUT
  !$ACC UPDATE DEVICE(LFEM_OUTPUT)
+   
+   ! Size check
+   PRINT *, '=== SIZE CHECK ==='
+   PRINT *, 'MODEL_NUMP:', MODEL_NUMP
     !
     CALL ASSIGN_PARALLEL(HPC_SCHEME, MODEL_NUMP, LOCAL_NUMP)
     !
@@ -209,6 +214,15 @@
 
     TOTAL_LOCAL_SIZE = LOCAL_NUMP + GHOST_NUMP + GHOST_BUFFER
 
+   PRINT *, 'TOTAL_LOCAL_SIZE:', TOTAL_LOCAL_SIZE
+   PRINT *, 'TOTAL_LOCAL_NUMP:', TOTAL_LOCAL_NUMP
+   PRINT *, 'LOCAL_NUMP:', LOCAL_NUMP
+   IF (TOTAL_LOCAL_SIZE .NE. MODEL_NUMP) THEN
+       PRINT *, 'WARNING: Size mismatch!'
+       PRINT *, '  TOTAL_LOCAL_SIZE =', TOTAL_LOCAL_SIZE
+       PRINT *, '  MODEL_NUMP =', MODEL_NUMP
+   END IF
+
     ALLOCATE(LOCAL_STATE(20,TOTAL_LOCAL_SIZE),    LOCAL_STRESS(6,TOTAL_LOCAL_SIZE))
     ALLOCATE(LOCAL_DX_STRESS(6,TOTAL_LOCAL_SIZE), LOCAL_DY_STRESS(6,TOTAL_LOCAL_SIZE),   LOCAL_DZ_STRESS(6,TOTAL_LOCAL_SIZE))
     ALLOCATE(LOCAL_DX_STRAIN(6,TOTAL_LOCAL_SIZE), LOCAL_DY_STRAIN(6,TOTAL_LOCAL_SIZE),   LOCAL_DZ_STRAIN(6,TOTAL_LOCAL_SIZE))
@@ -235,6 +249,27 @@
         LOCAL_ACL,LOCAL_VEL,LOCAL_DSP,LOCAL_DSP_TOT,LOCAL_DSP_TOT_PHY,LOCAL_MASS,LOCAL_COO_CURRENT, LOCAL_EBC, LOCAL_NONZERO_EBC,LOCAL_EBC_NODES, &
         LOCAL_PRFORCE, LOCAL_DX_STRESS, LOCAL_DY_STRESS, LOCAL_DZ_STRESS, LOCAL_DX_STRAIN, LOCAL_DY_STRAIN, LOCAL_DZ_STRAIN,LOCAL_STRAIN_EQ)
 
+   ! Check LOCAL_EBC after initialization
+   PRINT *, '=== LOCAL_EBC CHECK after STATE_INIT ==='
+   INTEGER:: NUM_EBC  ! 臨時變數宣告
+   NUM_EBC = 0
+   DO I = 1, LOCAL_NUMP
+       DO J = 1, 3
+           IF (LOCAL_EBC(J,I) .NE. 0) THEN
+               NUM_EBC = NUM_EBC + 1
+               IF (NUM_EBC .LE. 5) THEN
+                   PRINT '(A,I4,A,I1,A,I2)', 'Node', I, ' Dir', J, ' EBC=', LOCAL_EBC(J,I)
+               END IF
+           END IF
+       END DO
+   END DO
+   PRINT *, 'Total EBC entries:', NUM_EBC
+   ! Special check for nodes 1-5
+   DO I = 1, MIN(5, LOCAL_NUMP)
+       IF (ANY(LOCAL_EBC(:,I) .NE. 0)) THEN
+           PRINT '(A,I4,A,3I2)', 'Node', I, ' EBC:', LOCAL_EBC(:,I)
+       END IF
+   END DO
     !
     DEALLOCATE(MODEL_VINIT,MODEL_MASS,MODEL_EBC,MODEL_COO,MODEL_NONZERO_EBC)
 
@@ -268,6 +303,18 @@
 !$ACC&     LOCAL_DSP_TOT, LOCAL_DSP_TOT_PHY,                       &
 !$ACC&     LOCAL_PRFORCE, TOTAL_FORCE)                      &
 !$ACC& COPYIN(LOCAL_VEL)  ! Ensure initial velocity is copied to GPU
+
+   ! Check LOCAL_EBC inside DATA region
+   PRINT *, '=== LOCAL_EBC CHECK inside DATA region ==='
+   DO I = 1, MIN(5, LOCAL_NUMP)
+       PRINT '(A,I4,A,3I2)', 'Node', I, ' EBC:', LOCAL_EBC(:,I)
+   END DO
+   ! Check specific nodes that should have constraints
+   DO I = LOCAL_NUMP-5, LOCAL_NUMP
+       IF (I .GT. 0) THEN
+           PRINT '(A,I4,A,3I2)', 'Node', I, ' EBC:', LOCAL_EBC(:,I)
+       END IF
+   END DO
 
    ! Debug: Check initial velocities before time integration
    PRINT *, '=== INITIAL VELOCITY CHECK ==='
