@@ -21,7 +21,8 @@
     !
     IMPLICIT NONE
     !
-    INTEGER:: I, J, M, ITEMP, I_STEP, STEP_NUM
+    INTEGER:: I, J, M, ITEMP, I_STEP, STEP_NUM, NUM_EBC
+
 
     !
     !
@@ -251,7 +252,7 @@
 
    ! Check LOCAL_EBC after initialization
    PRINT *, '=== LOCAL_EBC CHECK after STATE_INIT ==='
-   INTEGER:: NUM_EBC  ! 臨時變數宣告
+
    NUM_EBC = 0
    DO I = 1, LOCAL_NUMP
        DO J = 1, 3
