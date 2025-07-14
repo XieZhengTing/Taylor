@@ -283,7 +283,8 @@
 !$ACC DATA COPYIN(                                          &!← 把 DLT 及所有初始化陣列搬到 GPU
 !$ACC&     DLT,                                             &
 !$ACC&     LOCAL_COO, LOCAL_COO_CURRENT, LOCAL_MASS,       &
-!$ACC&     LOCAL_EBC, LOCAL_NONZERO_EBC, LOCAL_EBC_NODES,   &
+!$ACC&     LOCAL_NONZERO_EBC, LOCAL_EBC_NODES)             &
+!$ACC& COPY(LOCAL_EBC)                                     & ! 改為 COPY 以便雙向同步
 !$ACC&     LOCAL_SM_LEN, LOCAL_SM_AREA, LOCAL_SM_VOL,       &
 !$ACC&     LOCAL_WIN, LOCAL_VOL, LOCAL_NSNI_FAC,           &
 !$ACC&     LOCAL_MAT_TYPE, LOCAL_PROP, LOCAL_BODY_ID,       &
@@ -409,6 +410,29 @@
         !
         !
         !
+
+       ! Verify LOCAL_EBC at start of time loop
+       IF (STEPS .EQ. 0) THEN
+           PRINT *, '=== LOCAL_EBC at start of time loop ==='
+           ! Sync from GPU to ensure we have latest values
+           !$ACC UPDATE HOST(LOCAL_EBC)
+           NUM_EBC = 0
+           DO I = 1, LOCAL_NUMP
+               DO J = 1, 3
+                   IF (LOCAL_EBC(J,I) .NE. 0) THEN
+                       NUM_EBC = NUM_EBC + 1
+                       IF (NUM_EBC .LE. 5) THEN
+                           PRINT *, 'Node', I, 'Dir', J, 'EBC=', LOCAL_EBC(J,I)
+                       END IF
+                   END IF
+               END DO
+           END DO
+           PRINT *, 'Total EBC in time loop:', NUM_EBC
+           ! Check node 5 specifically
+           PRINT *, 'Node 5 EBC in time loop:', LOCAL_EBC(:,5)
+       END IF
+       
+
         ! ASSIGN NEW GHOSTS (RIGHT NOW, THIS SUBROUTINE DOES NOTHING)
         !
         CALL GHOSTER(HPC_SCHEME)
@@ -610,6 +634,17 @@
         IF (AUTO_TS) DLT = LOCAL_DLT
         
         IF (PDSTIME.NE.0.0D0) PDSEARCH=CEILING(PDSTIME/DLT) 
+
+       ! Final check before boundary enforcement
+       IF (STEPS .LE. 2) THEN
+           PRINT *, '=== LOCAL_EBC before boundary enforcement ==='
+           !$ACC UPDATE HOST(LOCAL_EBC)  ! Ensure latest values from GPU
+           DO I = 1, MIN(5, LOCAL_NUMP)
+               IF (ANY(LOCAL_EBC(:,I) .NE. 0)) THEN
+                   PRINT *, 'Node', I, 'EBC:', LOCAL_EBC(:,I)
+               END IF
+           END DO
+       END IF
 
         DO I=1,LOCAL_NUMP
 
