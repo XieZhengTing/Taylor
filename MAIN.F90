@@ -284,7 +284,7 @@
 !$ACC&     DLT,                                             &
 !$ACC&     LOCAL_COO, LOCAL_COO_CURRENT, LOCAL_MASS,       &
 !$ACC&     LOCAL_NONZERO_EBC, LOCAL_EBC_NODES)             &
-!$ACC& COPY(LOCAL_EBC)                                     & ! 改為 COPY 以便雙向同步
+!$ACC& COPY(LOCAL_EBC,                                  & ! 改為 COPY 以便雙向同步
 !$ACC&     LOCAL_SM_LEN, LOCAL_SM_AREA, LOCAL_SM_VOL,       &
 !$ACC&     LOCAL_WIN, LOCAL_VOL, LOCAL_NSNI_FAC,           &
 !$ACC&     LOCAL_MAT_TYPE, LOCAL_PROP, LOCAL_BODY_ID,       &
