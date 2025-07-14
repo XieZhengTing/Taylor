@@ -69,7 +69,29 @@
       ! LOCAL
       !
       INTEGER:: I, II, J
+     INTEGER:: NUM_BC_MODEL, NUM_BC_LOCAL
+     LOGICAL:: IS_IDENTITY
       
+     ! Diagnostic: Check mapping
+     PRINT *, '=== STATE_INIT DIAGNOSTIC ==='
+     PRINT *, 'TOTAL_LOCAL_NUMP:', TOTAL_LOCAL_NUMP
+     PRINT *, 'MODEL_NUMP:', MODEL_NUMP
+     
+     ! Check if identity mapping
+     IS_IDENTITY = .TRUE.
+     DO I = 1, MIN(10, TOTAL_LOCAL_NUMP)
+         II = TOTAL_MODEL_MAP(I)
+         IF (I .LE. 5) PRINT '(A,I4,A,I4)', '  Local ', I, ' -> Global ', II
+         IF (I .NE. II) IS_IDENTITY = .FALSE.
+     END DO
+     PRINT *, 'Identity mapping?', IS_IDENTITY
+     
+     ! Check MODEL_EBC
+     NUM_BC_MODEL = 0
+     DO I = 1, MODEL_NUMP
+         IF (ANY(MODEL_EBC(:,I) .GT. 0)) NUM_BC_MODEL = NUM_BC_MODEL + 1
+     END DO
+     PRINT *, 'MODEL nodes with BC:', NUM_BC_MODEL
       LOCAL_STATE = 0.0d0
       LOCAL_STRESS = 0.0d0
       LOCAL_STRAIN = 0.0d0
@@ -100,9 +122,12 @@
         LOCAL_EBC(:,I) = MODEL_EBC(:,II)
         LOCAL_NONZERO_EBC(:,I) = MODEL_NONZERO_EBC(:,II)        
           DO J=1,3
-	        IF (MODEL_EBC(J,I).EQ.1) THEN
+	        IF (LOCAL_EBC(J,I).EQ.1) THEN
                 LOCAL_VEL((I-1)*3 + J) = 0.0d0
                 LOCAL_EBC_NODES(I) = .TRUE.
+           ELSEIF (LOCAL_EBC(J,I).EQ.2) THEN  ! 處理非零邊界條件
+               LOCAL_VEL((I-1)*3 + J) = LOCAL_NONZERO_EBC(J,I)
+               LOCAL_EBC_NODES(I) = .TRUE
 	        ELSE
                 LOCAL_VEL((I-1)*3 + J) = MODEL_VINIT(J,II)
 	        END IF
@@ -119,7 +144,14 @@
       LOCAL_FINT = 0.0d0
       LOCAL_ACL = 0.0d0
       LOCAL_DSP = 0.0d0
-      
+     ! Final check
+     NUM_BC_LOCAL = 0
+     DO I = 1, LOCAL_NUMP
+         IF (LOCAL_EBC_NODES(I)) NUM_BC_LOCAL = NUM_BC_LOCAL + 1
+     END DO
+     PRINT *, 'LOCAL nodes with BC:', NUM_BC_LOCAL
+     PRINT *, 'First 5 LOCAL_EBC_NODES:', LOCAL_EBC_NODES(1:MIN(5,LOCAL_NUMP))
+     PRINT *, '=== END STATE_INIT DIAGNOSTIC ==='
       RETURN
       
       END SUBROUTINE
