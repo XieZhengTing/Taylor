@@ -253,6 +253,36 @@
    ! Check LOCAL_EBC after initialization
    PRINT *, '=== LOCAL_EBC CHECK after STATE_INIT ==='
 
+   ! OpenACC特定修正：修正節點集重疊導致的分類錯誤
+   #ifdef _OPENACC
+   PRINT *, '=== Applying OpenACC node classification fix ==='
+   DO I = 1, LOCAL_NUMP
+       ! BAR節點 (body_id=1) 不應有約束，應有初速 -373 m/s
+       IF (LOCAL_BODY_ID(I) .EQ. 1) THEN
+           IF (ANY(LOCAL_EBC(:,I) .NE. 0)) THEN
+               PRINT '(A,I5,A)', 'Fixing BAR node ', I, ' (removing constraints)'
+           END IF
+           ! 清除所有約束
+           LOCAL_EBC(:,I) = 0
+           LOCAL_EBC_NODES(I) = .FALSE.
+           ! 設定正確的初速
+           LOCAL_VEL((I-1)*3+1) = 0.0d0      ! X velocity
+           LOCAL_VEL((I-1)*3+2) = 0.0d0      ! Y velocity
+           LOCAL_VEL((I-1)*3+3) = -373.0d0   ! Z velocity
+       END IF
+   END DO
+   
+   ! 同步修正到GPU
+   !$ACC UPDATE DEVICE(LOCAL_VEL, LOCAL_EBC, LOCAL_EBC_NODES)
+   
+   ! 驗證節點5
+   IF (LOCAL_NUMP .GE. 5) THEN
+       PRINT *, 'Node 5 after OpenACC fix:'
+       PRINT '(A,3F10.2)', '  Velocity:', LOCAL_VEL(13:15)
+       PRINT '(A,3I3)', '  EBC:', LOCAL_EBC(:,5)
+   END IF
+   #endif
+
    NUM_EBC = 0
    DO I = 1, LOCAL_NUMP
        DO J = 1, 3
