@@ -703,7 +703,7 @@
                 END IF
 
                ! Debug: Check forces for first few nodes
-               IF (I .LE. 3 .AND. STEPS .LE. 2) THEN
+               IF ((I .EQ. 5 .OR. I .LE. 3) .AND. STEPS .LE. 2) THEN
                    IF (J .EQ. 1) THEN
                        PRINT '(A,I3,A)', '=== Node ', I, ' forces ==='
                        PRINT *, '  EBC:', LOCAL_EBC(:,I)
