@@ -292,7 +292,8 @@
 !$ACC&     LINIT,                                         &
 !$ACC&     LOCAL_X_MOM, LOCAL_Y_MOM, LOCAL_Z_MOM,          &
 !$ACC&     LFINITE_STRAIN, LLAGRANGIAN,                    &
-!$ACC&     MODEL_ELCON, MODEL_NUMEL)                       &
+!$ACC&     MODEL_ELCON, MODEL_NUMEL,                       &
+!$ACC&     LOCAL_DSP_TOT)                                  &
 !$ACC& COPY(                                               &!← 在離開 region 時自動拷回以下更新結果
 !$ACC&     LOCAL_STATE, LOCAL_STRESS, LOCAL_STRAIN, LOCAL_STRAIN_EQ, &
 !$ACC&     GDINC, GVEL, GACL,                              &
@@ -301,7 +302,7 @@
 !$ACC&     LOCAL_FINT, LOCAL_FEXT, LOCAL_FINT_NMO, LOCAL_FEXT_NMO, &
 !$ACC&     LOCAL_ACL, LOCAL_DSP,                                   &
 !$ACC&     LOCAL_ACL_PHY, LOCAL_VEL_PHY, LOCAL_DINC_PHY,           &
-!$ACC&     LOCAL_DSP_TOT, LOCAL_DSP_TOT_PHY,                       &
+!$ACC&     LOCAL_DSP_TOT_PHY,                                      &
 !$ACC&     LOCAL_PRFORCE, TOTAL_FORCE)                      &
 !$ACC& COPYIN(LOCAL_VEL)  ! Ensure initial velocity is copied to GPU
 

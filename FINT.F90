@@ -347,8 +347,8 @@
     !$ACC&                     LLAGRANGIAN, QL, QL_COEF, QL_LEN, SHSUP, &
     !$ACC&                     ITYPE_INT, IGRAVITY)
     !$ACC ENTER DATA COPYIN(LINIT, LFINITE_STRAIN)
-   ! Update GDINC_TOT to ensure latest values are used
-   !$ACC UPDATE DEVICE(GDINC_TOT)
+   ! Ensure GDINC_TOT is present on GPU
+   !$ACC DATA PRESENT(GDINC_TOT)
 
         IF (LINIT) THEN
           ALLOCATE(GWIN0(3,GNUMP))
@@ -434,6 +434,10 @@
         !
         DO J = 1, LN
             LSTACK(J) = GSTACK(LSTART+J-1)
+           ! Boundary check
+           IF (LSTACK(J) .LT. 1 .OR. LSTACK(J) .GT. GNUMP) THEN
+               LSTACK(J) = 1  ! Safe fallback
+           END IF
         END DO
         !
         ! GET THE INCREMENTS OF DISPLACEMENTS FOR NEIGHBORS
@@ -1518,7 +1522,7 @@ XNORM(1:3) =0.D0
     !$ACC EXIT DATA DELETE(RK_DEGREE, RK_PSIZE, RK_CONT, RK_IMPL, &
     !$ACC&                   LLAGRANGIAN, QL, QL_COEF, QL_LEN, SHSUP, &
     !$ACC&                   ITYPE_INT, IGRAVITY)
-
+   !$ACC END DATA  ! End PRESENT(GDINC_TOT) region
     DEALLOCATE(FINT_TEMP)
     DEALLOCATE(FEXT_TEMP)
     DEALLOCATE(GINT_WORK_TEMP)
