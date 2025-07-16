@@ -353,7 +353,11 @@
 		  GWIN0 = GWIN
           !$ACC ENTER DATA COPYIN(GWIN0)
 		END IF
-		
+        
+   ! CRITICAL: Sync state variables to GPU before material calculations
+   IF (.NOT. LINIT) THEN
+       !$ACC UPDATE DEVICE(GSTATE, GSTRESS, GSTRAIN)
+   END IF		
 		
     !$ACC PARALLEL LOOP GANG VECTOR COPYIN(LINIT, LFINITE_STRAIN) &
     !$ACC&                          PRESENT(GCOO, GCOO_CUURENT, GWIN, GSM_LEN, GSM_VOL, GSM_AREA, GN, GSTART, &
@@ -912,6 +916,12 @@
         ELAS_MAT = FORM_CMAT(LPROP)
         LSTRESS_PREDICTOR = LSTRESS + MATMUL(ELAS_MAT,STRAIN)
         !
+       ! Diagnostic: Check stress magnitude for Taylor bar
+       IF (I .LE. 5 .AND. STEPS .LE. 5) THEN
+           PRINT '(A,I4,A,I4,A,E12.5)', &
+               'Node=', I, ' Step=', STEPS, &
+               ' |Stress_pred|=', SQRT(SUM(LSTRESS_PREDICTOR**2))
+       END IF
 
          IF (LMAT_TYPE.EQ.5) THEN
              CALL HYPERELASTIC(LPROP,LSTRESS,FMAT,LSTRAIN)

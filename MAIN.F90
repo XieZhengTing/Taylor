@@ -600,6 +600,12 @@
         !
         DO_INTERP = .FALSE.
         LINIT_TEMP = .FALSE.
+
+       ! Ensure state variables are current on GPU
+       IF (.NOT. LINIT) THEN
+           !$ACC UPDATE DEVICE(LOCAL_STATE, LOCAL_STRESS, LOCAL_STRAIN)
+       END IF
+
         IF(LINIT) THEN
             LOCAL_FINT_NMO = 0.0d0
             LOCAL_FEXT_NMO = 0.0d0
