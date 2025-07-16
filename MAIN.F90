@@ -507,15 +507,15 @@
  GACL = LOCAL_ACL
  
  ! Ensure these arrays are synchronized to GPU before interpolation
- !$ACC UPDATE DEVICE(GDINC, GVEL, GACL, GDINC_TOT)
+ !$ACC UPDATE DEVICE(GDINC, GVEL, GACL, LOCAL_DSP_TOT)
 
 ! Diagnostic: Verify displacement data
 IF (STEPS .LE. 2) THEN
     PRINT *, '=== DISPLACEMENT DATA CHECK ==='
-    PRINT *, 'GDINC(1:3):', GDINC(1:3)
-    PRINT *, 'GDINC_TOT(1:3):', GDINC_TOT(1:3)
-    PRINT *, 'Max |GDINC|:', MAXVAL(ABS(GDINC))
-    PRINT *, 'Max |GDINC_TOT|:', MAXVAL(ABS(GDINC_TOT))
+    PRINT *, 'LOCAL_DSP(1:3):', LOCAL_DSP(1:3)
+    PRINT *, 'LOCAL_DSP_TOT(1:3):', LOCAL_DSP_TOT(1:3)
+    PRINT *, 'Max |LOCAL_DSP|:', MAXVAL(ABS(LOCAL_DSP))
+    PRINT *, 'Max |LOCAL_DSP_TOT|:', MAXVAL(ABS(LOCAL_DSP_TOT))
 END IF
  
  ! Debug: Verify GDINC has correct values

@@ -347,6 +347,7 @@
     !$ACC&                     LLAGRANGIAN, QL, QL_COEF, QL_LEN, SHSUP, &
     !$ACC&                     ITYPE_INT, IGRAVITY)
     !$ACC ENTER DATA COPYIN(LINIT, LFINITE_STRAIN)
+    !$ACC ENTER DATA COPYIN(GDINC_TOT)
 
         IF (LINIT) THEN
           ALLOCATE(GWIN0(3,GNUMP))
