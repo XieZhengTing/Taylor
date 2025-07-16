@@ -347,7 +347,8 @@
     !$ACC&                     LLAGRANGIAN, QL, QL_COEF, QL_LEN, SHSUP, &
     !$ACC&                     ITYPE_INT, IGRAVITY)
     !$ACC ENTER DATA COPYIN(LINIT, LFINITE_STRAIN)
-    !$ACC ENTER DATA COPYIN(GDINC_TOT)
+   ! Update GDINC_TOT to ensure latest values are used
+   !$ACC UPDATE DEVICE(GDINC_TOT)
 
         IF (LINIT) THEN
           ALLOCATE(GWIN0(3,GNUMP))
@@ -911,6 +912,14 @@
 
 
         LSTRAIN = LSTRAIN + STRAIN
+
+       ! Store diagnostic info for first few nodes
+       IF (I .LE. 3) THEN
+           ! Store max displacement and strain for diagnostics
+           LSTATE(16) = MAXVAL(ABS(LDINC_TOT(:,1:LN)))  ! Max displacement
+           LSTATE(17) = MAXVAL(ABS(STRAIN))              ! Max strain
+       END IF
+
         !
         ! ELASTIC PREDICTOR
         !
@@ -1364,6 +1373,17 @@ XNORM(1:3) =0.D0
    
    ! Also sync other important arrays computed on GPU
    !$ACC UPDATE HOST(GSTRESS, GSTRAIN, GSTATE, GSTRAIN_EQ)
+
+   ! Print diagnostic info from GPU computation
+   IF (LINIT) THEN
+       PRINT *, '=== GPU COMPUTATION DIAGNOSTICS ==='
+       DO I = 1, MIN(3, GNUMP)
+           PRINT '(A,I3,A,E12.5,A,E12.5)', &
+               'Node', I, ' Max|LDINC_TOT|=', GSTATE(16,I), &
+               ' Max|STRAIN|=', GSTATE(17,I)
+       END DO
+   END IF
+
 
    ! CPU-side diagnostic for plasticity convergence (OUTSIDE GPU loop)
    IF (LINIT) THEN  ! Only print during first timestep

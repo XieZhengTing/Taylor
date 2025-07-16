@@ -333,6 +333,12 @@
                             LOCAL_DX_STRESS, LOCAL_DY_STRESS, LOCAL_DZ_STRESS, &
                             G_X_MOM, G_Y_MOM, G_Z_MOM, MODEL_BODYFORCE, GINT_WORK,DLT)              !OUTPUT
 	  ELSE
+     ! Diagnostic: Verify GDINC_TOT before GPU computation
+     IF (LINIT .OR. ITYPE_INT .EQ. 0) THEN
+         PRINT *, '=== HANDELER: GDINC_TOT CHECK ==='
+         PRINT *, 'First 3 values:', GDINC_TOT(1:3)
+         PRINT *, 'Max value:', MAXVAL(ABS(GDINC_TOT))
+     END IF
       !GET THE INTERNAL FORCE
       CALL CONSTRUCT_FINT(GWIN,    GVOL,        GNUMP,     GCOO, GCOO_CUURENT, &   !FROM MAIN
                           GSM_LEN, GSM_AREA,    GSM_VOL,   GNSNI_FAC,          &   !FROM MAIN
