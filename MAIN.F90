@@ -459,7 +459,8 @@
 				LOCAL_IJKSPC)
         ! Check for GPU errors
         CALL CHECK_GPU_ERROR()
-            !LINIT = .FALSE.  !SET IT TO FALSE AFTER THE SHP/DSHP COMPUTATION
+           LINIT = .FALSE.  !SET IT TO FALSE AFTER THE SHP/DSHP COMPUTATION
+           !$ACC UPDATE DEVICE(LINIT)
         ENDIF
         !
 
@@ -506,7 +507,16 @@
  GACL = LOCAL_ACL
  
  ! Ensure these arrays are synchronized to GPU before interpolation
- !$ACC UPDATE DEVICE(GDINC, GVEL, GACL)
+ !$ACC UPDATE DEVICE(GDINC, GVEL, GACL, GDINC_TOT)
+
+! Diagnostic: Verify displacement data
+IF (STEPS .LE. 2) THEN
+    PRINT *, '=== DISPLACEMENT DATA CHECK ==='
+    PRINT *, 'GDINC(1:3):', GDINC(1:3)
+    PRINT *, 'GDINC_TOT(1:3):', GDINC_TOT(1:3)
+    PRINT *, 'Max |GDINC|:', MAXVAL(ABS(GDINC))
+    PRINT *, 'Max |GDINC_TOT|:', MAXVAL(ABS(GDINC_TOT))
+END IF
  
  ! Debug: Verify GDINC has correct values
  IF (STEPS .LE. 2) THEN
@@ -888,10 +898,10 @@
         STEPS = STEPS + 1
         TIMER_STEPS = TIMER_STEPS + 1
         !
-        LINIT = .FALSE.
-        !$ACC UPDATE DEVICE(LINIT)
+!       LINIT = .FALSE.
+!        !$ACC UPDATE DEVICE(LINIT)
 
-
+       ! LINIT already set to FALSE after initial shape function computation
         WRITE(120,*) TIME
 
 
