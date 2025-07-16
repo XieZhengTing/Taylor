@@ -938,6 +938,16 @@
         DO J = 1, 20
             GSTATE(J,I) = LSTATE(J)
         END DO
+
+       ! CPU-side diagnostic for plasticity convergence
+       IF (LMAT_TYPE .EQ. 2 .AND. I .LE. 5) THEN
+           IF (LSTATE(11) .GT. 10.0d0) THEN
+               PRINT '(A,I4,A,F3.0,A,E12.5,A,E12.5)', &
+                   'Node=', I, ' Plasticity iter=', LSTATE(11), &
+                   ' YLD_FN=', LSTATE(12), ' DELTA_GAMMA=', LSTATE(13)
+           END IF
+       END IF
+
         !
         DO J = 1, 6
 

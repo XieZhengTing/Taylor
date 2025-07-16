@@ -36,6 +36,12 @@
 	  DOUBLE PRECISION, INTENT(IN)::    STRAIN(6)
 	  DOUBLE PRECISION, INTENT(IN)::    STRESS_PREDICT(6)
 	  DOUBLE PRECISION, INTENT(IN)::    PROPS(30)
+
+     ! Diagnostic variables - store in STATE array for later retrieval
+     ! STATE(11) = final iteration count
+     ! STATE(12) = final YLD_FN value
+     ! STATE(13) = final DELTA_GAMMA
+
 	  !
 	  !LOOP INDEX VARIABLES
 	  INTEGER:: I, J, K
@@ -109,14 +115,10 @@
        XK = SIG23*(1.D0 + B*EPS)**(CE)       
        YLD_FN = TNORM_DEV_STRESS_PRE - XK - (2.D0*MU*DELTA_GAMMA)
 
-      ! Diagnostic output for convergence debugging
-      IF (I .EQ. 1 .OR. I .EQ. 10 .OR. I .EQ. 20) THEN
-          IF (ABS(YLD_FN) .GT. 1.0D0) THEN
-              PRINT '(A,I3,A,E12.5,A,E12.5,A,E12.5)', &
-                  'VON_MISES Iter=', I, ' YLD_FN=', YLD_FN, &
-                  ' DELTA_GAMMA=', DELTA_GAMMA, ' EPS=', EPS
-          END IF
-      END IF
+      ! Store diagnostic info in STATE array
+      STATE(11) = DBLE(I)
+      STATE(12) = YLD_FN
+      STATE(13) = DELTA_GAMMA
 
       IF(ABS(YLD_FN).GT. SIG23*1.0E-05) THEN
        !XKP = 12.5D0*SIG_NOT*(1.D0+125.D0*EPS)**(-0.9D0)
@@ -128,13 +130,9 @@
              !!WRITE(*,*)"TOO MANY ITERATIONS IN PlASTICITY, EQIT"
              !!PAUSE
 
-            ! Final diagnostic before failure
-            PRINT '(A,E12.5,A,E12.5)', &
-                'VON_MISES FAILED: Final YLD_FN=', YLD_FN, &
-               ' Tolerance=', SIG23*1.0E-05
-            PRINT '(A,E12.5,A,E12.5,A,E12.5)', &
-                '  TNORM_DEV_STRESS_PRE=', TNORM_DEV_STRESS_PRE, &
-                ' XK=', XK, ' EPS=', EPS
+            ! Store failure info for CPU-side diagnostics
+            STATE(14) = TNORM_DEV_STRESS_PRE
+            STATE(15) = XK
 
          CALL SET_GPU_ERROR('VON_MISES_CONVERGE', 0)
          ! Set error code 1 for convergence failure
