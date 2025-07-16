@@ -916,11 +916,10 @@
         ELAS_MAT = FORM_CMAT(LPROP)
         LSTRESS_PREDICTOR = LSTRESS + MATMUL(ELAS_MAT,STRAIN)
         !
-       ! Diagnostic: Check stress magnitude for Taylor bar
-       IF (I .LE. 5 .AND. STEPS .LE. 5) THEN
-           PRINT '(A,I4,A,I4,A,E12.5)', &
-               'Node=', I, ' Step=', STEPS, &
-               ' |Stress_pred|=', SQRT(SUM(LSTRESS_PREDICTOR**2))
+       ! Store stress magnitude for diagnostics (no PRINT in GPU kernel)
+       IF (I .LE. 5) THEN
+           ! Use STATE array to store diagnostic info
+           LSTATE(16) = SQRT(SUM(LSTRESS_PREDICTOR**2))
        END IF
 
          IF (LMAT_TYPE.EQ.5) THEN
@@ -939,14 +938,6 @@
             GSTATE(J,I) = LSTATE(J)
         END DO
 
-       ! CPU-side diagnostic for plasticity convergence
-       IF (LMAT_TYPE .EQ. 2 .AND. I .LE. 5) THEN
-           IF (LSTATE(11) .GT. 10.0d0) THEN
-               PRINT '(A,I4,A,F3.0,A,E12.5,A,E12.5)', &
-                   'Node=', I, ' Plasticity iter=', LSTATE(11), &
-                   ' YLD_FN=', LSTATE(12), ' DELTA_GAMMA=', LSTATE(13)
-           END IF
-       END IF
 
         !
         DO J = 1, 6
@@ -1372,6 +1363,30 @@ XNORM(1:3) =0.D0
    
    ! Also sync other important arrays computed on GPU
    !$ACC UPDATE HOST(GSTRESS, GSTRAIN, GSTATE, GSTRAIN_EQ)
+
+   ! CPU-side diagnostic for plasticity convergence (OUTSIDE GPU loop)
+   IF (LINIT) THEN  ! Only print during first timestep
+       PRINT *, '=== PLASTICITY CONVERGENCE DIAGNOSTICS ==='
+       DO I = 1, MIN(5, GNUMP)
+           IF (GMAT_TYPE(I) .EQ. 2 .AND. GSTATE(11,I) .GT. 10.0d0) THEN
+               PRINT '(A,I4,A,F3.0,A,E12.5,A,E12.5)', &
+                   'Node=', I, ' Plasticity iter=', GSTATE(11,I), &
+                   ' YLD_FN=', GSTATE(12,I), ' DELTA_GAMMA=', GSTATE(13,I)
+           END IF
+       END DO
+   END IF
+
+    ! CPU-side diagnostic output (safe to use PRINT here)
+    IF (LINIT) THEN
+        PRINT *, '=== STRESS PREDICTOR DIAGNOSTICS (First timestep) ==='
+        DO I = 1, MIN(5, GNUMP)
+            IF (GMAT_TYPE(I) .EQ. 2) THEN  ! Von Mises material
+                PRINT '(A,I4,A,E12.5,A,E12.5)', &
+                    'Node=', I, ' |Stress_pred|=', GSTATE(16,I), &
+                    ' Plastic strain=', GSTATE(3,I)
+            END IF
+        END DO
+    END IF
 
     !$OMP PARALLEL PRIVATE(ID_RANK) SHARED(NCORES_INPUT,GINT_WORK_TEMP)
     GINT_WORK =  GINT_WORK+SUM(GINT_WORK_TEMP(1:NCORES_INPUT))
