@@ -374,8 +374,8 @@
     !$ACC&                DENSITY, PMOD, BMAT, BMAT_T, FINT3, FINT3_EXT, &
     !$ACC&                FBOD, FGRAV, LBOD, MAG_FINT, ID_RANK)
      DO I = 1, GNUMP
-        ! For GPU, use gang/vector index instead of OpenMP thread ID
-        ID_RANK = MOD(I-1, NCORES_INPUT) + 1
+    ! For GPU, use gang/vector index instead of OpenMP thread ID
+    ID_RANK = MOD(I-1, NCORES_INPUT) + 1
         !
         !
         !GRAB NODE INFORMATION FROM LIST
@@ -1343,6 +1343,9 @@ XNORM(1:3) =0.D0
 
     END DO !INTEGRATION POINT (NODE) LOOP
     !$ACC END PARALLEL LOOP
+
+    ! CRITICAL FIX: Copy GPU results back to host for reduction
+    !$ACC UPDATE HOST(FINT_TEMP, FEXT_TEMP, GINT_WORK_TEMP)
 
    ! Synchronize shape functions from GPU to CPU after GPU computation
    !$ACC UPDATE HOST(GSTACK_SHP, GSTACK_DSHP, GSTACK_DDSHP)
