@@ -326,7 +326,7 @@
     ALLOCATE(FEXT_TEMP(1,3,GNUMP))
     FEXT_TEMP = 0.D0
 
-    ALLOCATE(GINT_WORK_TEMP(1))
+    ALLOCATE(GINT_WORK_TEMP(NCORES_INPUT))
       GINT_WORK_TEMP = 0.0d0
 
       ! Check material properties on the host before entering the
@@ -980,12 +980,16 @@
         IF (LFINITE_STRAIN) THEN
             DO J = 1, 6
             
-                 GINT_WORK_TEMP(ID_RANK+1) = GINT_WORK_TEMP(ID_RANK+1) + 0.5d0*D(J)*(2*LSTRESS(J)-STRESS_INC(J))*VOL*DET
+                !$ACC ATOMIC UPDATE
+                GINT_WORK_TEMP(1) = GINT_WORK_TEMP(1) + 0.5d0*D(J)*(2*LSTRESS(J)-STRESS_INC(J))*VOL*DET
+                !$ACC END ATOMIC            
             END DO
         ELSE
 
             DO J = 1, 6
-                GINT_WORK_TEMP(ID_RANK+1) = GINT_WORK_TEMP(ID_RANK+1) + 0.5d0*STRAIN_INC(J)*STRESS_INC(J)*VOL*DET
+                !$ACC ATOMIC UPDATE
+                GINT_WORK_TEMP(1) = GINT_WORK_TEMP(1) + 0.5d0*STRAIN_INC(J)*STRESS_INC(J)*VOL*DET
+                !$ACC END ATOMIC            
             END DO
         END IF
         
@@ -1417,7 +1421,7 @@ XNORM(1:3) =0.D0
     END IF
 
     !$OMP PARALLEL PRIVATE(ID_RANK) SHARED(NCORES_INPUT,GINT_WORK_TEMP)
-    GINT_WORK =  GINT_WORK+SUM(GINT_WORK_TEMP(1:NCORES_INPUT))
+    GINT_WORK =  GINT_WORK + GINT_WORK_TEMP(1)
     !$OMP END PARALLEL
 
     !
