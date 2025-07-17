@@ -226,28 +226,6 @@
     !
     TIME = 0.0d0
     STEP_NUM = 0
-
-    ! OpenACC: Begin GPU data region for main time integration loop
-    !
-!$ACC DATA COPYIN(                                          &!← 把 DLT 及所有初始化陣列搬到 GPU
-!$ACC&     DLT,                                             &
-!$ACC&     LOCAL_COO, LOCAL_COO_CURRENT, LOCAL_MASS,       &
-!$ACC&     LOCAL_EBC, LOCAL_NONZERO_EBC, LOCAL_EBC_NODES,   &
-!$ACC&     LOCAL_SM_LEN, LOCAL_SM_AREA, LOCAL_SM_VOL,       &
-!$ACC&     LOCAL_WIN, LOCAL_VOL, LOCAL_NSNI_FAC,           &
-!$ACC&     LOCAL_MAT_TYPE, LOCAL_PROP, LOCAL_BODY_ID,       &
-!$ACC&     LOCAL_CHAR_DIST, LOCAL_WAVE_VEL,                &
-!$ACC&     LOCAL_X_MOM, LOCAL_Y_MOM, LOCAL_Z_MOM)          &
-!$ACC& COPY(                                               &!← 在離開 region 時自動拷回以下更新結果
-!$ACC&     LOCAL_STATE, LOCAL_STRESS, LOCAL_STRAIN, LOCAL_STRAIN_EQ, &
-!$ACC&     LOCAL_DX_STRESS, LOCAL_DY_STRESS, LOCAL_DZ_STRESS,     &
-!$ACC&     LOCAL_H_STRESS, LOCAL_S_STRESS,                         &
-!$ACC&     LOCAL_FINT, LOCAL_FEXT, LOCAL_FINT_NMO, LOCAL_FEXT_NMO, &
-!$ACC&     LOCAL_ACL, LOCAL_VEL, LOCAL_DSP,                         &
-!$ACC&     LOCAL_ACL_PHY, LOCAL_VEL_PHY, LOCAL_DINC_PHY,           &
-!$ACC&     LOCAL_DSP_TOT, LOCAL_DSP_TOT_PHY,                       &
-!$ACC&     LOCAL_PRFORCE, TOTAL_FORCE)
-
     !
     !******************************************OUTPUT******************************************
     !
@@ -367,21 +345,15 @@
         !
         !CALL PREDICTOR(TOTAL_LOCAL_SIZE,LOCAL_ACL,LOCAL_VEL,LOCAL_DSP,DLT)
 
-     IF (LINIT .AND. AUTO_TS) THEN
-         LOCAL_DSP = 0.0d0
-         !$ACC UPDATE DEVICE(LOCAL_DSP)           !← 把主機的零值傳到 GPU
-     ELSE
-        !$ACC PARALLEL LOOP PRESENT(LOCAL_DSP, LOCAL_VEL, LOCAL_ACL, LOCAL_DSP_TOT) ASYNC(1)
-
-         DO I = 1, 3*TOTAL_LOCAL_SIZE
-             LOCAL_DSP(I)     = DLT * LOCAL_VEL(I) + 0.5d0*DLT**2 * LOCAL_ACL(I)
-             LOCAL_DSP_TOT(I) = LOCAL_DSP_TOT(I) + LOCAL_DSP(I)
-             LOCAL_VEL(I)     = LOCAL_VEL(I) + 0.5d0*DLT      * LOCAL_ACL(I)
-         END DO
-        !$ACC END PARALLEL LOOP
-        !$ACC WAIT(1)                             !← 確保非同步計算完成
-        !$ACC UPDATE HOST(LOCAL_DSP, LOCAL_DSP_TOT, LOCAL_VEL)  !← 把 GPU 計算結果拷回主機
-     END IF
+        IF (LINIT.AND.(AUTO_TS)) THEN
+            !WE DONT HAVE A TIME STEP ESTIMATE YET
+            LOCAL_DSP = 0.0d0
+        ELSE
+            !PREDICT THE DISPLACEMENT INCREMENT AND VELOCITY FROM THE PREVIOUS ACCELERATION
+            LOCAL_DSP = DLT * LOCAL_VEL + DLT**2 * 0.5d0 * LOCAL_ACL
+            LOCAL_DSP_TOT = LOCAL_DSP_TOT + LOCAL_DSP
+            LOCAL_VEL = LOCAL_VEL + DLT * 0.5d0 * LOCAL_ACL
+        END IF
 
 
         !
@@ -402,26 +374,17 @@
 
 
 
-        !$ACC UPDATE HOST(LOCAL_DINC_PHY, LOCAL_VEL_PHY, LOCAL_ACL_PHY)
         LOCAL_DSP_TOT_PHY = LOCAL_DSP_TOT_PHY + LOCAL_DINC_PHY
-        
-        ! Ensure LOCAL_DSP_TOT_PHY is on GPU for coordinate update
-        !$ACC UPDATE DEVICE(LOCAL_DSP_TOT_PHY)
-        
         !
         ! LIKELY HAVE TO UPDATE GHOSTS HERE FOR GHOST SCHEMES, THESE ARRAYS
         ! SHOULD BE DIFFERENT SIZES THEN #TODO
         !
-        !$ACC PARALLEL LOOP PRESENT(LOCAL_COO_CURRENT, LOCAL_COO, LOCAL_DSP_TOT_PHY)
         DO I=1,LOCAL_NUMP
             DO J=1,3
                 LOCAL_COO_CURRENT(J,I) = LOCAL_COO(J,I) + LOCAL_DSP_TOT_PHY((I-1)*3+J)
             END DO
         END DO
-        !$ACC END PARALLEL LOOP
 
-        ! Sync updated coordinates back to host
-        !$ACC UPDATE HOST(LOCAL_COO_CURRENT)
 
         !TEST HUGHS-WINDET ROTATION ALGORITHM, LATER SHOULD BE REMOVED
         !CALL ROTATION_TEST(LOCAL_DSP,LOCAL_COO,LOCAL_NUMP,TIME,DLT)
@@ -467,9 +430,6 @@
         IF (PDSTIME.NE.0.0D0) PDSEARCH=CEILING(PDSTIME/DLT) 
 
         DO I=1,LOCAL_NUMP
-
-            ! Note: This loop contains reductions (TOTAL_FORCE)
-            ! Will be handled in Step 3 with proper reduction clauses
 
             DO J=1,3
 
@@ -526,8 +486,7 @@
 
             END DO
         END DO
-        ! Synchronize CPU updates to GPU for next iteration
-        !$ACC UPDATE DEVICE(LOCAL_VEL, LOCAL_ACL)
+
         WRITE(122,'(E15.5,I8,3(E15.5),I8,3(E15.5))') TIME,LOCAL_BODY_ID(1), TOTAL_FORCE(1,LOCAL_BODY_ID(1)), TOTAL_FORCE(2,LOCAL_BODY_ID(1)),TOTAL_FORCE(3,LOCAL_BODY_ID(1)), LOCAL_BODY_ID(LOCAL_NUMP), TOTAL_FORCE(1,LOCAL_BODY_ID(LOCAL_NUMP)),TOTAL_FORCE(2,LOCAL_BODY_ID(LOCAL_NUMP)),TOTAL_FORCE(3,LOCAL_BODY_ID(LOCAL_NUMP))
 
 
@@ -697,12 +656,6 @@
         IF (TIME.GT.TIME_END) EXIT
         !
     END DO
-
-    !
-    ! End OpenACC data region - copy results back to host
-    !
-    !$ACC END DATA
-    !
 
 	!GC
 	DEALLOCATE(MODEL_ELCON)

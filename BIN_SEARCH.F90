@@ -15,11 +15,7 @@
     INTEGER:: I,ISX,ISY,ISZ,M
     DOUBLE PRECISION:: X,Y,Z
 
-    !$ACC PARALLEL LOOP PRESENT_OR_CREATE(NODES_IN_BIN)
-    DO I = 1, NBINS
-        NODES_IN_BIN(I) = 0
-    END DO
-    !$ACC END PARALLEL LOOP
+    NODES_IN_BIN = 0
 
     DO I=1,NP
 
@@ -200,11 +196,7 @@
                 
     DIM_NN_LIST_ACTUAL = 0
 
-    !$ACC PARALLEL LOOP PRESENT(GN)
-    DO I = 1, GNUMP
-        GN(I) = 0
-    END DO
-    !$ACC END PARALLEL LOOP
+    GN = 0
 
     K = 0
 
