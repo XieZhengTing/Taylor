@@ -15,11 +15,19 @@
     
     
 	SUBROUTINE INVERSE(A,N, AINV)
-	IMPLICIT NONE
-	
-	INTEGER, INTENT(IN):: N
-	DOUBLE PRECISION, INTENT(IN):: A(N,N)
-	DOUBLE PRECISION, INTENT(OUT):: AINV(N,N)
+      !$ACC ROUTINE SEQ	
+        IMPLICIT NONE
+
+        INTERFACE
+            SUBROUTINE WARN(STRING_LINE)
+                !$ACC ROUTINE SEQ
+                CHARACTER(*) :: STRING_LINE
+            END SUBROUTINE WARN
+        END INTERFACE
+
+        INTEGER, INTENT(IN):: N
+        DOUBLE PRECISION, INTENT(IN):: A(N,N)
+        DOUBLE PRECISION, INTENT(OUT):: AINV(N,N)
 	
 	
 	INTEGER:: IS(N),JS(N), L, K, I, J
@@ -91,7 +99,9 @@
 300     CONTINUE
 
         IF (L.EQ.0) THEN
-          CALL WARN('PROBLEM INVERTING MATRIX')
+          ! Cannot call WARN on GPU, handle error silently
+          ! In GPU version, just return with AINV as is
+          RETURN
         END IF
 
 		RETURN
@@ -117,6 +127,7 @@
 	  !********************************************************
     
       SUBROUTINE INV3 (A, AINV)
+	 !$ACC ROUTINE SEQ 
       ! THIS SUBROUTINE HAS BUG, COMMENTED, USE  INVERSE()
    
 	  ! FUNCTION OF THIS SUBROUTINE:
@@ -183,7 +194,7 @@
 
 
       SUBROUTINE M44INV (A, AINV)
-
+      !$ACC ROUTINE SEQ
       IMPLICIT NONE
 
       DOUBLE PRECISION, DIMENSION(4,4), INTENT(IN)  :: A

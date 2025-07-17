@@ -39,6 +39,95 @@
     USE omp_lib
     !
     IMPLICIT NONE
+
+
+
+    ! Interface for routines executed inside the OpenACC region
+    INTERFACE
+        SUBROUTINE DETERMINANT(A, DET)
+            !$ACC ROUTINE SEQ
+            DOUBLE PRECISION, INTENT(IN)  :: A(3,3)
+            DOUBLE PRECISION, INTENT(OUT) :: DET
+        END SUBROUTINE DETERMINANT
+
+        SUBROUTINE INV3(A, AINV)
+            !$ACC ROUTINE SEQ
+            DOUBLE PRECISION, INTENT(IN)  :: A(3,3)
+            DOUBLE PRECISION, INTENT(OUT) :: AINV(3,3)
+        END SUBROUTINE INV3
+        SUBROUTINE RK1(X, DEG, MSIZE, CONT, IMPL, GCOO, GWIN, GNUMP, &
+                       LSTACK, LN, LNMAX, EBCS, SELF_EBC, QL, QL_COEF, &
+                       QL_LEN, SHP, SHPD, SHSUP)
+            !$ACC ROUTINE SEQ
+            DOUBLE PRECISION, INTENT(IN)  :: X(3)
+            INTEGER, INTENT(IN)           :: DEG, MSIZE, CONT, GNUMP, LN, LNMAX
+            INTEGER, INTENT(IN)           :: LSTACK(LNMAX)
+            LOGICAL, INTENT(IN)           :: EBCS(GNUMP)
+            LOGICAL, INTENT(IN)           :: SELF_EBC
+            DOUBLE PRECISION, INTENT(IN)  :: GCOO(3,GNUMP), GWIN(3,GNUMP)
+            LOGICAL, INTENT(IN)           :: QL, SHSUP
+            DOUBLE PRECISION, INTENT(IN)  :: QL_COEF, QL_LEN
+            DOUBLE PRECISION, INTENT(OUT) :: SHP(LNMAX)
+            DOUBLE PRECISION, INTENT(OUT) :: SHPD(3,LNMAX)
+        END SUBROUTINE RK1   
+    SUBROUTINE INVERSE(A, N, AINV)
+        !$ACC ROUTINE SEQ
+        INTEGER, INTENT(IN)           :: N
+        DOUBLE PRECISION, INTENT(IN)  :: A(N,N)
+        DOUBLE PRECISION, INTENT(OUT) :: AINV(N,N)
+    END SUBROUTINE INVERSE 
+        SUBROUTINE HUGHES_WINGET(LMAT, ROT, STRAIN, D)
+            !$ACC ROUTINE SEQ
+            DOUBLE PRECISION, INTENT(IN)  :: LMAT(3,3)
+            DOUBLE PRECISION, INTENT(OUT) :: ROT(3,3)
+            DOUBLE PRECISION, INTENT(OUT) :: STRAIN(6)
+            DOUBLE PRECISION, INTENT(OUT) :: D(6)
+        END SUBROUTINE HUGHES_WINGET
+        SUBROUTINE D_HUGHES_WINGET(LMAT, DLMAT, ROT, DSTRAIN)
+            !$ACC ROUTINE SEQ
+            DOUBLE PRECISION, INTENT(IN)  :: LMAT(3,3)
+            DOUBLE PRECISION, INTENT(IN)  :: DLMAT(3,3)
+            DOUBLE PRECISION, INTENT(OUT) :: ROT(3,3)
+            DOUBLE PRECISION, INTENT(OUT) :: DSTRAIN(6)
+        END SUBROUTINE D_HUGHES_WINGET
+        SUBROUTINE ROTATE_TENSOR(ROT, VTENSOR)
+            !$ACC ROUTINE SEQ
+            DOUBLE PRECISION, INTENT(IN)    :: ROT(3,3)
+            DOUBLE PRECISION, INTENT(INOUT) :: VTENSOR(6)
+        END SUBROUTINE ROTATE_TENSOR
+        SUBROUTINE HYPERELASTIC(LPROP, LSTRESS, FTEN, LSTRAIN)
+            !$ACC ROUTINE SEQ
+            DOUBLE PRECISION, INTENT(IN)  :: LPROP(30)
+            DOUBLE PRECISION, INTENT(OUT) :: LSTRESS(6)
+            DOUBLE PRECISION, INTENT(IN)  :: FTEN(3,3)
+            DOUBLE PRECISION, INTENT(OUT) :: LSTRAIN(6)
+        END SUBROUTINE HYPERELASTIC
+        SUBROUTINE SPK2CAUCHY(LSTRESSTEN, DET, FTEN, FT)
+            !$ACC ROUTINE SEQ
+            DOUBLE PRECISION, INTENT(INOUT) :: LSTRESSTEN(3,3)
+            DOUBLE PRECISION, INTENT(IN)    :: DET
+            DOUBLE PRECISION, INTENT(IN)    :: FTEN(3,3)
+            DOUBLE PRECISION, INTENT(IN)    :: FT(3,3)
+        END SUBROUTINE SPK2CAUCHY
+        SUBROUTINE CONSTITUTION(LSTRESS_PREDICTOR, LMAT_TYPE, LSTRAIN, STRAIN, LPROP, DLT, FMAT, &
+                                LSTATE, LSTRESS, S_STRESS, H_STRESS)
+            !$ACC ROUTINE SEQ
+            DOUBLE PRECISION, INTENT(IN)  :: LSTRESS_PREDICTOR(6)
+            INTEGER, INTENT(IN)           :: LMAT_TYPE
+            DOUBLE PRECISION, INTENT(IN)  :: LSTRAIN(6), STRAIN(6)
+            DOUBLE PRECISION, INTENT(IN)  :: LPROP(30), DLT, FMAT(3,3)
+            DOUBLE PRECISION, INTENT(INOUT):: LSTATE(20), S_STRESS(6), H_STRESS(6)
+            DOUBLE PRECISION, INTENT(OUT) :: LSTRESS(6)
+        END SUBROUTINE CONSTITUTION
+        SUBROUTINE ESTIMATE_MODULI(STRESS_INC, STRAIN_INC, SHEAR_TRIAL, BULK_TRIAL, &
+                                   SHEAR, BULK, NSNI_FLAG)
+            !$ACC ROUTINE SEQ
+            DOUBLE PRECISION, INTENT(IN)    :: STRESS_INC(6), STRAIN_INC(6)
+            DOUBLE PRECISION, INTENT(OUT)   :: SHEAR_TRIAL, BULK_TRIAL
+            DOUBLE PRECISION, INTENT(INOUT) :: SHEAR, BULK
+            LOGICAL, INTENT(IN)             :: NSNI_FLAG
+        END SUBROUTINE ESTIMATE_MODULI
+    END INTERFACE
     !
     !
     !
@@ -230,33 +319,68 @@
     DET = 1.d0
     !REDUCTION(+:FINT)
     !
-    ALLOCATE(FINT_TEMP(NCORES_INPUT,3,GNUMP))
+    ! Simplify to single accumulator per node
+    ALLOCATE(FINT_TEMP(1,3,GNUMP))
     FINT_TEMP = 0.D0
 
-    ALLOCATE(FEXT_TEMP(NCORES_INPUT,3,GNUMP))
+    ALLOCATE(FEXT_TEMP(1,3,GNUMP))
     FEXT_TEMP = 0.D0
 
-    ALLOCATE(GINT_WORK_TEMP(NCORES_INPUT))
-    GINT_WORK_TEMP = 0.0d0
+    ALLOCATE(GINT_WORK_TEMP(1))
+      GINT_WORK_TEMP = 0.0d0
+
+      ! Check material properties on the host before entering the
+      ! accelerator region. Hyperelastic materials require LPROP(1) = 3.
+      DO I = 1, GNUMP
+          IF (GMAT_TYPE(I) .EQ. 5) THEN
+              IF (INT(GPROP(1,I)) .NE. 3) THEN
+                  CALL EXIT_PROGRAM('NOT A HYPERELASTIC MATERIAL', 1)
+              END IF
+          END IF
+      END DO
+
+    ! OpenACC: Create temporary arrays on GPU
+    !
+    !$ACC ENTER DATA CREATE(FINT_TEMP, FEXT_TEMP, GINT_WORK_TEMP)
+    !$ACC UPDATE DEVICE(FINT_TEMP, FEXT_TEMP, GINT_WORK_TEMP)
+    !$ACC ENTER DATA COPYIN(GGHOST)
+    !$ACC ENTER DATA COPYIN(RK_DEGREE, RK_PSIZE, RK_CONT, RK_IMPL, &
+    !$ACC&                     LLAGRANGIAN, QL, QL_COEF, QL_LEN, SHSUP, &
+    !$ACC&                     ITYPE_INT, IGRAVITY)
+    !$ACC ENTER DATA COPYIN(LINIT, LFINITE_STRAIN)
+   ! Ensure GDINC_TOT is present on GPU
+   !$ACC DATA PRESENT(GDINC_TOT)
 
         IF (LINIT) THEN
           ALLOCATE(GWIN0(3,GNUMP))
 		  GWIN0 = GWIN
+          !$ACC ENTER DATA COPYIN(GWIN0)
 		END IF
+        
+    ! CRITICAL: Always sync state variables to GPU before material calculations
+    !$ACC UPDATE DEVICE(GSTATE, GSTRESS, GSTRAIN)	
 		
-		
-    !$OMP PARALLEL DEFAULT(FIRSTPRIVATE) SHARED( GNUMP, GCOO, GCOO_CUURENT, GWIN, GSM_LEN, GSM_VOL, GSM_AREA, GN, GSTART, &
-    !$OMP                                       DIM_NN_LIST, GSTACK, GSTACK_SHP, GSTACK_DSHP, GSTACK_DDSHP, GINVK, &
-    !$OMP                                       GCHAR_DIST,GMAX_WVEL, GMAXN, GGHOST, GEBC_NODES, GVOL, GNSNI_FAC, &
-    !$OMP                                       GSTRESS, LOCAL_DX_STRESS, LOCAL_DY_STRESS, LOCAL_DZ_STRESS, &
-    !$OMP                                       GSTRAIN, &
-    !$OMP                                       GSTATE, GPROP, GDINC,GDINC_TOT, GMAT_TYPE, FINT, DLT_FINT, FINT_TEMP, FEXT_TEMP, &
-    !$OMP                                       GINT_WORK_TEMP,GINT_WORK,GSTRAIN_EQ)
-
-    ID_RANK = OMP_get_thread_num()  !OMPJOE
-
-    !$OMP DO
-    DO I = 1, GNUMP
+    !$ACC PARALLEL LOOP GANG VECTOR COPYIN(LINIT, LFINITE_STRAIN) &
+    !$ACC&                          PRESENT(GCOO, GCOO_CUURENT, GWIN, GSM_LEN, GSM_VOL, GSM_AREA, GN, GSTART, &
+    !$ACC&                                  DIM_NN_LIST, GSTACK, GSTACK_SHP, GSTACK_DSHP, GSTACK_DDSHP, GINVK, &
+    !$ACC&                                  GCHAR_DIST, GMAX_WVEL, GMAXN, GGHOST, GEBC_NODES, GVOL, GNSNI_FAC, &
+    !$ACC&                                  GSTRESS, LOCAL_DX_STRESS, LOCAL_DY_STRESS, LOCAL_DZ_STRESS, &
+    !$ACC&                                  GSTRAIN, GSTATE, GPROP, GDINC, GDINC_TOT, GMAT_TYPE, &
+    !$ACC&                                  FINT_TEMP, FEXT_TEMP, GINT_WORK_TEMP, GSTRAIN_EQ, &
+    !$ACC&                                  MODEL_BODYFORCE, MODEL_BODY_ID, DLT, &
+    !$ACC&                                  LLAGRANGIAN, RK_DEGREE, RK_PSIZE, RK_CONT, RK_IMPL, &
+    !$ACC&                                  QL, QL_COEF, QL_LEN, SHSUP, ITYPE_INT, IGRAVITY) &
+    !$ACC&        PRIVATE(I, J, K, L, JJ, LCOO, LCOO_T, VOL, LWIN, LSM_LEN, LN, LSTART, &
+    !$ACC&                LGHOST, LVOL, LPROP, LMAT_TYPE, LOCAL_BODY_ID, SELF_EBC, &
+    !$ACC&                LSTRESS, LSTRAIN, LSTATE, LSTACK, LDINC, LDINC_TOT, &
+    !$ACC&                LCOO_CUURENT, LCOONE, SHP, SHPD, SHPDTMP, FMAT, IFMAT, &
+    !$ACC&                DET, LMAT, STRAIN, ELAS_MAT, LSTRESS_PREDICTOR, &
+    !$ACC&                ROT, D, STRESS_INC, STRAIN_INC, POISS, YOUNG, BULK, SHEAR, &
+    !$ACC&                DENSITY, PMOD, BMAT, BMAT_T, FINT3, FINT3_EXT, &
+    !$ACC&                FBOD, FGRAV, LBOD, MAG_FINT, ID_RANK)
+     DO I = 1, GNUMP
+    ! For GPU, use gang/vector index instead of OpenMP thread ID
+    ID_RANK = MOD(I-1, NCORES_INPUT) + 1
         !
         !
         !GRAB NODE INFORMATION FROM LIST
@@ -309,6 +433,10 @@
         !
         DO J = 1, LN
             LSTACK(J) = GSTACK(LSTART+J-1)
+           ! Boundary check
+           IF (LSTACK(J) .LT. 1 .OR. LSTACK(J) .GT. GNUMP) THEN
+               LSTACK(J) = 1  ! Safe fallback
+           END IF
         END DO
         !
         ! GET THE INCREMENTS OF DISPLACEMENTS FOR NEIGHBORS
@@ -397,103 +525,103 @@
             !
             ! TODO: CONDENSE ALL SHAPE FUNCTION CALCULATIONS
             !
-!            IF (ITYPE_INT.EQ.0) THEN
+            IF (ITYPE_INT.EQ.0) THEN
                 !
                 ! DIRECT NODAL INTEGRATION
                 !
-!                IF (LLAGRANGIAN) THEN
+                IF (LLAGRANGIAN) THEN
 
-!                    CALL RK1(LCOO, RK_DEGREE, RK_PSIZE, RK_CONT, RK_IMPL,GCOO, GWIN, GNUMP, LSTACK, LN, GMAXN, GEBC_NODES,SELF_EBC, &
-!                        QL, QL_COEF,QL_LEN, &
-!                        SHP, SHPD,SHSUP)
+                    CALL RK1(LCOO, RK_DEGREE, RK_PSIZE, RK_CONT, RK_IMPL,GCOO, GWIN, GNUMP, LSTACK, LN, GMAXN, GEBC_NODES,SELF_EBC, &
+                        QL, QL_COEF,QL_LEN, &
+                        SHP, SHPD,SHSUP)
 
 
-!                ELSE !GCOO_CUURENT
-!                    CALL RK1(LCOO_T, RK_DEGREE, RK_PSIZE, RK_CONT, RK_IMPL,GCOO_CUURENT, GWIN, GNUMP, LSTACK, LN, GMAXN, GEBC_NODES,SELF_EBC, &
-!                        QL, QL_COEF,QL_LEN, &
-!                        SHP, SHPD, SHSUP)
+                ELSE !GCOO_CUURENT
+                    CALL RK1(LCOO_T, RK_DEGREE, RK_PSIZE, RK_CONT, RK_IMPL,GCOO_CUURENT, GWIN, GNUMP, LSTACK, LN, GMAXN, GEBC_NODES,SELF_EBC, &
+                        QL, QL_COEF,QL_LEN, &
+                        SHP, SHPD, SHSUP)
                     
                     ! CALCULATE THE DEFORMATION GRADIENT
-!                    B_TEMP = 0.D0
-!                    DO K = 1, 3
-!                        DO L = 1, 3
-!                            DO J = 1, LN
-!                                B_TEMP(K,L) = B_TEMP(K,L) +  SHPD(L,J)*LCOONE(K,J)
-!                            END DO 
-!                        END DO
-!                    END DO
-!                    CALL INVERSE(B_TEMP, 3, B_INV_TEMP) 
-!                    FMAT = B_INV_TEMP
+                    B_TEMP = 0.D0
+                    DO K = 1, 3
+                        DO L = 1, 3
+                            DO J = 1, LN
+                                B_TEMP(K,L) = B_TEMP(K,L) +  SHPD(L,J)*LCOONE(K,J)
+                            END DO 
+                        END DO
+                    END DO
+                    CALL INVERSE(B_TEMP, 3, B_INV_TEMP) 
+                    FMAT = B_INV_TEMP
                     !
                     ! STORE THE SHP FOR PHY DISPLACEMENT/VEL CACULATION FOR DNI
                     !
-!                    DO J = 1, LN
-!                        GSTACK_SHP(LSTART+J-1) = SHP(J)
-!                        GSTACK_DSHP(1,LSTART+J-1) = SHPD(1,J)
-!                        GSTACK_DSHP(2,LSTART+J-1) = SHPD(2,J)
-!                        GSTACK_DSHP(3,LSTART+J-1) = SHPD(3,J)
-!                    END DO
+                    DO J = 1, LN
+                        GSTACK_SHP(LSTART+J-1) = SHP(J)
+                        GSTACK_DSHP(1,LSTART+J-1) = SHPD(1,J)
+                        GSTACK_DSHP(2,LSTART+J-1) = SHPD(2,J)
+                        GSTACK_DSHP(3,LSTART+J-1) = SHPD(3,J)
+                    END DO
 
-!                END IF
+                END IF
 
-!                CONTINUE
+                CONTINUE
 
-            IF ((ITYPE_INT.EQ.2).OR.(ITYPE_INT.EQ.1)) THEN
+!            ELSEIF ((ITYPE_INT.EQ.2).OR.(ITYPE_INT.EQ.1)) THEN
                 !
                 ! NSNI
                 !
                 ! GET THE SMOOTHING INFORMATION
                 ! (1-6) = (+X, -X, +Y, -Y, +Z, -Z)
                 !
-               DO J = 1, 3
-                    DO K = 1, 6
-                        LSM_PTS(J,K) = LCOO_T(J)
-                    END DO
-                END DO
-                LSM_PTS(1,1) = LCOO_T(1) + LSM_LEN(1)
-                LSM_PTS(1,2) = LCOO_T(1) - LSM_LEN(2)
-                LSM_PTS(2,3) = LCOO_T(2) + LSM_LEN(3)
-                LSM_PTS(2,4) = LCOO_T(2) - LSM_LEN(4)
-                LSM_PTS(3,5) = LCOO_T(3) + LSM_LEN(5)
-                LSM_PTS(3,6) = LCOO_T(3) - LSM_LEN(6)
-
-                LSM_VOL = GSM_VOL(I)
+!               DO J = 1, 3
+!                    DO K = 1, 6
+!                        LSM_PTS(J,K) = LCOO_T(J)
+!                    END DO
+!                END DO
+!                LSM_PTS(1,1) = LCOO_T(1) + LSM_LEN(1)
+!                LSM_PTS(1,2) = LCOO_T(1) - LSM_LEN(2)
+!                LSM_PTS(2,3) = LCOO_T(2) + LSM_LEN(3)
+!                LSM_PTS(2,4) = LCOO_T(2) - LSM_LEN(4)
+!                LSM_PTS(3,5) = LCOO_T(3) + LSM_LEN(5)
+!                LSM_PTS(3,6) = LCOO_T(3) - LSM_LEN(6)
+!
+!                LSM_VOL = GSM_VOL(I)
 !                !
 !                ! COMPUTE SMOOTHED AREA OVER VOLUME
 !                !
-                DO J = 1, 3
-                    LSM_AOV((J-1)*2+1) = GSM_AREA(J,I) / LSM_VOL
-                    LSM_AOV((J-1)*2+2) = GSM_AREA(J,I) / LSM_VOL
-                END DO
+!                DO J = 1, 3
+!                    LSM_AOV((J-1)*2+1) = GSM_AREA(J,I) / LSM_VOL
+!                    LSM_AOV((J-1)*2+2) = GSM_AREA(J,I) / LSM_VOL
+!                END DO
 
                 !
                 !COMPUTE THE SHAPE FUNCTIONS AT GRADIENT SMOOTHING POINTS
                 !
-                DO J = 1, 6
+!                DO J = 1, 6
 
-                    SM_COO(:) = LSM_PTS(:,J)
-                    CALL RK1(SM_COO, RK_DEGREE, RK_PSIZE, RK_CONT, RK_IMPL, GCOO_CUURENT, GWIN, GNUMP, LSTACK, LN, GMAXN, GEBC_NODES,SELF_EBC, &
-                        QL, QL_COEF,QL_LEN, &
-                        SHP, SHPD, SHSUP)
+!                    SM_COO(:) = LSM_PTS(:,J)
+!                    CALL RK1(SM_COO, RK_DEGREE, RK_PSIZE, RK_CONT, RK_IMPL, GCOO_CUURENT, GWIN, GNUMP, LSTACK, LN, GMAXN, GEBC_NODES,SELF_EBC, &
+!                        QL, QL_COEF,QL_LEN, &
+!                        SHP, SHPD, SHSUP)
 
-                    DO K = 1, LN
+!                    DO K = 1, LN
                     
-                        SHP6(K,J) = SHP(K)
-                        SHPD6(:,K,J) = SHPD(:,K)
-                    END DO
+!                        SHP6(K,J) = SHP(K)
+!                        SHPD6(:,K,J) = SHPD(:,K)
+!                    END DO
 
-                END DO !J = 1, 6 (COMPUTE THE SMOOTHED GRADIENTS)
+!                END DO !J = 1, 6 (COMPUTE THE SMOOTHED GRADIENTS)
 
                 !
                 ! FILL OUT THE SMOOTHED GRADIENT INFORMATION
                 !
-                DO K = 1, LN
+!                DO K = 1, LN
 
-                    SHPD(1,K) = (SHP6(K,1)*LSM_AOV(1) - SHP6(K,2)*LSM_AOV(2))
-                    SHPD(2,K) = (SHP6(K,3)*LSM_AOV(3) - SHP6(K,4)*LSM_AOV(4))
-                    SHPD(3,K) = (SHP6(K,5)*LSM_AOV(5) - SHP6(K,6)*LSM_AOV(6))
+!                    SHPD(1,K) = (SHP6(K,1)*LSM_AOV(1) - SHP6(K,2)*LSM_AOV(2))
+!                    SHPD(2,K) = (SHP6(K,3)*LSM_AOV(3) - SHP6(K,4)*LSM_AOV(4))
+!                    SHPD(3,K) = (SHP6(K,5)*LSM_AOV(5) - SHP6(K,6)*LSM_AOV(6))
 
-                END DO
+!                END DO
                 !
 !                IF (ITYPE_INT.EQ.2) THEN
 
@@ -563,16 +691,16 @@
 
 !                END IF
 
-                CALL RK1(LCOO_T, RK_DEGREE, RK_PSIZE, RK_CONT, RK_IMPL,GCOO_CUURENT, GWIN, GNUMP, LSTACK, LN, GMAXN, GEBC_NODES,SELF_EBC, &
-                    QL, QL_COEF,QL_LEN, &
-                    SHP, SHPD_TRASH, SHSUP)
+!                CALL RK1(LCOO_T, RK_DEGREE, RK_PSIZE, RK_CONT, RK_IMPL,GCOO_CUURENT, GWIN, GNUMP, LSTACK, LN, GMAXN, GEBC_NODES,SELF_EBC, &
+!                    QL, QL_COEF,QL_LEN, &
+!                    SHP, SHPD_TRASH, SHSUP)
                 !
                 ! STORE THE SHP FOR PHY DISPLACEMENT/VEL CACULATION FOR SNNI, DNI
                 !
-                DO J = 1, LN
-                    GSTACK_SHP(LSTART+J-1) = SHP(J)
-                END DO
-        ELSEIF (ITYPE_INT.EQ.0) THEN 
+!                DO J = 1, LN
+!                    GSTACK_SHP(LSTART+J-1) = SHP(J)
+!                END DO
+
             END IF
 
 
@@ -787,15 +915,28 @@
 
 
         LSTRAIN = LSTRAIN + STRAIN
+
+       ! Store diagnostic info for first few nodes
+       IF (I .LE. 3) THEN
+           ! Store max displacement and strain for diagnostics
+           LSTATE(16) = MAXVAL(ABS(LDINC_TOT(:,1:LN)))  ! Max displacement
+           LSTATE(17) = MAXVAL(ABS(STRAIN))              ! Max strain
+       END IF
+
         !
         ! ELASTIC PREDICTOR
         !
         ELAS_MAT = FORM_CMAT(LPROP)
         LSTRESS_PREDICTOR = LSTRESS + MATMUL(ELAS_MAT,STRAIN)
         !
+       ! Store stress magnitude for diagnostics (no PRINT in GPU kernel)
+       IF (I .LE. 5) THEN
+           ! Use STATE array to store diagnostic info
+           LSTATE(16) = SQRT(SUM(LSTRESS_PREDICTOR**2))
+       END IF
 
-        IF (LMAT_TYPE.EQ.5) THEN
-            CALL HYPERELASTIC(LPROP,LSTRESS,FMAT,LSTRAIN)
+         IF (LMAT_TYPE.EQ.5) THEN
+             CALL HYPERELASTIC(LPROP,LSTRESS,FMAT,LSTRAIN)
         ELSE
             CALL CONSTITUTION(LSTRESS_PREDICTOR,LMAT_TYPE, LSTRAIN, STRAIN, LPROP, DLT, FMAT, & !IN
         LSTATE, LSTRESS, L_H_STRESS, L_S_STRESS) !IN/OUT, OUT
@@ -809,6 +950,8 @@
         DO J = 1, 20
             GSTATE(J,I) = LSTATE(J)
         END DO
+
+
         !
         DO J = 1, 6
 
@@ -833,14 +976,14 @@
 
         GSTRAIN_EQ(I) = ( GSTRAIN_EQ(I) *2/3)**0.5
 
-        ID_RANK = OMP_get_thread_num()
+
         IF (LFINITE_STRAIN) THEN
             DO J = 1, 6
             
                  GINT_WORK_TEMP(ID_RANK+1) = GINT_WORK_TEMP(ID_RANK+1) + 0.5d0*D(J)*(2*LSTRESS(J)-STRESS_INC(J))*VOL*DET
             END DO
         ELSE
-        ID_RANK = OMP_get_thread_num()
+
             DO J = 1, 6
                 GINT_WORK_TEMP(ID_RANK+1) = GINT_WORK_TEMP(ID_RANK+1) + 0.5d0*STRAIN_INC(J)*STRESS_INC(J)*VOL*DET
             END DO
@@ -882,55 +1025,55 @@
           !
 		!END IF
 		
-        IF (ITYPE_INT.EQ.2) THEN
+!        IF (ITYPE_INT.EQ.2) THEN
 
-            DO J = 1, 6
-                LDX_STRESS(J) = LOCAL_DX_STRESS(J,I)
-                LDY_STRESS(J) = LOCAL_DY_STRESS(J,I)
-                LDZ_STRESS(J) = LOCAL_DZ_STRESS(J,I)
-            END DO
+!            DO J = 1, 6
+!                LDX_STRESS(J) = LOCAL_DX_STRESS(J,I)
+!                LDY_STRESS(J) = LOCAL_DY_STRESS(J,I)
+!                LDZ_STRESS(J) = LOCAL_DZ_STRESS(J,I)
+!            END DO
 
-            CALL ROTATE_TENSOR(ROT,LDX_STRESS)
-            CALL ROTATE_TENSOR(ROT,LDY_STRESS)
-            CALL ROTATE_TENSOR(ROT,LDZ_STRESS)
+!            CALL ROTATE_TENSOR(ROT,LDX_STRESS)
+!            CALL ROTATE_TENSOR(ROT,LDY_STRESS)
+!            CALL ROTATE_TENSOR(ROT,LDZ_STRESS)
 
-            POISS = LPROP(1)
-            YOUNG = LPROP(2)
+!            POISS = LPROP(1)
+!            YOUNG = LPROP(2)
 
-            BULK = BULK_MOD(YOUNG,POISS)
+!            BULK = BULK_MOD(YOUNG,POISS)
 
-            SHEAR = SHEAR_MOD(YOUNG,POISS)
+!            SHEAR = SHEAR_MOD(YOUNG,POISS)
 
-            IF (LMAT_TYPE.GT.1) THEN
+!            IF (LMAT_TYPE.GT.1) THEN
             !IF (.TRUE.) THEN
-                NSNI_FLAG=.TRUE.
-                CALL ESTIMATE_MODULI(STRESS_INC, STRAIN_INC, SHEAR_TRIAL, BULK_TRIAL, SHEAR, BULK,NSNI_FLAG)
-            END IF
+!                NSNI_FLAG=.TRUE.
+!                CALL ESTIMATE_MODULI(STRESS_INC, STRAIN_INC, SHEAR_TRIAL, BULK_TRIAL, SHEAR, BULK,NSNI_FLAG)
+!            END IF
 
-            LAMDA = LAMDA_MOD(BULK,SHEAR)
-            MU = SHEAR
-            LAMDA_PLUS_2MU = LAMDA + 2.0d0*MU
+!            LAMDA = LAMDA_MOD(BULK,SHEAR)
+!            MU = SHEAR
+!            LAMDA_PLUS_2MU = LAMDA + 2.0d0*MU
 
-            CMAT = 0.0d0
+!            CMAT = 0.0d0
 
-            CMAT(1,1) = LAMDA_PLUS_2MU
-            CMAT(2,2) = LAMDA_PLUS_2MU
-            CMAT(3,3) = LAMDA_PLUS_2MU
-            CMAT(4,4) = MU
-            CMAT(5,5) = MU
-            CMAT(6,6) = MU
+!            CMAT(1,1) = LAMDA_PLUS_2MU
+!            CMAT(2,2) = LAMDA_PLUS_2MU
+!            CMAT(3,3) = LAMDA_PLUS_2MU
+!            CMAT(4,4) = MU
+!            CMAT(5,5) = MU
+!            CMAT(6,6) = MU
 
-            CMAT(1,2) = LAMDA
-            CMAT(2,1) = LAMDA
+!            CMAT(1,2) = LAMDA
+!            CMAT(2,1) = LAMDA
 
-            CMAT(1,3) = LAMDA
-            CMAT(3,1) = LAMDA
+!            CMAT(1,3) = LAMDA
+!            CMAT(3,1) = LAMDA
 
-            CMAT(3,2) = LAMDA
-            CMAT(2,3) = LAMDA
-
-			NSNI_LIMITER = 1.0d0
-            IF ((LMAT_TYPE.EQ.3).OR.(LMAT_TYPE.EQ.6)) THEN
+!            CMAT(3,2) = LAMDA
+!            CMAT(2,3) = LAMDA
+!
+!			NSNI_LIMITER = 1.0d0
+!            IF ((LMAT_TYPE.EQ.3).OR.(LMAT_TYPE.EQ.6)) THEN
 			!IF (LMAT_TYPE.EQ.3) THEN
             !
             ! DAMAGE MECHANICS INVOLVED, DO NOT USE A "TOTAL" STRESS
@@ -941,32 +1084,32 @@
 			! IN CASE THE DAMAGE GETS TOO BIG, THIS SEEMS TO WORK
 			! OK, BUT THE VALUE IS SENSATIVE A BIT.
             !
-			IF (LSTATE(4).GT.(0.5d0)) THEN
-                NSNI_LIMITER = 0.0d0
-			ELSE
-               NSNI_LIMITER = (1.0d0-2.0d0*LSTATE(4))
-			END IF
-            END IF
+!			IF (LSTATE(4).GT.(0.5d0)) THEN
+!                NSNI_LIMITER = 0.0d0
+!			ELSE
+!               NSNI_LIMITER = (1.0d0-2.0d0*LSTATE(4))
+!			END IF
+!            END IF
             !
             ! UPDATE THE PSUEDO-STRESSES FOR NSNI
             !
-            DO K = 1, 6
-                DO L = 1, 6
-                    LDX_STRESS(K) = LDX_STRESS(K) +  CMAT(K,L)*DX_STRAIN(L)
-                    LDY_STRESS(K) = LDY_STRESS(K) +  CMAT(K,L)*DY_STRAIN(L)
-                    LDZ_STRESS(K) = LDZ_STRESS(K) +  CMAT(K,L)*DZ_STRAIN(L)
-                END DO
-            END DO
+!            DO K = 1, 6
+!                DO L = 1, 6
+!                    LDX_STRESS(K) = LDX_STRESS(K) +  CMAT(K,L)*DX_STRAIN(L)
+!                    LDY_STRESS(K) = LDY_STRESS(K) +  CMAT(K,L)*DY_STRAIN(L)
+!                    LDZ_STRESS(K) = LDZ_STRESS(K) +  CMAT(K,L)*DZ_STRAIN(L)
+!                END DO
+!            END DO
             !
             ! SAVE WORK CONGUGATE STRESS DERIVATIVES FOR NSNI
             !
-            DO J = 1, 6
+!            DO J = 1, 6
                 !
-                LOCAL_DX_STRESS(J,I) = LDX_STRESS(J)*NSNI_LIMITER
-                LOCAL_DY_STRESS(J,I) = LDY_STRESS(J)*NSNI_LIMITER
-                LOCAL_DZ_STRESS(J,I) = LDY_STRESS(J)*NSNI_LIMITER
+!                LOCAL_DX_STRESS(J,I) = LDX_STRESS(J)*NSNI_LIMITER
+!                LOCAL_DY_STRESS(J,I) = LDY_STRESS(J)*NSNI_LIMITER
+!                LOCAL_DZ_STRESS(J,I) = LDY_STRESS(J)*NSNI_LIMITER
                 !
-            END DO
+!            END DO
 			
 			!DOESNT WORK!
 			!IF ((LMAT_TYPE.EQ.3).OR.(LMAT_TYPE.EQ.6)) THEN
@@ -976,7 +1119,7 @@
 			!END IF
 
 
-        END IF !NSNI
+!        END IF !NSNI
 XNORM(1:3) =0.D0
         DO K = 1, LN
             KK = LSTACK(K)
@@ -1105,128 +1248,173 @@ XNORM(1:3) =0.D0
             END DO
 
             DO K = 1, 3
-                ID_RANK = OMP_get_thread_num()  !OMPJOE
 
-                FINT_TEMP(ID_RANK+1,K,JJ) = FINT_TEMP(ID_RANK+1,K,JJ) + FINT3(K)*VOL*DET
 
-                FEXT_TEMP(ID_RANK+1,K,JJ) = FEXT_TEMP(ID_RANK+1,K,JJ) + FINT3_EXT(K)*VOL*DET
-
+               ! Use atomic operations to avoid race conditions
+               !$ACC ATOMIC UPDATE
+               FINT_TEMP(1,K,JJ) = FINT_TEMP(1,K,JJ) + FINT3(K)*VOL*DET
+               !$ACC END ATOMIC
+               
+               !$ACC ATOMIC UPDATE
+               FEXT_TEMP(1,K,JJ) = FEXT_TEMP(1,K,JJ) + FINT3_EXT(K)*VOL*DET
+               !$ACC END ATOMIC
             END DO
 
         END DO !ASSEMBLE FINT FOR STANDARD NODAL INTEGRATION PART
 
         MAG_FINT=DSQRT(MAG_FINT)
 
-        IF (ITYPE_INT.EQ.2) THEN !NSNI
+!        IF (ITYPE_INT.EQ.2) THEN !NSNI
 
             !
-            MAG_STAB_FINT = 0.0d0
+!            MAG_STAB_FINT = 0.0d0
             !
-            DO J = 1, LN
+!            DO J = 1, LN
 
-                JJ = LSTACK(J)
+!                JJ = LSTACK(J)
 
-                XBMAT = 0.0d0
-                YBMAT = 0.0d0
-                ZBMAT = 0.0d0
+!                XBMAT = 0.0d0
+!                YBMAT = 0.0d0
+!                ZBMAT = 0.0d0
 
-                XBMAT(1,1) = SHPDD_SM(XMAP(1),J)
-                XBMAT(2,2) = SHPDD_SM(XMAP(2),J)
-                XBMAT(3,3) = SHPDD_SM(XMAP(3),J)
-                XBMAT(4,2) = SHPDD_SM(XMAP(3),J)
-                XBMAT(4,3) = SHPDD_SM(XMAP(2),J)
-                XBMAT(5,1) = SHPDD_SM(XMAP(3),J)
-                XBMAT(5,3) = SHPDD_SM(XMAP(1),J)
-                XBMAT(6,1) = SHPDD_SM(XMAP(2),J)
-                XBMAT(6,2) = SHPDD_SM(XMAP(1),J)
+!                XBMAT(1,1) = SHPDD_SM(XMAP(1),J)
+!                XBMAT(2,2) = SHPDD_SM(XMAP(2),J)
+!                XBMAT(3,3) = SHPDD_SM(XMAP(3),J)
+!                XBMAT(4,2) = SHPDD_SM(XMAP(3),J)
+!                XBMAT(4,3) = SHPDD_SM(XMAP(2),J)
+!                XBMAT(5,1) = SHPDD_SM(XMAP(3),J)
+!                XBMAT(5,3) = SHPDD_SM(XMAP(1),J)
+!                XBMAT(6,1) = SHPDD_SM(XMAP(2),J)
+!                XBMAT(6,2) = SHPDD_SM(XMAP(1),J)
 
-                XBMAT_T = TRANSPOSE(XBMAT)
+!                XBMAT_T = TRANSPOSE(XBMAT)
 
-               XFINT3(J,1:3) = MATMUL(XBMAT_T,LDX_STRESS)
-
-
-
-                YBMAT(1,1) = SHPDD_SM(YMAP(1),J)
-                YBMAT(2,2) = SHPDD_SM(YMAP(2),J)
-                YBMAT(3,3) = SHPDD_SM(YMAP(3),J)
-                YBMAT(4,2) = SHPDD_SM(YMAP(3),J)
-                YBMAT(4,3) = SHPDD_SM(YMAP(2),J)
-                YBMAT(5,1) = SHPDD_SM(YMAP(3),J)
-                YBMAT(5,3) = SHPDD_SM(YMAP(1),J)
-                YBMAT(6,1) = SHPDD_SM(YMAP(2),J)
-                YBMAT(6,2) = SHPDD_SM(YMAP(1),J)
-
-                YBMAT_T = TRANSPOSE(YBMAT)
-
-                YFINT3(J,1:3) = MATMUL(YBMAT_T,LDY_STRESS)
+!               XFINT3(J,1:3) = MATMUL(XBMAT_T,LDX_STRESS)
 
 
 
-                ZBMAT(1,1) = SHPDD_SM(ZMAP(1),J)
-                ZBMAT(2,2) = SHPDD_SM(ZMAP(2),J)
-                ZBMAT(3,3) = SHPDD_SM(ZMAP(3),J)
-                ZBMAT(4,2) = SHPDD_SM(ZMAP(3),J)
-                ZBMAT(4,3) = SHPDD_SM(ZMAP(2),J)
-                ZBMAT(5,1) = SHPDD_SM(ZMAP(3),J)
-                ZBMAT(5,3) = SHPDD_SM(ZMAP(1),J)
-                ZBMAT(6,1) = SHPDD_SM(ZMAP(2),J)
-                ZBMAT(6,2) = SHPDD_SM(ZMAP(1),J)
+!                YBMAT(1,1) = SHPDD_SM(YMAP(1),J)
+!                YBMAT(2,2) = SHPDD_SM(YMAP(2),J)
+!                YBMAT(3,3) = SHPDD_SM(YMAP(3),J)
+!                YBMAT(4,2) = SHPDD_SM(YMAP(3),J)
+!                YBMAT(4,3) = SHPDD_SM(YMAP(2),J)
+!                YBMAT(5,1) = SHPDD_SM(YMAP(3),J)
+!                YBMAT(5,3) = SHPDD_SM(YMAP(1),J)
+!                YBMAT(6,1) = SHPDD_SM(YMAP(2),J)
+!                YBMAT(6,2) = SHPDD_SM(YMAP(1),J)
 
-                ZBMAT_T = TRANSPOSE(ZBMAT)
+!                YBMAT_T = TRANSPOSE(YBMAT)
 
-                ZFINT3(J,1:3) = MATMUL(ZBMAT_T,LDZ_STRESS)
+!                YFINT3(J,1:3) = MATMUL(YBMAT_T,LDY_STRESS)
 
-                DO K = 1, 3
-                    MAG_STAB_FINT = MAG_STAB_FINT + (XFINT3(J,K)**2 + YFINT3(J,K)**2 + ZFINT3(J,K)**2)
-                END DO
+
+
+!                ZBMAT(1,1) = SHPDD_SM(ZMAP(1),J)
+!                ZBMAT(2,2) = SHPDD_SM(ZMAP(2),J)
+!                ZBMAT(3,3) = SHPDD_SM(ZMAP(3),J)
+!                ZBMAT(4,2) = SHPDD_SM(ZMAP(3),J)
+!                ZBMAT(4,3) = SHPDD_SM(ZMAP(2),J)
+!                ZBMAT(5,1) = SHPDD_SM(ZMAP(3),J)
+!                ZBMAT(5,3) = SHPDD_SM(ZMAP(1),J)
+!                ZBMAT(6,1) = SHPDD_SM(ZMAP(2),J)
+!                ZBMAT(6,2) = SHPDD_SM(ZMAP(1),J)
+
+!                ZBMAT_T = TRANSPOSE(ZBMAT)
+
+!                ZFINT3(J,1:3) = MATMUL(ZBMAT_T,LDZ_STRESS)
+
+!                DO K = 1, 3
+!                    MAG_STAB_FINT = MAG_STAB_FINT + (XFINT3(J,K)**2 + YFINT3(J,K)**2 + ZFINT3(J,K)**2)
+!                END DO
                 
-                CONTINUE
+!                CONTINUE
 
 
-            END DO
+!            END DO
             !
             ! CONTROL THE CONTRIBUTION TO FINT BY NSNI: SOME PARAMETERS ARE ESTIMATED AND
             ! THEY MIGHT NOT BE ACCURATE
             !
-            IF (USE_STAB_CONTROL) THEN
-             IF (MAG_STAB_FINT.GT.(1.0d-12)) THEN
-                MAG_STAB_FINT=DSQRT(MAG_STAB_FINT)
-                IF (MAG_STAB_FINT.GT.MAG_FINT) THEN
+!            IF (USE_STAB_CONTROL) THEN
+!             IF (MAG_STAB_FINT.GT.(1.0d-12)) THEN
+!                MAG_STAB_FINT=DSQRT(MAG_STAB_FINT)
+!                IF (MAG_STAB_FINT.GT.MAG_FINT) THEN
 !                    XFINT3=XFINT3*MAG_FINT/MAG_STAB_FINT*STABILIZATION_CONTROL_COEF
 !                    YFINT3=YFINT3*MAG_FINT/MAG_STAB_FINT*STABILIZATION_CONTROL_COEF
 !                    ZFINT3=ZFINT3*MAG_FINT/MAG_STAB_FINT*STABILIZATION_CONTROL_COEF
-                END IF
-             END IF
-            END IF
+!                END IF
+!             END IF
+!            END IF
             
             !DEBUG
             !IF (MAG_STAB_FINT.GT.(1.0e-6)) THEN
             !CONTINUE
             !END IF
 
-            DO J = 1, LN
+!            DO J = 1, LN
 
-                JJ = LSTACK(J)
+!                JJ = LSTACK(J)
 
-                DO K = 1, 3
+!                DO K = 1, 3
                     !IT DOESNT LOOK LIKE X_MOM GETS ASSIGNED ANYTHING! FIX NSNI!
-                    ID_RANK = OMP_get_thread_num()
-                    FINT_TEMP(ID_RANK+1,K,JJ) = FINT_TEMP(ID_RANK+1,K,JJ) + XFINT3(J,K) *VOL*DET * G_X_MOM(I)
-                    FINT_TEMP(ID_RANK+1,K,JJ) = FINT_TEMP(ID_RANK+1,K,JJ) + YFINT3(J,K) *VOL*DET * G_Y_MOM(I)
-                    FINT_TEMP(ID_RANK+1,K,JJ) = FINT_TEMP(ID_RANK+1,K,JJ) + ZFINT3(J,K) *VOL*DET * G_Z_MOM(I)
+!                    ID_RANK = OMP_get_thread_num()
+!                    FINT_TEMP(ID_RANK+1,K,JJ) = FINT_TEMP(ID_RANK+1,K,JJ) + XFINT3(J,K) *VOL*DET * G_X_MOM(I)
+!                    FINT_TEMP(ID_RANK+1,K,JJ) = FINT_TEMP(ID_RANK+1,K,JJ) + YFINT3(J,K) *VOL*DET * G_Y_MOM(I)
+!                    FINT_TEMP(ID_RANK+1,K,JJ) = FINT_TEMP(ID_RANK+1,K,JJ) + ZFINT3(J,K) *VOL*DET * G_Z_MOM(I)
 
-                END DO
+!                END DO
 
-            END DO
+!            END DO
 
-        END IF !NSNI
+!        END IF !NSNI
 
 
     END DO !INTEGRATION POINT (NODE) LOOP
-    !$OMP END DO
-    !$OMP END PARALLEL
+    !$ACC END PARALLEL LOOP
+
+    ! CRITICAL FIX: Copy GPU results back to host for reduction
+    !$ACC UPDATE HOST(FINT_TEMP, FEXT_TEMP, GINT_WORK_TEMP)
+
+   ! Synchronize shape functions from GPU to CPU after GPU computation
+   !$ACC UPDATE HOST(GSTACK_SHP, GSTACK_DSHP, GSTACK_DDSHP)
+   
+   ! Also sync other important arrays computed on GPU
+   !$ACC UPDATE HOST(GSTRESS, GSTRAIN, GSTATE, GSTRAIN_EQ)
+
+   ! Print diagnostic info from GPU computation
+   IF (LINIT) THEN
+       PRINT *, '=== GPU COMPUTATION DIAGNOSTICS ==='
+       DO I = 1, MIN(3, GNUMP)
+           PRINT '(A,I3,A,E12.5,A,E12.5)', &
+               'Node', I, ' Max|LDINC_TOT|=', GSTATE(16,I), &
+               ' Max|STRAIN|=', GSTATE(17,I)
+       END DO
+   END IF
 
 
+   ! CPU-side diagnostic for plasticity convergence (OUTSIDE GPU loop)
+   IF (LINIT) THEN  ! Only print during first timestep
+       PRINT *, '=== PLASTICITY CONVERGENCE DIAGNOSTICS ==='
+       DO I = 1, MIN(5, GNUMP)
+           IF (GMAT_TYPE(I) .EQ. 2 .AND. GSTATE(11,I) .GT. 10.0d0) THEN
+               PRINT '(A,I4,A,F3.0,A,E12.5,A,E12.5)', &
+                   'Node=', I, ' Plasticity iter=', GSTATE(11,I), &
+                   ' YLD_FN=', GSTATE(12,I), ' DELTA_GAMMA=', GSTATE(13,I)
+           END IF
+       END DO
+   END IF
+
+    ! CPU-side diagnostic output (safe to use PRINT here)
+    IF (LINIT) THEN
+        PRINT *, '=== STRESS PREDICTOR DIAGNOSTICS (First timestep) ==='
+        DO I = 1, MIN(5, GNUMP)
+            IF (GMAT_TYPE(I) .EQ. 2) THEN  ! Von Mises material
+                PRINT '(A,I4,A,E12.5,A,E12.5)', &
+                    'Node=', I, ' |Stress_pred|=', GSTATE(16,I), &
+                    ' Plastic strain=', GSTATE(3,I)
+            END IF
+        END DO
+    END IF
 
     !$OMP PARALLEL PRIVATE(ID_RANK) SHARED(NCORES_INPUT,GINT_WORK_TEMP)
     GINT_WORK =  GINT_WORK+SUM(GINT_WORK_TEMP(1:NCORES_INPUT))
@@ -1239,8 +1427,8 @@ XNORM(1:3) =0.D0
     !$OMP DO
     DO I = 1, GNUMP
         DO K = 1, 3
-            FINT((I-1)*3+K) =  SUM(FINT_TEMP(1:NCORES_INPUT,K,I))
-            FEXT((I-1)*3+K) =  SUM(FEXT_TEMP(1:NCORES_INPUT,K,I))
+            FINT((I-1)*3+K) =  FINT_TEMP(1,K,I)
+            FEXT((I-1)*3+K) =  FEXT_TEMP(1,K,I)
         END DO
     END DO
     !$OMP END DO
@@ -1329,8 +1517,17 @@ XNORM(1:3) =0.D0
 
 !    END IF !CALC TIME STEP
 
+    !
+    ! OpenACC: Clean up temporary GPU arrays
+    !
+    !$ACC EXIT DATA DELETE(FINT_TEMP, FEXT_TEMP, GINT_WORK_TEMP)
 
+    !$ACC EXIT DATA DELETE(RK_DEGREE, RK_PSIZE, RK_CONT, RK_IMPL, &
+    !$ACC&                   LLAGRANGIAN, QL, QL_COEF, QL_LEN, SHSUP, &
+    !$ACC&                   ITYPE_INT, IGRAVITY)
+   !$ACC END DATA  ! End PRESENT(GDINC_TOT) region
     DEALLOCATE(FINT_TEMP)
+    DEALLOCATE(FEXT_TEMP)
     DEALLOCATE(GINT_WORK_TEMP)
     RETURN
     END SUBROUTINE

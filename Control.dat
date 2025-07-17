@@ -41,7 +41,7 @@ Taylor_bar.k
 
 *INTEGRATION PARAMETERS
 #TYPE (0 = DNI, 1 = SNNI, 2 = NSNI)
-1
+0
 
 *FORMULATION PARAMETERS
 # IFINITE_STRAIN, ILAGRANGIAN
@@ -121,6 +121,9 @@ BAR
 *OUTPUT VARIABLES
 all
 
+*FEM OUTPUT
+#LFEM_OUTPUT  (1 = write FEM cells)
+1
 
 ##possible parameters:
 

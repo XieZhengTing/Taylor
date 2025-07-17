@@ -15,6 +15,7 @@
 
 	  SUBROUTINE HUGHES_WINGET(LMAT, & !IN
 	                           ROT,STRAIN,D) !OUT
+      !$ACC ROUTINE SEQ
 	  !
 	  ! FUNCTION OF THIS SUBROUTINE:
 	  !
@@ -24,6 +25,13 @@
       USE FINT_FUNCTIONS
       !
 	  IMPLICIT NONE
+          INTERFACE
+              SUBROUTINE INV3(A, AINV)
+                  !$ACC ROUTINE SEQ
+                  DOUBLE PRECISION, INTENT(IN)  :: A(3,3)
+                  DOUBLE PRECISION, INTENT(OUT) :: AINV(3,3)
+              END SUBROUTINE INV3
+          END INTERFACE
 	  !
 	  !GLOBAL IN-OUT
 	  DOUBLE PRECISION, INTENT(IN):: LMAT(3,3)
@@ -83,6 +91,7 @@
 
 	  SUBROUTINE D_HUGHES_WINGET(LMAT,DLMAT, & !IN
 	                           ROT,DSTRAIN) !OUT
+       !$ACC ROUTINE SEQ
 	  !
 	  ! FUNCTION OF THIS SUBROUTINE:
 	  !
@@ -92,6 +101,13 @@
       USE FINT_FUNCTIONS
       !
 	  IMPLICIT NONE
+          INTERFACE
+              SUBROUTINE INV3(A, AINV)
+                  !$ACC ROUTINE SEQ
+                  DOUBLE PRECISION, INTENT(IN)  :: A(3,3)
+                  DOUBLE PRECISION, INTENT(OUT) :: AINV(3,3)
+              END SUBROUTINE INV3
+          END INTERFACE
 	  !
 	  !GLOBAL IN-OUT
 	  DOUBLE PRECISION, INTENT(IN):: LMAT(3,3)

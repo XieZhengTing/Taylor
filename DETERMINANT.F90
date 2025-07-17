@@ -16,7 +16,7 @@
       
       
     SUBROUTINE DETERMINANT(A,DET)
-       
+    !$ACC ROUTINE SEQ
     IMPLICIT NONE
     
     !GLOBAL
