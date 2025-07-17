@@ -17,13 +17,10 @@
     !
     USE MODEL
     USE CONTROL
-    USE GPU_ERROR
     !
     IMPLICIT NONE
     !
-    INTEGER:: I, J, M, ITEMP, I_STEP, STEP_NUM, NUM_EBC
-
-
+    INTEGER:: I, J, M, ITEMP, I_STEP, STEP_NUM
     !
     !
     INTEGER:: GHOST_NUMP, TOTAL_LOCAL_NUMP, TOTAL_LOCAL_SIZE
@@ -78,9 +75,6 @@
     DOUBLE PRECISION, ALLOCATABLE:: LOCAL_DSP(:)
     DOUBLE PRECISION, ALLOCATABLE:: LOCAL_DSP_TOT_PHY(:)
     DOUBLE PRECISION, ALLOCATABLE:: LOCAL_DSP_TOT(:)
- DOUBLE PRECISION, ALLOCATABLE:: GDINC(:)
- DOUBLE PRECISION, ALLOCATABLE:: GVEL(:) 
- DOUBLE PRECISION, ALLOCATABLE:: GACL(:)
     DOUBLE PRECISION, ALLOCATABLE:: LOCAL_COO(:,:)
     DOUBLE PRECISION, ALLOCATABLE:: LOCAL_COO_CURRENT(:,:)
     DOUBLE PRECISION, ALLOCATABLE:: LOCAL_PRFORCE(:,:)
@@ -146,13 +140,6 @@
     CALL PRE_CONTROL
     !
     CALL LOG_APPEND_SPACE('CONTROL FILE READ SUCSESSFULLY')
- ! Debug and sync LFEM_OUTPUT for OpenACC
- PRINT *, 'MAIN: LFEM_OUTPUT after PRE_CONTROL =', LFEM_OUTPUT
- !$ACC UPDATE DEVICE(LFEM_OUTPUT)
-   
-   ! Size check
-   PRINT *, '=== SIZE CHECK ==='
-   PRINT *, 'MODEL_NUMP:', MODEL_NUMP
     !
     CALL ASSIGN_PARALLEL(HPC_SCHEME, MODEL_NUMP, LOCAL_NUMP)
     !
@@ -215,15 +202,6 @@
 
     TOTAL_LOCAL_SIZE = LOCAL_NUMP + GHOST_NUMP + GHOST_BUFFER
 
-   PRINT *, 'TOTAL_LOCAL_SIZE:', TOTAL_LOCAL_SIZE
-   PRINT *, 'TOTAL_LOCAL_NUMP:', TOTAL_LOCAL_NUMP
-   PRINT *, 'LOCAL_NUMP:', LOCAL_NUMP
-   IF (TOTAL_LOCAL_SIZE .NE. MODEL_NUMP) THEN
-       PRINT *, 'WARNING: Size mismatch!'
-       PRINT *, '  TOTAL_LOCAL_SIZE =', TOTAL_LOCAL_SIZE
-       PRINT *, '  MODEL_NUMP =', MODEL_NUMP
-   END IF
-
     ALLOCATE(LOCAL_STATE(20,TOTAL_LOCAL_SIZE),    LOCAL_STRESS(6,TOTAL_LOCAL_SIZE))
     ALLOCATE(LOCAL_DX_STRESS(6,TOTAL_LOCAL_SIZE), LOCAL_DY_STRESS(6,TOTAL_LOCAL_SIZE),   LOCAL_DZ_STRESS(6,TOTAL_LOCAL_SIZE))
     ALLOCATE(LOCAL_DX_STRAIN(6,TOTAL_LOCAL_SIZE), LOCAL_DY_STRAIN(6,TOTAL_LOCAL_SIZE),   LOCAL_DZ_STRAIN(6,TOTAL_LOCAL_SIZE))
@@ -234,14 +212,6 @@
     ALLOCATE(LOCAL_DSP_TOT(3*TOTAL_LOCAL_SIZE),   LOCAL_DSP_TOT_PHY(3*TOTAL_LOCAL_SIZE), LOCAL_COO_CURRENT(3,TOTAL_LOCAL_SIZE))
     ALLOCATE(LOCAL_EBC(3,TOTAL_LOCAL_SIZE),       LOCAL_EBC_NODES(TOTAL_LOCAL_SIZE),     LOCAL_NONZERO_EBC(3,TOTAL_LOCAL_SIZE))
     ALLOCATE(LOCAL_H_STRESS(6,TOTAL_LOCAL_SIZE),  LOCAL_S_STRESS(6,TOTAL_LOCAL_SIZE))
- ALLOCATE(GDINC(3*TOTAL_LOCAL_SIZE))
- ALLOCATE(GVEL(3*TOTAL_LOCAL_SIZE))
- ALLOCATE(GACL(3*TOTAL_LOCAL_SIZE))
- 
- ! 初始化
- GDINC = 0.0d0
- GVEL = 0.0d0
- GACL = 0.0d0   
     !
     ! GET INITIAL VALUES
     !
@@ -250,27 +220,6 @@
         LOCAL_ACL,LOCAL_VEL,LOCAL_DSP,LOCAL_DSP_TOT,LOCAL_DSP_TOT_PHY,LOCAL_MASS,LOCAL_COO_CURRENT, LOCAL_EBC, LOCAL_NONZERO_EBC,LOCAL_EBC_NODES, &
         LOCAL_PRFORCE, LOCAL_DX_STRESS, LOCAL_DY_STRESS, LOCAL_DZ_STRESS, LOCAL_DX_STRAIN, LOCAL_DY_STRAIN, LOCAL_DZ_STRAIN,LOCAL_STRAIN_EQ)
 
-   ! Check LOCAL_EBC after initialization
-   PRINT *, '=== LOCAL_EBC CHECK after STATE_INIT ==='
-
-   NUM_EBC = 0
-   DO I = 1, LOCAL_NUMP
-       DO J = 1, 3
-           IF (LOCAL_EBC(J,I) .NE. 0) THEN
-               NUM_EBC = NUM_EBC + 1
-               IF (NUM_EBC .LE. 5) THEN
-                   PRINT '(A,I4,A,I1,A,I2)', 'Node', I, ' Dir', J, ' EBC=', LOCAL_EBC(J,I)
-               END IF
-           END IF
-       END DO
-   END DO
-   PRINT *, 'Total EBC entries:', NUM_EBC
-   ! Special check for nodes 1-5
-   DO I = 1, MIN(5, LOCAL_NUMP)
-       IF (ANY(LOCAL_EBC(:,I) .NE. 0)) THEN
-           PRINT '(A,I4,A,3I2)', 'Node', I, ' EBC:', LOCAL_EBC(:,I)
-       END IF
-   END DO
     !
     DEALLOCATE(MODEL_VINIT,MODEL_MASS,MODEL_EBC,MODEL_COO,MODEL_NONZERO_EBC)
 
@@ -288,47 +237,16 @@
 !$ACC&     LOCAL_WIN, LOCAL_VOL, LOCAL_NSNI_FAC,           &
 !$ACC&     LOCAL_MAT_TYPE, LOCAL_PROP, LOCAL_BODY_ID,       &
 !$ACC&     LOCAL_CHAR_DIST, LOCAL_WAVE_VEL,                &
-!$ACC&     MODEL_BODYFORCE,                                &
-!$ACC&     LINIT,                                         &
-!$ACC&     LOCAL_X_MOM, LOCAL_Y_MOM, LOCAL_Z_MOM,          &
-!$ACC&     LFINITE_STRAIN, LLAGRANGIAN,                    &
-!$ACC&     MODEL_ELCON, MODEL_NUMEL,                       &
-!$ACC&     LOCAL_DSP_TOT)                                  &
+!$ACC&     LOCAL_X_MOM, LOCAL_Y_MOM, LOCAL_Z_MOM)          &
 !$ACC& COPY(                                               &!← 在離開 region 時自動拷回以下更新結果
 !$ACC&     LOCAL_STATE, LOCAL_STRESS, LOCAL_STRAIN, LOCAL_STRAIN_EQ, &
-!$ACC&     GDINC, GVEL, GACL,                              &
 !$ACC&     LOCAL_DX_STRESS, LOCAL_DY_STRESS, LOCAL_DZ_STRESS,     &
 !$ACC&     LOCAL_H_STRESS, LOCAL_S_STRESS,                         &
 !$ACC&     LOCAL_FINT, LOCAL_FEXT, LOCAL_FINT_NMO, LOCAL_FEXT_NMO, &
-!$ACC&     LOCAL_ACL, LOCAL_DSP,                                   &
+!$ACC&     LOCAL_ACL, LOCAL_VEL, LOCAL_DSP,                         &
 !$ACC&     LOCAL_ACL_PHY, LOCAL_VEL_PHY, LOCAL_DINC_PHY,           &
-!$ACC&     LOCAL_DSP_TOT_PHY,                                      &
-!$ACC&     LOCAL_PRFORCE, TOTAL_FORCE)                      &
-!$ACC& COPYIN(LOCAL_VEL)  ! Ensure initial velocity is copied to GPU
-
-   ! Check LOCAL_EBC inside DATA region
-   PRINT *, '=== LOCAL_EBC CHECK inside DATA region ==='
-   DO I = 1, MIN(5, LOCAL_NUMP)
-       PRINT '(A,I4,A,3I2)', 'Node', I, ' EBC:', LOCAL_EBC(:,I)
-   END DO
-   ! Check specific nodes that should have constraints
-   DO I = LOCAL_NUMP-5, LOCAL_NUMP
-       IF (I .GT. 0) THEN
-           PRINT '(A,I4,A,3I2)', 'Node', I, ' EBC:', LOCAL_EBC(:,I)
-       END IF
-   END DO
-
-   ! Debug: Check initial velocities before time integration
-   PRINT *, '=== INITIAL VELOCITY CHECK ==='
-   PRINT *, 'First 5 nodes Z-velocity (should be -373 for Taylor bar):'
-   DO I = 1, MIN(5, LOCAL_NUMP)
-       PRINT '(A,I4,A,3E15.5)', 'Node', I, ' Vel:', &
-           LOCAL_VEL((I-1)*3+1), LOCAL_VEL((I-1)*3+2), LOCAL_VEL((I-1)*3+3)
-   END DO
-   PRINT *, 'Max absolute velocity:', MAXVAL(ABS(LOCAL_VEL))
-   
-   ! CRITICAL: Ensure initial velocities are on GPU
-   !$ACC UPDATE DEVICE(LOCAL_VEL)
+!$ACC&     LOCAL_DSP_TOT, LOCAL_DSP_TOT_PHY,                       &
+!$ACC&     LOCAL_PRFORCE, TOTAL_FORCE)
 
     !
     !******************************************OUTPUT******************************************
@@ -382,7 +300,6 @@
     !
     TIME_COUNTER = 0.0d0
     LINIT = .TRUE.
-    !$ACC UPDATE DEVICE(LINIT)
     LINIT_TIME = .TRUE.
     SIM_TIME_1 = 0.0d0
     CALL CPU_TIME(REAL_TIME_0)
@@ -410,29 +327,6 @@
         !
         !
         !
-
-       ! Verify LOCAL_EBC at start of time loop
-       IF (STEPS .EQ. 0) THEN
-           PRINT *, '=== LOCAL_EBC at start of time loop ==='
-           ! Sync from GPU to ensure we have latest values
-           !$ACC UPDATE HOST(LOCAL_EBC)
-           NUM_EBC = 0
-           DO I = 1, LOCAL_NUMP
-               DO J = 1, 3
-                   IF (LOCAL_EBC(J,I) .NE. 0) THEN
-                       NUM_EBC = NUM_EBC + 1
-                       IF (NUM_EBC .LE. 5) THEN
-                           PRINT *, 'Node', I, 'Dir', J, 'EBC=', LOCAL_EBC(J,I)
-                       END IF
-                   END IF
-               END DO
-           END DO
-           PRINT *, 'Total EBC in time loop:', NUM_EBC
-           ! Check node 5 specifically
-           PRINT *, 'Node 5 EBC in time loop:', LOCAL_EBC(:,5)
-       END IF
-       
-
         ! ASSIGN NEW GHOSTS (RIGHT NOW, THIS SUBROUTINE DOES NOTHING)
         !
         CALL GHOSTER(HPC_SCHEME)
@@ -458,10 +352,7 @@
                 LOCAL_X_MOM,     LOCAL_Y_MOM,    LOCAL_Z_MOM, &
                 LOCAL_XDIST_MAX, LOCAL_YDIST_MAX, LOCAL_ZDIST_MAX, MODEL_BODYFORCE,DLT, LOCAL_INT_WORK, LOCAL_BODY_ID, LOCAL_STRAIN_EQ, &
 				LOCAL_IJKSPC)
-        ! Check for GPU errors
-        CALL CHECK_GPU_ERROR()
-           LINIT = .FALSE.  !SET IT TO FALSE AFTER THE SHP/DSHP COMPUTATION
-           !$ACC UPDATE DEVICE(LINIT)
+            !LINIT = .FALSE.  !SET IT TO FALSE AFTER THE SHP/DSHP COMPUTATION
         ENDIF
         !
 
@@ -490,45 +381,12 @@
         !$ACC END PARALLEL LOOP
         !$ACC WAIT(1)                             !← 確保非同步計算完成
         !$ACC UPDATE HOST(LOCAL_DSP, LOCAL_DSP_TOT, LOCAL_VEL)  !← 把 GPU 計算結果拷回主機
-     ! Debug: Check if predictor is working
-        IF (STEPS .LE. 2) THEN
-            PRINT *, '=== PREDICTOR CHECK (Step', STEPS, ') ==='
-            PRINT *, 'Time step DLT:', DLT
-            PRINT *, 'First node after predictor:'
-            PRINT *, '  Vel:', LOCAL_VEL(1:3)
-            PRINT *, '  Accel:', LOCAL_ACL(1:3)
-            PRINT *, '  Disp incr:', LOCAL_DSP(1:3)
-            PRINT *, '  Total disp:', LOCAL_DSP_TOT(1:3)
-        END IF
      END IF
 
- ! CRITICAL: Copy displacement increments to GDINC for interpolation
- GDINC = LOCAL_DSP
- GVEL = LOCAL_VEL  
- GACL = LOCAL_ACL
- 
- ! Ensure these arrays are synchronized to GPU before interpolation
- !$ACC UPDATE DEVICE(GDINC, GVEL, GACL, LOCAL_DSP_TOT)
 
-! Diagnostic: Verify displacement data
-IF (STEPS .LE. 2) THEN
-    PRINT *, '=== DISPLACEMENT DATA CHECK ==='
-    PRINT *, 'LOCAL_DSP(1:3):', LOCAL_DSP(1:3)
-    PRINT *, 'LOCAL_DSP_TOT(1:3):', LOCAL_DSP_TOT(1:3)
-    PRINT *, 'Max |LOCAL_DSP|:', MAXVAL(ABS(LOCAL_DSP))
-    PRINT *, 'Max |LOCAL_DSP_TOT|:', MAXVAL(ABS(LOCAL_DSP_TOT))
-END IF
- 
- ! Debug: Verify GDINC has correct values
- IF (STEPS .LE. 2) THEN
-     PRINT *, '=== GDINC CHECK before interpolation ==='
-     PRINT *, 'GDINC(1:3):', GDINC(1:3)
-     PRINT *, 'Should match LOCAL_DSP:', LOCAL_DSP(1:3)
- END IF
         !
         !COMPUTE THE PREDICTED CURRENT COORD FOR SEMI-LAG SHP CACULATION
         !
-
         DO_INTERP = .TRUE.
         LINIT_TEMP = .FALSE.
         CALL HANDELER(      LOCAL_WIN,       LOCAL_VOL,      LOCAL_NUMP,        LOCAL_COO,      LOCAL_COO_CURRENT,     &
@@ -541,23 +399,12 @@ END IF
             LOCAL_X_MOM,     LOCAL_Y_MOM,    LOCAL_Z_MOM, &
             LOCAL_XDIST_MAX, LOCAL_YDIST_MAX, LOCAL_ZDIST_MAX,MODEL_BODYFORCE,DLT, LOCAL_INT_WORK, LOCAL_BODY_ID, LOCAL_STRAIN_EQ, &
 				LOCAL_IJKSPC)
-        ! Check for GPU errors
-        CALL CHECK_GPU_ERROR()
+
 
 
         !$ACC UPDATE HOST(LOCAL_DINC_PHY, LOCAL_VEL_PHY, LOCAL_ACL_PHY)
- ! Debug: Check PHY variables
- IF (STEPS .LE. 2) THEN
-     PRINT *, '=== PHY VARIABLES CHECK (Step', STEPS, ') ==='
-     PRINT *, 'LOCAL_DINC_PHY (first 3):', LOCAL_DINC_PHY(1:3)
-     PRINT *, 'Before update - LOCAL_DSP_TOT_PHY:', LOCAL_DSP_TOT_PHY(1:3)
- END IF
         LOCAL_DSP_TOT_PHY = LOCAL_DSP_TOT_PHY + LOCAL_DINC_PHY
-
- IF (STEPS .LE. 2) THEN
-     PRINT *, 'After update - LOCAL_DSP_TOT_PHY:', LOCAL_DSP_TOT_PHY(1:3)
- END IF
-
+        
         ! Ensure LOCAL_DSP_TOT_PHY is on GPU for coordinate update
         !$ACC UPDATE DEVICE(LOCAL_DSP_TOT_PHY)
         
@@ -576,31 +423,6 @@ END IF
         ! Sync updated coordinates back to host
         !$ACC UPDATE HOST(LOCAL_COO_CURRENT)
 
- ! Debug: Verify coordinate update
- IF (MOD(STEPS, 16) .EQ. 0) THEN
-     PRINT *, '=== COORDINATE UPDATE CHECK (Step', STEPS, ') ==='
-     PRINT *, 'Sample displacement:', LOCAL_DSP_TOT_PHY(1:3)
-     PRINT *, 'Original coord:', LOCAL_COO(:,1)
-     PRINT *, 'Current coord:', LOCAL_COO_CURRENT(:,1)
- END IF
-
- ! Update all arrays needed for VTK output
- !$ACC UPDATE HOST(LOCAL_DSP_TOT_PHY)
- !$ACC UPDATE HOST(LOCAL_STRESS, LOCAL_STRAIN, LOCAL_STATE, LOCAL_STRAIN_EQ)
- !$ACC UPDATE HOST(LOCAL_H_STRESS, LOCAL_S_STRESS)
- ! CRITICAL: Update MODEL_ELCON for element connectivity output
- !$ACC UPDATE HOST(MODEL_ELCON)
-
- ! Debug: Check coordinate values before VTK output
- PRINT *, '=== COORDINATE CHECK BEFORE VTK OUTPUT ==='
- PRINT *, 'First 3 nodes coordinates:'
- DO I = 1, 3
-     PRINT '(A,I4,A,3E15.5)', 'Node', I, ':', LOCAL_COO_CURRENT(:,I)
- END DO
- PRINT *, 'Min/Max X:', MINVAL(LOCAL_COO_CURRENT(1,:)), MAXVAL(LOCAL_COO_CURRENT(1,:))
- PRINT *, 'Min/Max Y:', MINVAL(LOCAL_COO_CURRENT(2,:)), MAXVAL(LOCAL_COO_CURRENT(2,:))
- PRINT *, 'Min/Max Z:', MINVAL(LOCAL_COO_CURRENT(3,:)), MAXVAL(LOCAL_COO_CURRENT(3,:))
-
         !TEST HUGHS-WINDET ROTATION ALGORITHM, LATER SHOULD BE REMOVED
         !CALL ROTATION_TEST(LOCAL_DSP,LOCAL_COO,LOCAL_NUMP,TIME,DLT)
         !
@@ -611,12 +433,6 @@ END IF
         !
         DO_INTERP = .FALSE.
         LINIT_TEMP = .FALSE.
-
-       ! Ensure state variables are current on GPU
-       IF (.NOT. LINIT) THEN
-           !$ACC UPDATE DEVICE(LOCAL_STATE, LOCAL_STRESS, LOCAL_STRAIN)
-       END IF
-
         IF(LINIT) THEN
             LOCAL_FINT_NMO = 0.0d0
             LOCAL_FEXT_NMO = 0.0d0
@@ -635,8 +451,7 @@ END IF
             LOCAL_X_MOM,     LOCAL_Y_MOM,    LOCAL_Z_MOM, &
             LOCAL_XDIST_MAX, LOCAL_YDIST_MAX, LOCAL_ZDIST_MAX,MODEL_BODYFORCE,DLT, LOCAL_INT_WORK, LOCAL_BODY_ID, LOCAL_STRAIN_EQ, &
 				LOCAL_IJKSPC)
-        ! Check for GPU errors
-        CALL CHECK_GPU_ERROR()
+
 
         !
         ! GET THE INTERNAL FORCE SUFFICIENT FOR CONTINUEING ONTO TIME INTEGRATION
@@ -650,17 +465,6 @@ END IF
         IF (AUTO_TS) DLT = LOCAL_DLT
         
         IF (PDSTIME.NE.0.0D0) PDSEARCH=CEILING(PDSTIME/DLT) 
-
-       ! Final check before boundary enforcement
-       IF (STEPS .LE. 2) THEN
-           PRINT *, '=== LOCAL_EBC before boundary enforcement ==='
-           !$ACC UPDATE HOST(LOCAL_EBC)  ! Ensure latest values from GPU
-           DO I = 1, MIN(5, LOCAL_NUMP)
-               IF (ANY(LOCAL_EBC(:,I) .NE. 0)) THEN
-                   PRINT *, 'Node', I, 'EBC:', LOCAL_EBC(:,I)
-               END IF
-           END DO
-       END IF
 
         DO I=1,LOCAL_NUMP
 
@@ -717,19 +521,7 @@ END IF
                     LOCAL_PRFORCE(J,I) = 0.0d0
 
                 END IF
-
-               ! Debug: Check forces for first few nodes
-               IF (I .LE. 3 .AND. STEPS .LE. 2) THEN
-                   IF (J .EQ. 1) THEN
-                       PRINT '(A,I3,A)', '=== Node ', I, ' forces ==='
-                       PRINT *, '  EBC:', LOCAL_EBC(:,I)
-                       PRINT *, '  FINT:', LOCAL_FINT((I-1)*3+1:I*3)
-                       PRINT *, '  FEXT:', LOCAL_FEXT((I-1)*3+1:I*3)
-                       PRINT *, '  Mass:', LOCAL_MASS((I-1)*3+1:I*3)
-                       PRINT *, '  Accel:', LOCAL_ACL((I-1)*3+1:I*3)
-                   END IF
-               END IF
-
+                            
             TOTAL_FORCE(J,LOCAL_BODY_ID(I))=TOTAL_FORCE(J,LOCAL_BODY_ID(I))+LOCAL_PRFORCE(J,I)
 
             END DO
@@ -835,10 +627,7 @@ END IF
             ! CALL THE SUBROUTINE TO OUTPUT TO THE VTK FILE
             !
             IF (HPC_SCHEME.EQ.1) THEN
-     ! Ensure all data is synchronized before output
-     !$ACC UPDATE HOST(LOCAL_DSP_TOT_PHY, LOCAL_VEL_PHY, LOCAL_ACL_PHY)
-     !$ACC UPDATE HOST(LOCAL_STRESS, LOCAL_STRAIN, LOCAL_STATE, LOCAL_STRAIN_EQ)
-     !$ACC UPDATE HOST(MODEL_ELCON)
+
                 IF (UNF_OUTPUT) THEN
                     call UNF_OUTPUT_STEP_VTK(exodusStep,LOCAL_NUMP,MODEL_NUMEL, MODEL_ELCON, LOCAL_COO_CURRENT,MODEL_NODE_IDS,LOCAL_DSP_TOT_PHY,LOCAL_VEL_PHY, &
                         LOCAL_ACL_PHY, LOCAL_FINT, LOCAL_EBC,  LOCAL_BODY_ID,  LOCAL_MAT_TYPE,  LOCAL_COO,    &
@@ -899,10 +688,9 @@ END IF
         STEPS = STEPS + 1
         TIMER_STEPS = TIMER_STEPS + 1
         !
-!       LINIT = .FALSE.
-!        !$ACC UPDATE DEVICE(LINIT)
+        LINIT = .FALSE.
 
-       ! LINIT already set to FALSE after initial shape function computation
+
         WRITE(120,*) TIME
 
 

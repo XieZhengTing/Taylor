@@ -20,7 +20,6 @@
         NODES_IN_BIN(I) = 0
     END DO
     !$ACC END PARALLEL LOOP
-    !$ACC UPDATE HOST(NODES_IN_BIN)
 
     DO I=1,NP
 
@@ -206,7 +205,6 @@
         GN(I) = 0
     END DO
     !$ACC END PARALLEL LOOP
-    !$ACC UPDATE HOST(GN)
 
     K = 0
 
