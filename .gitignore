@@ -1,7 +1,8 @@
 *.o
 *.mod
-
+*.vtk
 *.log
 *.out
 /seacas/
 /Trilinos/
+/VTK比對/
