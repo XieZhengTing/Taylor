@@ -652,6 +652,19 @@ END IF
         
         IF (PDSTIME.NE.0.0D0) PDSEARCH=CEILING(PDSTIME/DLT) 
 
+       ! Debug: Check velocities BEFORE boundary conditions
+       IF (STEPS .LE. 5) THEN
+           !$ACC UPDATE HOST(LOCAL_VEL)
+           PRINT *, '=== BEFORE BOUNDARY CONDITIONS (Step', STEPS, ') ==='
+           DO I = 1, LOCAL_NUMP
+               IF (LOCAL_EBC(3,I) .EQ. 1) THEN
+                   PRINT '(A,I4,A,E15.8)', 'Node', I, ' Z-vel before BC:', &
+                       LOCAL_VEL((I-1)*3+3)
+                   EXIT  ! Just print first constrained node
+               END IF
+           END DO
+       END IF
+
        ! Final check before boundary enforcement
        IF (STEPS .LE. 2) THEN
            PRINT *, '=== LOCAL_EBC before boundary enforcement ==='
@@ -737,9 +750,23 @@ END IF
             END DO
         END DO
         !$ACC END PARALLEL LOOP
-        
-        ! Synchronize CPU updates to GPU for next iteration
-        !$ACC UPDATE DEVICE(LOCAL_VEL, LOCAL_ACL)
+
+       ! Debug: Check velocities AFTER boundary conditions
+       IF (STEPS .LE. 5) THEN
+           !$ACC UPDATE HOST(LOCAL_VEL, LOCAL_ACL)
+           PRINT *, '=== AFTER BOUNDARY CONDITIONS (Step', STEPS, ') ==='
+           DO I = 1, LOCAL_NUMP
+               IF (LOCAL_EBC(3,I) .EQ. 1) THEN
+                   PRINT '(A,I4,A,E15.8,A,E15.8)', 'Node', I, &
+                       ' Z-vel after BC:', LOCAL_VEL((I-1)*3+3), &
+                       ' Z-accel:', LOCAL_ACL((I-1)*3+3)
+                   EXIT
+               END IF
+           END DO
+       END IF
+
+        ! Update host data before writing output
+        !$ACC UPDATE HOST(TOTAL_FORCE)
         WRITE(122,'(E15.5,I8,3(E15.5),I8,3(E15.5))') TIME,LOCAL_BODY_ID(1), TOTAL_FORCE(1,LOCAL_BODY_ID(1)), TOTAL_FORCE(2,LOCAL_BODY_ID(1)),TOTAL_FORCE(3,LOCAL_BODY_ID(1)), LOCAL_BODY_ID(LOCAL_NUMP), TOTAL_FORCE(1,LOCAL_BODY_ID(LOCAL_NUMP)),TOTAL_FORCE(2,LOCAL_BODY_ID(LOCAL_NUMP)),TOTAL_FORCE(3,LOCAL_BODY_ID(LOCAL_NUMP))
 
 
