@@ -639,6 +639,16 @@ END IF
         ! Check for GPU errors
         CALL CHECK_GPU_ERROR()
 
+       ! CRITICAL: Sync forces computed on CPU to GPU before boundary conditions
+       !$ACC UPDATE DEVICE(LOCAL_FINT, LOCAL_FEXT)
+       
+       ! Debug: Verify forces are non-zero
+       IF (STEPS .LE. 2) THEN
+           PRINT *, '=== FORCE CHECK after HANDELER ==='
+           PRINT *, 'LOCAL_FINT(1:3):', LOCAL_FINT(1:3)
+           PRINT *, 'Max |FINT|:', MAXVAL(ABS(LOCAL_FINT))
+       END IF
+
         !
         ! GET THE INTERNAL FORCE SUFFICIENT FOR CONTINUEING ONTO TIME INTEGRATION
         !(INTERNAL FORCE FOR LOCALLY OWNED NODES)
@@ -648,6 +658,8 @@ END IF
         !
         CALL ASSEMBLER(LOCAL_NUMP,LOCAL_FINT,HPC_SCHEME)
         !LOCAL_FINT = 0.D0 !TEMP FOR TESTING ROTATION
+
+        
         IF (AUTO_TS) DLT = LOCAL_DLT
         
         IF (PDSTIME.NE.0.0D0) PDSEARCH=CEILING(PDSTIME/DLT) 
