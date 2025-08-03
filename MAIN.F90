@@ -559,18 +559,6 @@ END IF
      PRINT *, 'After update - LOCAL_DSP_TOT_PHY:', LOCAL_DSP_TOT_PHY(1:3)
  END IF
 
-       ! Apply boundary conditions to PHY displacement
-       !$ACC PARALLEL LOOP PRESENT(LOCAL_EBC, LOCAL_DSP_TOT_PHY) PRIVATE(J, M)
-       DO I=1,LOCAL_NUMP
-           DO J=1,3
-               M = (I-1)*3+J
-               IF (LOCAL_EBC(J,I).EQ.1) THEN
-                   LOCAL_DSP_TOT_PHY(M) = 0.0d0
-               END IF
-           END DO
-       END DO
-       !$ACC END PARALLEL LOOP
-
         ! Ensure LOCAL_DSP_TOT_PHY is on GPU for coordinate update
         !$ACC UPDATE DEVICE(LOCAL_DSP_TOT_PHY)
         
@@ -664,19 +652,6 @@ END IF
         
         IF (PDSTIME.NE.0.0D0) PDSEARCH=CEILING(PDSTIME/DLT) 
 
-       ! Debug: Check velocities BEFORE boundary conditions
-       IF (STEPS .LE. 5) THEN
-           !$ACC UPDATE HOST(LOCAL_VEL)
-           PRINT *, '=== BEFORE BOUNDARY CONDITIONS (Step', STEPS, ') ==='
-           DO I = 1, LOCAL_NUMP
-               IF (LOCAL_EBC(3,I) .EQ. 1) THEN
-                   PRINT '(A,I4,A,E15.8)', 'Node', I, ' Z-vel before BC:', &
-                       LOCAL_VEL((I-1)*3+3)
-                   EXIT  ! Just print first constrained node
-               END IF
-           END DO
-       END IF
-
        ! Final check before boundary enforcement
        IF (STEPS .LE. 2) THEN
            PRINT *, '=== LOCAL_EBC before boundary enforcement ==='
@@ -712,8 +687,7 @@ END IF
 
                     LOCAL_VEL(M) = 0.0d0
                     LOCAL_ACL(M) = 0.0d0
-                   LOCAL_DSP(M) = 0.0d0       ! Reset displacement increment
-                   LOCAL_DSP_TOT(M) = 0.0d0   ! Reset total displacement
+
                     LOCAL_PRFORCE(J,I) = - LOCAL_FINT(M)
 
                     LOCAL_FEXT(M) = - LOCAL_FINT(M)
@@ -763,40 +737,20 @@ END IF
             END DO
         END DO
         !$ACC END PARALLEL LOOP
-
-       ! Debug: Check velocities AFTER boundary conditions
-       IF (STEPS .LE. 5) THEN
-           !$ACC UPDATE HOST(LOCAL_VEL, LOCAL_ACL)
-           PRINT *, '=== AFTER BOUNDARY CONDITIONS (Step', STEPS, ') ==='
-           DO I = 1, LOCAL_NUMP
-               IF (LOCAL_EBC(3,I) .EQ. 1) THEN
-                   PRINT '(A,I4,A,E15.8,A,E15.8)', 'Node', I, &
-                       ' Z-vel after BC:', LOCAL_VEL((I-1)*3+3), &
-                       ' Z-accel:', LOCAL_ACL((I-1)*3+3)
-                   EXIT
-               END IF
+       ! Debug: Check forces for first few nodes (moved outside parallel loop)
+       IF (STEPS .LE. 2) THEN
+           !$ACC UPDATE HOST(LOCAL_FINT, LOCAL_FEXT, LOCAL_MASS, LOCAL_ACL)
+           DO I = 1, 3
+               PRINT '(A,I3,A)', '=== Node ', I, ' forces ==='
+               PRINT *, '  EBC:', LOCAL_EBC(:,I)
+               PRINT *, '  FINT:', LOCAL_FINT((I-1)*3+1:I*3)
+               PRINT *, '  FEXT:', LOCAL_FEXT((I-1)*3+1:I*3)
+               PRINT *, '  Mass:', LOCAL_MASS((I-1)*3+1:I*3)
+               PRINT *, '  Accel:', LOCAL_ACL((I-1)*3+1:I*3)
            END DO
        END IF
-
-       ! Debug: Verify displacement arrays are zeroed
-       IF (STEPS .LE. 5) THEN
-           !$ACC UPDATE HOST(LOCAL_VEL, LOCAL_ACL, LOCAL_DSP, LOCAL_DSP_TOT)
-           PRINT *, '=== AFTER BOUNDARY CONDITIONS WITH DISPLACEMENT RESET ==='
-           DO I = 1, LOCAL_NUMP
-               IF (LOCAL_EBC(3,I) .EQ. 1) THEN
-                   M = (I-1)*3+3
-                   PRINT '(A,I4)', 'Constrained Node', I
-                   PRINT '(A,E15.8)', '  Z-vel:', LOCAL_VEL(M)
-                   PRINT '(A,E15.8)', '  Z-disp:', LOCAL_DSP(M)
-                   PRINT '(A,E15.8)', '  Z-disp_tot:', LOCAL_DSP_TOT(M)
-                   PRINT '(A,E15.8)', '  Z-disp_tot_phy:', LOCAL_DSP_TOT_PHY(M)
-                   EXIT
-               END IF
-           END DO
-       END IF
-
-        ! Update host data before writing output
-        !$ACC UPDATE HOST(TOTAL_FORCE)
+        ! Synchronize CPU updates to GPU for next iteration
+        !$ACC UPDATE DEVICE(LOCAL_VEL, LOCAL_ACL)
         WRITE(122,'(E15.5,I8,3(E15.5),I8,3(E15.5))') TIME,LOCAL_BODY_ID(1), TOTAL_FORCE(1,LOCAL_BODY_ID(1)), TOTAL_FORCE(2,LOCAL_BODY_ID(1)),TOTAL_FORCE(3,LOCAL_BODY_ID(1)), LOCAL_BODY_ID(LOCAL_NUMP), TOTAL_FORCE(1,LOCAL_BODY_ID(LOCAL_NUMP)),TOTAL_FORCE(2,LOCAL_BODY_ID(LOCAL_NUMP)),TOTAL_FORCE(3,LOCAL_BODY_ID(LOCAL_NUMP))
 
 
