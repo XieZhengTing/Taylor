@@ -358,6 +358,7 @@
                 SHPD(3,J) = GSTACK_DSHP(3,LSTART+J-1)
             END DO
 
+
             IF (LFINITE_STRAIN) THEN
 
                 FMAT = 0.0d0
