@@ -566,140 +566,140 @@
 
                 CONTINUE
 
-!            ELSEIF ((ITYPE_INT.EQ.2).OR.(ITYPE_INT.EQ.1)) THEN
-                !
+           ELSEIF ((ITYPE_INT.EQ.2).OR.(ITYPE_INT.EQ.1)) THEN
+                
                 ! NSNI
-                !
+                
                 ! GET THE SMOOTHING INFORMATION
                 ! (1-6) = (+X, -X, +Y, -Y, +Z, -Z)
-                !
-!               DO J = 1, 3
-!                    DO K = 1, 6
-!                        LSM_PTS(J,K) = LCOO_T(J)
-!                    END DO
-!                END DO
-!                LSM_PTS(1,1) = LCOO_T(1) + LSM_LEN(1)
-!                LSM_PTS(1,2) = LCOO_T(1) - LSM_LEN(2)
-!                LSM_PTS(2,3) = LCOO_T(2) + LSM_LEN(3)
-!                LSM_PTS(2,4) = LCOO_T(2) - LSM_LEN(4)
-!                LSM_PTS(3,5) = LCOO_T(3) + LSM_LEN(5)
-!                LSM_PTS(3,6) = LCOO_T(3) - LSM_LEN(6)
-!
-!                LSM_VOL = GSM_VOL(I)
-!                !
-!                ! COMPUTE SMOOTHED AREA OVER VOLUME
-!                !
-!                DO J = 1, 3
-!                    LSM_AOV((J-1)*2+1) = GSM_AREA(J,I) / LSM_VOL
-!                    LSM_AOV((J-1)*2+2) = GSM_AREA(J,I) / LSM_VOL
-!                END DO
+                
+              DO J = 1, 3
+                   DO K = 1, 6
+                       LSM_PTS(J,K) = LCOO_T(J)
+                   END DO
+               END DO
+               LSM_PTS(1,1) = LCOO_T(1) + LSM_LEN(1)
+               LSM_PTS(1,2) = LCOO_T(1) - LSM_LEN(2)
+               LSM_PTS(2,3) = LCOO_T(2) + LSM_LEN(3)
+               LSM_PTS(2,4) = LCOO_T(2) - LSM_LEN(4)
+               LSM_PTS(3,5) = LCOO_T(3) + LSM_LEN(5)
+               LSM_PTS(3,6) = LCOO_T(3) - LSM_LEN(6)
 
-                !
-                !COMPUTE THE SHAPE FUNCTIONS AT GRADIENT SMOOTHING POINTS
-                !
-!                DO J = 1, 6
+               LSM_VOL = GSM_VOL(I)
+               !
+               ! COMPUTE SMOOTHED AREA OVER VOLUME
+               !
+               DO J = 1, 3
+                   LSM_AOV((J-1)*2+1) = GSM_AREA(J,I) / LSM_VOL
+                   LSM_AOV((J-1)*2+2) = GSM_AREA(J,I) / LSM_VOL
+               END DO
 
-!                    SM_COO(:) = LSM_PTS(:,J)
-!                    CALL RK1(SM_COO, RK_DEGREE, RK_PSIZE, RK_CONT, RK_IMPL, GCOO_CUURENT, GWIN, GNUMP, LSTACK, LN, GMAXN, GEBC_NODES,SELF_EBC, &
-!                        QL, QL_COEF,QL_LEN, &
-!                        SHP, SHPD, SHSUP)
+                
+                ! COMPUTE THE SHAPE FUNCTIONS AT GRADIENT SMOOTHING POINTS
+                
+               DO J = 1, 6
 
-!                    DO K = 1, LN
+                   SM_COO(:) = LSM_PTS(:,J)
+                   CALL RK1(SM_COO, RK_DEGREE, RK_PSIZE, RK_CONT, RK_IMPL, GCOO_CUURENT, GWIN, GNUMP, LSTACK, LN, GMAXN, GEBC_NODES,SELF_EBC, &
+                       QL, QL_COEF,QL_LEN, &
+                       SHP, SHPD, SHSUP)
+
+                   DO K = 1, LN
                     
-!                        SHP6(K,J) = SHP(K)
-!                        SHPD6(:,K,J) = SHPD(:,K)
-!                    END DO
+                       SHP6(K,J) = SHP(K)
+                       SHPD6(:,K,J) = SHPD(:,K)
+                   END DO
 
-!                END DO !J = 1, 6 (COMPUTE THE SMOOTHED GRADIENTS)
+               END DO !J = 1, 6 (COMPUTE THE SMOOTHED GRADIENTS)
 
-                !
+                
                 ! FILL OUT THE SMOOTHED GRADIENT INFORMATION
-                !
-!                DO K = 1, LN
+                
+               DO K = 1, LN
 
-!                    SHPD(1,K) = (SHP6(K,1)*LSM_AOV(1) - SHP6(K,2)*LSM_AOV(2))
-!                    SHPD(2,K) = (SHP6(K,3)*LSM_AOV(3) - SHP6(K,4)*LSM_AOV(4))
-!                    SHPD(3,K) = (SHP6(K,5)*LSM_AOV(5) - SHP6(K,6)*LSM_AOV(6))
+                   SHPD(1,K) = (SHP6(K,1)*LSM_AOV(1) - SHP6(K,2)*LSM_AOV(2))
+                   SHPD(2,K) = (SHP6(K,3)*LSM_AOV(3) - SHP6(K,4)*LSM_AOV(4))
+                   SHPD(3,K) = (SHP6(K,5)*LSM_AOV(5) - SHP6(K,6)*LSM_AOV(6))
 
-!                END DO
-                !
-!                IF (ITYPE_INT.EQ.2) THEN
+               END DO
+                
+               IF (ITYPE_INT.EQ.2) THEN
 
-                    !NSNI CALCS
+                    ! NSNI CALCS
 
-!                    DO K = 1, LN
-                        !
+                   DO K = 1, LN
+                        
                         ! SMOOTH X Y Z IN X DIRECTION
-                        !
-                        !XX
-!                        SHPDTEMP(1) = (SHPD6(1,K,1)*LSM_AOV(1) - SHPD6(1,K,2)*LSM_AOV(2)) !SMOOTH IN X DIRECTION
+                        
+                        ! XX
+                       SHPDTEMP(1) = (SHPD6(1,K,1)*LSM_AOV(1) - SHPD6(1,K,2)*LSM_AOV(2)) !SMOOTH IN X DIRECTION
 
-                        !XY
-!                        SHPDTEMP(2) = (SHPD6(2,K,1)*LSM_AOV(1) - SHPD6(2,K,2)*LSM_AOV(2)) !SMOOTH IN X DIRECTION
+                        ! XY
+                       SHPDTEMP(2) = (SHPD6(2,K,1)*LSM_AOV(1) - SHPD6(2,K,2)*LSM_AOV(2)) !SMOOTH IN X DIRECTION
 
-                        !XZ
-!                        SHPDTEMP(3) = (SHPD6(3,K,1)*LSM_AOV(1) - SHPD6(3,K,2)*LSM_AOV(2)) !SMOOTH IN X DIRECTION
-                        !
+                        ! XZ
+                       SHPDTEMP(3) = (SHPD6(3,K,1)*LSM_AOV(1) - SHPD6(3,K,2)*LSM_AOV(2)) !SMOOTH IN X DIRECTION
+                        
                         ! SMOOTH X Y Z IN Y DIRECTION
-                        !
-                        !YX
-!                        SHPDTEMP(4) = (SHPD6(1,K,3)*LSM_AOV(3) - SHPD6(1,K,4)*LSM_AOV(4)) !SMOOTH IN Y DIRECTION
+                        
+                        ! YX
+                       SHPDTEMP(4) = (SHPD6(1,K,3)*LSM_AOV(3) - SHPD6(1,K,4)*LSM_AOV(4)) !SMOOTH IN Y DIRECTION
 
-                        !YY
-!                        SHPDTEMP(5) = (SHPD6(2,K,3)*LSM_AOV(3) - SHPD6(2,K,4)*LSM_AOV(4)) !SMOOTH IN Y DIRECTION
+                        ! YY
+                       SHPDTEMP(5) = (SHPD6(2,K,3)*LSM_AOV(3) - SHPD6(2,K,4)*LSM_AOV(4)) !SMOOTH IN Y DIRECTION
 
-                        !YZ
-!                        SHPDTEMP(6) = (SHPD6(3,K,3)*LSM_AOV(3) - SHPD6(3,K,4)*LSM_AOV(4)) !SMOOTH IN Y DIRECTION
-                        !
+                        ! YZ
+                       SHPDTEMP(6) = (SHPD6(3,K,3)*LSM_AOV(3) - SHPD6(3,K,4)*LSM_AOV(4)) !SMOOTH IN Y DIRECTION
+                        
                         ! SMOOTH X Y Z IN Z DIRECTION
-                        !
-                        !ZX
-!                        SHPDTEMP(7) = (SHPD6(1,K,5)*LSM_AOV(5) - SHPD6(1,K,6)*LSM_AOV(6)) !SMOOTH IN Z DIRECTION
+                        
+                        ! ZX
+                       SHPDTEMP(7) = (SHPD6(1,K,5)*LSM_AOV(5) - SHPD6(1,K,6)*LSM_AOV(6)) !SMOOTH IN Z DIRECTION
 
-                        !ZY
-!                        SHPDTEMP(8) = (SHPD6(2,K,5)*LSM_AOV(5) - SHPD6(2,K,6)*LSM_AOV(6)) !SMOOTH IN Z DIRECTION
+                        ! ZY
+                       SHPDTEMP(8) = (SHPD6(2,K,5)*LSM_AOV(5) - SHPD6(2,K,6)*LSM_AOV(6)) !SMOOTH IN Z DIRECTION
 
-                        !ZZ
-!                        SHPDTEMP(9) = (SHPD6(3,K,5)*LSM_AOV(5) - SHPD6(3,K,6)*LSM_AOV(6)) !SMOOTH IN Z DIRECTION
+                        ! ZZ
+                       SHPDTEMP(9) = (SHPD6(3,K,5)*LSM_AOV(5) - SHPD6(3,K,6)*LSM_AOV(6)) !SMOOTH IN Z DIRECTION
 
-                        !XX
-!                        SHPDD_SM(1,K) = SHPDTEMP(1)
-                        !YY
-!                        SHPDD_SM(2,K) = SHPDTEMP(5)
-                        !ZZ
-!                        SHPDD_SM(3,K) = SHPDTEMP(9)
-                        !XY
-!                        SHPDD_SM(4,K) = 0.5d0 * (SHPDTEMP(2) + SHPDTEMP(4))
-                        !YZ
-!                        SHPDD_SM(5,K) = 0.5d0 * (SHPDTEMP(6) + SHPDTEMP(8))
-                        !XZ
-!                        SHPDD_SM(6,K) = 0.5d0 * (SHPDTEMP(3) + SHPDTEMP(7))
+                        ! XX
+                       SHPDD_SM(1,K) = SHPDTEMP(1)
+                        ! YY
+                       SHPDD_SM(2,K) = SHPDTEMP(5)
+                        ! ZZ
+                       SHPDD_SM(3,K) = SHPDTEMP(9)
+                        ! XY
+                       SHPDD_SM(4,K) = 0.5d0 * (SHPDTEMP(2) + SHPDTEMP(4))
+                        ! YZ
+                       SHPDD_SM(5,K) = 0.5d0 * (SHPDTEMP(6) + SHPDTEMP(8))
+                        ! XZ
+                       SHPDD_SM(6,K) = 0.5d0 * (SHPDTEMP(3) + SHPDTEMP(7))
 
-!                    END DO
+                   END DO
 
-                    !TODO: GET RID OF THESE ARRAYS, WE DONT DO LAGRANGIAN NSNI, SO ITS
-                    !WASTING A BUNCH OF STORAGE
+                    ! TODO: GET RID OF THESE ARRAYS, WE DONT DO LAGRANGIAN NSNI, SO ITS
+                    ! WASTING A BUNCH OF STORAGE
 
-!                    DO J = 1, LN
-!                        GSTACK_DDSHP(1,LSTART+J-1) = SHPDD_SM(1,J)
-!                        GSTACK_DDSHP(2,LSTART+J-1) = SHPDD_SM(2,J)
-!                        GSTACK_DDSHP(3,LSTART+J-1) = SHPDD_SM(3,J)
-!                        GSTACK_DDSHP(4,LSTART+J-1) = SHPDD_SM(4,J)
-!                        GSTACK_DDSHP(5,LSTART+J-1) = SHPDD_SM(5,J)
-!                        GSTACK_DDSHP(6,LSTART+J-1) = SHPDD_SM(6,J)
-!                    END DO
+                   DO J = 1, LN
+                       GSTACK_DDSHP(1,LSTART+J-1) = SHPDD_SM(1,J)
+                       GSTACK_DDSHP(2,LSTART+J-1) = SHPDD_SM(2,J)
+                       GSTACK_DDSHP(3,LSTART+J-1) = SHPDD_SM(3,J)
+                       GSTACK_DDSHP(4,LSTART+J-1) = SHPDD_SM(4,J)
+                       GSTACK_DDSHP(5,LSTART+J-1) = SHPDD_SM(5,J)
+                       GSTACK_DDSHP(6,LSTART+J-1) = SHPDD_SM(6,J)
+                   END DO
 
-!                END IF
+               END IF
 
-!                CALL RK1(LCOO_T, RK_DEGREE, RK_PSIZE, RK_CONT, RK_IMPL,GCOO_CUURENT, GWIN, GNUMP, LSTACK, LN, GMAXN, GEBC_NODES,SELF_EBC, &
-!                    QL, QL_COEF,QL_LEN, &
-!                    SHP, SHPD_TRASH, SHSUP)
-                !
+               CALL RK1(LCOO_T, RK_DEGREE, RK_PSIZE, RK_CONT, RK_IMPL,GCOO_CUURENT, GWIN, GNUMP, LSTACK, LN, GMAXN, GEBC_NODES,SELF_EBC, &
+                   QL, QL_COEF,QL_LEN, &
+                   SHP, SHPD_TRASH, SHSUP)
+                
                 ! STORE THE SHP FOR PHY DISPLACEMENT/VEL CACULATION FOR SNNI, DNI
-                !
-!                DO J = 1, LN
-!                    GSTACK_SHP(LSTART+J-1) = SHP(J)
-!                END DO
+                
+               DO J = 1, LN
+                   GSTACK_SHP(LSTART+J-1) = SHP(J)
+               END DO
 
             END IF
 
@@ -1029,101 +1029,101 @@
           !
 		!END IF
 		
-!        IF (ITYPE_INT.EQ.2) THEN
+       IF (ITYPE_INT.EQ.2) THEN
 
-!            DO J = 1, 6
-!                LDX_STRESS(J) = LOCAL_DX_STRESS(J,I)
-!                LDY_STRESS(J) = LOCAL_DY_STRESS(J,I)
-!                LDZ_STRESS(J) = LOCAL_DZ_STRESS(J,I)
-!            END DO
+           DO J = 1, 6
+               LDX_STRESS(J) = LOCAL_DX_STRESS(J,I)
+               LDY_STRESS(J) = LOCAL_DY_STRESS(J,I)
+               LDZ_STRESS(J) = LOCAL_DZ_STRESS(J,I)
+           END DO
 
-!            CALL ROTATE_TENSOR(ROT,LDX_STRESS)
-!            CALL ROTATE_TENSOR(ROT,LDY_STRESS)
-!            CALL ROTATE_TENSOR(ROT,LDZ_STRESS)
+           CALL ROTATE_TENSOR(ROT,LDX_STRESS)
+           CALL ROTATE_TENSOR(ROT,LDY_STRESS)
+           CALL ROTATE_TENSOR(ROT,LDZ_STRESS)
 
-!            POISS = LPROP(1)
-!            YOUNG = LPROP(2)
+           POISS = LPROP(1)
+           YOUNG = LPROP(2)
 
-!            BULK = BULK_MOD(YOUNG,POISS)
+           BULK = BULK_MOD(YOUNG,POISS)
 
-!            SHEAR = SHEAR_MOD(YOUNG,POISS)
+           SHEAR = SHEAR_MOD(YOUNG,POISS)
 
-!            IF (LMAT_TYPE.GT.1) THEN
-            !IF (.TRUE.) THEN
-!                NSNI_FLAG=.TRUE.
-!                CALL ESTIMATE_MODULI(STRESS_INC, STRAIN_INC, SHEAR_TRIAL, BULK_TRIAL, SHEAR, BULK,NSNI_FLAG)
-!            END IF
+           IF (LMAT_TYPE.GT.1) THEN
+            IF (.TRUE.) THEN
+               NSNI_FLAG=.TRUE.
+               CALL ESTIMATE_MODULI(STRESS_INC, STRAIN_INC, SHEAR_TRIAL, BULK_TRIAL, SHEAR, BULK,NSNI_FLAG)
+           END IF
 
-!            LAMDA = LAMDA_MOD(BULK,SHEAR)
-!            MU = SHEAR
-!            LAMDA_PLUS_2MU = LAMDA + 2.0d0*MU
+           LAMDA = LAMDA_MOD(BULK,SHEAR)
+           MU = SHEAR
+           LAMDA_PLUS_2MU = LAMDA + 2.0d0*MU
 
-!            CMAT = 0.0d0
+           CMAT = 0.0d0
 
-!            CMAT(1,1) = LAMDA_PLUS_2MU
-!            CMAT(2,2) = LAMDA_PLUS_2MU
-!            CMAT(3,3) = LAMDA_PLUS_2MU
-!            CMAT(4,4) = MU
-!            CMAT(5,5) = MU
-!            CMAT(6,6) = MU
+           CMAT(1,1) = LAMDA_PLUS_2MU
+           CMAT(2,2) = LAMDA_PLUS_2MU
+           CMAT(3,3) = LAMDA_PLUS_2MU
+           CMAT(4,4) = MU
+           CMAT(5,5) = MU
+           CMAT(6,6) = MU
 
-!            CMAT(1,2) = LAMDA
-!            CMAT(2,1) = LAMDA
+           CMAT(1,2) = LAMDA
+           CMAT(2,1) = LAMDA
 
-!            CMAT(1,3) = LAMDA
-!            CMAT(3,1) = LAMDA
+           CMAT(1,3) = LAMDA
+           CMAT(3,1) = LAMDA
 
-!            CMAT(3,2) = LAMDA
-!            CMAT(2,3) = LAMDA
-!
-!			NSNI_LIMITER = 1.0d0
-!            IF ((LMAT_TYPE.EQ.3).OR.(LMAT_TYPE.EQ.6)) THEN
-			!IF (LMAT_TYPE.EQ.3) THEN
-            !
+           CMAT(3,2) = LAMDA
+           CMAT(2,3) = LAMDA
+
+			NSNI_LIMITER = 1.0d0
+           IF ((LMAT_TYPE.EQ.3).OR.(LMAT_TYPE.EQ.6)) THEN
+			IF (LMAT_TYPE.EQ.3) THEN
+            
             ! DAMAGE MECHANICS INVOLVED, DO NOT USE A "TOTAL" STRESS
             ! STABILIZATION, INSTEAD, USE THE INCREMENTAL STRESS
             ! FOR STABILIZATION.
-			!
+			
 			! COMMENT #2: STILL INEFFECTIVE, ZERO-OUT THE STRESS
 			! IN CASE THE DAMAGE GETS TOO BIG, THIS SEEMS TO WORK
 			! OK, BUT THE VALUE IS SENSATIVE A BIT.
-            !
-!			IF (LSTATE(4).GT.(0.5d0)) THEN
-!                NSNI_LIMITER = 0.0d0
-!			ELSE
-!               NSNI_LIMITER = (1.0d0-2.0d0*LSTATE(4))
-!			END IF
-!            END IF
-            !
+            
+			IF (LSTATE(4).GT.(0.5d0)) THEN
+               NSNI_LIMITER = 0.0d0
+			ELSE
+              NSNI_LIMITER = (1.0d0-2.0d0*LSTATE(4))
+			END IF
+           END IF
+            
             ! UPDATE THE PSUEDO-STRESSES FOR NSNI
-            !
-!            DO K = 1, 6
-!                DO L = 1, 6
-!                    LDX_STRESS(K) = LDX_STRESS(K) +  CMAT(K,L)*DX_STRAIN(L)
-!                    LDY_STRESS(K) = LDY_STRESS(K) +  CMAT(K,L)*DY_STRAIN(L)
-!                    LDZ_STRESS(K) = LDZ_STRESS(K) +  CMAT(K,L)*DZ_STRAIN(L)
-!                END DO
-!            END DO
-            !
+            
+           DO K = 1, 6
+               DO L = 1, 6
+                   LDX_STRESS(K) = LDX_STRESS(K) +  CMAT(K,L)*DX_STRAIN(L)
+                   LDY_STRESS(K) = LDY_STRESS(K) +  CMAT(K,L)*DY_STRAIN(L)
+                   LDZ_STRESS(K) = LDZ_STRESS(K) +  CMAT(K,L)*DZ_STRAIN(L)
+               END DO
+           END DO
+            
             ! SAVE WORK CONGUGATE STRESS DERIVATIVES FOR NSNI
-            !
-!            DO J = 1, 6
-                !
-!                LOCAL_DX_STRESS(J,I) = LDX_STRESS(J)*NSNI_LIMITER
-!                LOCAL_DY_STRESS(J,I) = LDY_STRESS(J)*NSNI_LIMITER
-!                LOCAL_DZ_STRESS(J,I) = LDY_STRESS(J)*NSNI_LIMITER
-                !
-!            END DO
+            
+           DO J = 1, 6
+                
+               LOCAL_DX_STRESS(J,I) = LDX_STRESS(J)*NSNI_LIMITER
+               LOCAL_DY_STRESS(J,I) = LDY_STRESS(J)*NSNI_LIMITER
+               LOCAL_DZ_STRESS(J,I) = LDY_STRESS(J)*NSNI_LIMITER
+                
+           END DO
 			
-			!DOESNT WORK!
-			!IF ((LMAT_TYPE.EQ.3).OR.(LMAT_TYPE.EQ.6)) THEN
-			!LDX_STRESS = LDX_STRESS*(1.0d0-LSTATE(4))
-			!LDY_STRESS = LDY_STRESS*(1.0d0-LSTATE(4))
-			!LDX_STRESS = LDX_STRESS*(1.0d0-LSTATE(4))
-			!END IF
+			! DOESNT WORK!
+			IF ((LMAT_TYPE.EQ.3).OR.(LMAT_TYPE.EQ.6)) THEN
+			LDX_STRESS = LDX_STRESS*(1.0d0-LSTATE(4))
+			LDY_STRESS = LDY_STRESS*(1.0d0-LSTATE(4))
+			LDX_STRESS = LDX_STRESS*(1.0d0-LSTATE(4))
+			END IF
 
 
-!        END IF !NSNI
+       END IF !NSNI
 XNORM(1:3) =0.D0
         DO K = 1, LN
             KK = LSTACK(K)
@@ -1268,109 +1268,109 @@ XNORM(1:3) =0.D0
 
         MAG_FINT=DSQRT(MAG_FINT)
 
-!        IF (ITYPE_INT.EQ.2) THEN !NSNI
+       IF (ITYPE_INT.EQ.2) THEN !NSNI
 
-            !
-!            MAG_STAB_FINT = 0.0d0
-            !
-!            DO J = 1, LN
+            
+           MAG_STAB_FINT = 0.0d0
+            
+           DO J = 1, LN
 
-!                JJ = LSTACK(J)
+               JJ = LSTACK(J)
 
-!                XBMAT = 0.0d0
-!                YBMAT = 0.0d0
-!                ZBMAT = 0.0d0
+               XBMAT = 0.0d0
+               YBMAT = 0.0d0
+               ZBMAT = 0.0d0
 
-!                XBMAT(1,1) = SHPDD_SM(XMAP(1),J)
-!                XBMAT(2,2) = SHPDD_SM(XMAP(2),J)
-!                XBMAT(3,3) = SHPDD_SM(XMAP(3),J)
-!                XBMAT(4,2) = SHPDD_SM(XMAP(3),J)
-!                XBMAT(4,3) = SHPDD_SM(XMAP(2),J)
-!                XBMAT(5,1) = SHPDD_SM(XMAP(3),J)
-!                XBMAT(5,3) = SHPDD_SM(XMAP(1),J)
-!                XBMAT(6,1) = SHPDD_SM(XMAP(2),J)
-!                XBMAT(6,2) = SHPDD_SM(XMAP(1),J)
+               XBMAT(1,1) = SHPDD_SM(XMAP(1),J)
+               XBMAT(2,2) = SHPDD_SM(XMAP(2),J)
+               XBMAT(3,3) = SHPDD_SM(XMAP(3),J)
+               XBMAT(4,2) = SHPDD_SM(XMAP(3),J)
+               XBMAT(4,3) = SHPDD_SM(XMAP(2),J)
+               XBMAT(5,1) = SHPDD_SM(XMAP(3),J)
+               XBMAT(5,3) = SHPDD_SM(XMAP(1),J)
+               XBMAT(6,1) = SHPDD_SM(XMAP(2),J)
+               XBMAT(6,2) = SHPDD_SM(XMAP(1),J)
 
-!                XBMAT_T = TRANSPOSE(XBMAT)
+               XBMAT_T = TRANSPOSE(XBMAT)
 
-!               XFINT3(J,1:3) = MATMUL(XBMAT_T,LDX_STRESS)
-
-
-
-!                YBMAT(1,1) = SHPDD_SM(YMAP(1),J)
-!                YBMAT(2,2) = SHPDD_SM(YMAP(2),J)
-!                YBMAT(3,3) = SHPDD_SM(YMAP(3),J)
-!                YBMAT(4,2) = SHPDD_SM(YMAP(3),J)
-!                YBMAT(4,3) = SHPDD_SM(YMAP(2),J)
-!                YBMAT(5,1) = SHPDD_SM(YMAP(3),J)
-!                YBMAT(5,3) = SHPDD_SM(YMAP(1),J)
-!                YBMAT(6,1) = SHPDD_SM(YMAP(2),J)
-!                YBMAT(6,2) = SHPDD_SM(YMAP(1),J)
-
-!                YBMAT_T = TRANSPOSE(YBMAT)
-
-!                YFINT3(J,1:3) = MATMUL(YBMAT_T,LDY_STRESS)
+              XFINT3(J,1:3) = MATMUL(XBMAT_T,LDX_STRESS)
 
 
 
-!                ZBMAT(1,1) = SHPDD_SM(ZMAP(1),J)
-!                ZBMAT(2,2) = SHPDD_SM(ZMAP(2),J)
-!                ZBMAT(3,3) = SHPDD_SM(ZMAP(3),J)
-!                ZBMAT(4,2) = SHPDD_SM(ZMAP(3),J)
-!                ZBMAT(4,3) = SHPDD_SM(ZMAP(2),J)
-!                ZBMAT(5,1) = SHPDD_SM(ZMAP(3),J)
-!                ZBMAT(5,3) = SHPDD_SM(ZMAP(1),J)
-!                ZBMAT(6,1) = SHPDD_SM(ZMAP(2),J)
-!                ZBMAT(6,2) = SHPDD_SM(ZMAP(1),J)
+               YBMAT(1,1) = SHPDD_SM(YMAP(1),J)
+               YBMAT(2,2) = SHPDD_SM(YMAP(2),J)
+               YBMAT(3,3) = SHPDD_SM(YMAP(3),J)
+               YBMAT(4,2) = SHPDD_SM(YMAP(3),J)
+               YBMAT(4,3) = SHPDD_SM(YMAP(2),J)
+               YBMAT(5,1) = SHPDD_SM(YMAP(3),J)
+               YBMAT(5,3) = SHPDD_SM(YMAP(1),J)
+               YBMAT(6,1) = SHPDD_SM(YMAP(2),J)
+               YBMAT(6,2) = SHPDD_SM(YMAP(1),J)
 
-!                ZBMAT_T = TRANSPOSE(ZBMAT)
+               YBMAT_T = TRANSPOSE(YBMAT)
 
-!                ZFINT3(J,1:3) = MATMUL(ZBMAT_T,LDZ_STRESS)
+               YFINT3(J,1:3) = MATMUL(YBMAT_T,LDY_STRESS)
 
-!                DO K = 1, 3
-!                    MAG_STAB_FINT = MAG_STAB_FINT + (XFINT3(J,K)**2 + YFINT3(J,K)**2 + ZFINT3(J,K)**2)
-!                END DO
+
+
+               ZBMAT(1,1) = SHPDD_SM(ZMAP(1),J)
+               ZBMAT(2,2) = SHPDD_SM(ZMAP(2),J)
+               ZBMAT(3,3) = SHPDD_SM(ZMAP(3),J)
+               ZBMAT(4,2) = SHPDD_SM(ZMAP(3),J)
+               ZBMAT(4,3) = SHPDD_SM(ZMAP(2),J)
+               ZBMAT(5,1) = SHPDD_SM(ZMAP(3),J)
+               ZBMAT(5,3) = SHPDD_SM(ZMAP(1),J)
+               ZBMAT(6,1) = SHPDD_SM(ZMAP(2),J)
+               ZBMAT(6,2) = SHPDD_SM(ZMAP(1),J)
+
+               ZBMAT_T = TRANSPOSE(ZBMAT)
+
+               ZFINT3(J,1:3) = MATMUL(ZBMAT_T,LDZ_STRESS)
+
+               DO K = 1, 3
+                   MAG_STAB_FINT = MAG_STAB_FINT + (XFINT3(J,K)**2 + YFINT3(J,K)**2 + ZFINT3(J,K)**2)
+               END DO
                 
-!                CONTINUE
+               CONTINUE
 
 
-!            END DO
-            !
+           END DO
+            
             ! CONTROL THE CONTRIBUTION TO FINT BY NSNI: SOME PARAMETERS ARE ESTIMATED AND
             ! THEY MIGHT NOT BE ACCURATE
-            !
-!            IF (USE_STAB_CONTROL) THEN
-!             IF (MAG_STAB_FINT.GT.(1.0d-12)) THEN
-!                MAG_STAB_FINT=DSQRT(MAG_STAB_FINT)
-!                IF (MAG_STAB_FINT.GT.MAG_FINT) THEN
-!                    XFINT3=XFINT3*MAG_FINT/MAG_STAB_FINT*STABILIZATION_CONTROL_COEF
-!                    YFINT3=YFINT3*MAG_FINT/MAG_STAB_FINT*STABILIZATION_CONTROL_COEF
-!                    ZFINT3=ZFINT3*MAG_FINT/MAG_STAB_FINT*STABILIZATION_CONTROL_COEF
-!                END IF
-!             END IF
-!            END IF
             
-            !DEBUG
-            !IF (MAG_STAB_FINT.GT.(1.0e-6)) THEN
-            !CONTINUE
-            !END IF
+           IF (USE_STAB_CONTROL) THEN
+            IF (MAG_STAB_FINT.GT.(1.0d-12)) THEN
+               MAG_STAB_FINT=DSQRT(MAG_STAB_FINT)
+               IF (MAG_STAB_FINT.GT.MAG_FINT) THEN
+                   XFINT3=XFINT3*MAG_FINT/MAG_STAB_FINT*STABILIZATION_CONTROL_COEF
+                   YFINT3=YFINT3*MAG_FINT/MAG_STAB_FINT*STABILIZATION_CONTROL_COEF
+                   ZFINT3=ZFINT3*MAG_FINT/MAG_STAB_FINT*STABILIZATION_CONTROL_COEF
+               END IF
+            END IF
+           END IF
+            
+            ! DEBUG
+            IF (MAG_STAB_FINT.GT.(1.0e-6)) THEN
+            CONTINUE
+            END IF
 
-!            DO J = 1, LN
+           DO J = 1, LN
 
-!                JJ = LSTACK(J)
+               JJ = LSTACK(J)
 
-!                DO K = 1, 3
-                    !IT DOESNT LOOK LIKE X_MOM GETS ASSIGNED ANYTHING! FIX NSNI!
-!                    ID_RANK = OMP_get_thread_num()
-!                    FINT_TEMP(ID_RANK+1,K,JJ) = FINT_TEMP(ID_RANK+1,K,JJ) + XFINT3(J,K) *VOL*DET * G_X_MOM(I)
-!                    FINT_TEMP(ID_RANK+1,K,JJ) = FINT_TEMP(ID_RANK+1,K,JJ) + YFINT3(J,K) *VOL*DET * G_Y_MOM(I)
-!                    FINT_TEMP(ID_RANK+1,K,JJ) = FINT_TEMP(ID_RANK+1,K,JJ) + ZFINT3(J,K) *VOL*DET * G_Z_MOM(I)
+               DO K = 1, 3
+                    ! IT DOESNT LOOK LIKE X_MOM GETS ASSIGNED ANYTHING! FIX NSNI!
+                   ID_RANK = OMP_get_thread_num()
+                   FINT_TEMP(ID_RANK+1,K,JJ) = FINT_TEMP(ID_RANK+1,K,JJ) + XFINT3(J,K) *VOL*DET * G_X_MOM(I)
+                   FINT_TEMP(ID_RANK+1,K,JJ) = FINT_TEMP(ID_RANK+1,K,JJ) + YFINT3(J,K) *VOL*DET * G_Y_MOM(I)
+                   FINT_TEMP(ID_RANK+1,K,JJ) = FINT_TEMP(ID_RANK+1,K,JJ) + ZFINT3(J,K) *VOL*DET * G_Z_MOM(I)
 
-!                END DO
+               END DO
 
-!            END DO
+           END DO
 
-!        END IF !NSNI
+       END IF !NSNI
 
 
     END DO !INTEGRATION POINT (NODE) LOOP
