@@ -369,7 +369,8 @@
     !$ACC&                                  FINT_TEMP, FEXT_TEMP, GINT_WORK_TEMP, GSTRAIN_EQ, &
     !$ACC&                                  MODEL_BODYFORCE, MODEL_BODY_ID, DLT, &
     !$ACC&                                  LLAGRANGIAN, RK_DEGREE, RK_PSIZE, RK_CONT, RK_IMPL, &
-    !$ACC&                                  QL, QL_COEF, QL_LEN, SHSUP, ITYPE_INT, IGRAVITY) &
+    !$ACC&                                  QL, QL_COEF, QL_LEN, SHSUP, ITYPE_INT, IGRAVITY, &
+    !$ACC&                                  G_X_MOM, G_Y_MOM, G_Z_MOM) &
     !$ACC&        PRIVATE(I, J, K, L, JJ, LCOO, LCOO_T, VOL, LWIN, LSM_LEN, LN, LSTART, &
     !$ACC&                LGHOST, LVOL, LPROP, LMAT_TYPE, LOCAL_BODY_ID, SELF_EBC, &
     !$ACC&                LSTRESS, LSTRAIN, LSTATE, LSTACK, LDINC, LDINC_TOT, &
@@ -377,7 +378,18 @@
     !$ACC&                DET, LMAT, STRAIN, ELAS_MAT, LSTRESS_PREDICTOR, &
     !$ACC&                ROT, D, STRESS_INC, STRAIN_INC, POISS, YOUNG, BULK, SHEAR, &
     !$ACC&                DENSITY, PMOD, BMAT, BMAT_T, FINT3, FINT3_EXT, &
-    !$ACC&                FBOD, FGRAV, LBOD, MAG_FINT, ID_RANK)
+    !$ACC&                FBOD, FGRAV, LBOD, MAG_FINT, ID_RANK, &
+    !$ACC&                LSM_PTS, LSM_VOL, LSM_AOV, SM_COO, SHP6, SHPD6, &
+    !$ACC&                SHPDD_SM, SHPDTEMP, SHPD_TRASH, &
+    !$ACC&                XMAP, YMAP, ZMAP, XLMAT, YLMAT, ZLMAT, &
+    !$ACC&                DX_STRAIN, DY_STRAIN, DZ_STRAIN, &
+    !$ACC&                LDX_STRESS, LDY_STRESS, LDZ_STRESS, &
+    !$ACC&                CMAT, LAMDA, MU, LAMDA_PLUS_2MU, NSNI_LIMITER, &
+    !$ACC&                XBMAT, YBMAT, ZBMAT, XBMAT_T, YBMAT_T, ZBMAT_T, &
+    !$ACC&                XFINT3, YFINT3, ZFINT3, MAG_STAB_FINT, &
+    !$ACC&                L_H_STRESS, L_S_STRESS, XNORM, &
+    !$ACC&                F_INT_C, F_INT_C_TEMP, B_TEMP, B_INV_TEMP, &
+    !$ACC&                NSNI_FLAG)
      DO I = 1, GNUMP
     ! For GPU, use gang/vector index instead of OpenMP thread ID
     ID_RANK = MOD(I-1, NCORES_INPUT) + 1
@@ -567,12 +579,12 @@
                 CONTINUE
 
            ELSEIF ((ITYPE_INT.EQ.2).OR.(ITYPE_INT.EQ.1)) THEN
-                
+                !
                 ! NSNI
-                
+                !
                 ! GET THE SMOOTHING INFORMATION
                 ! (1-6) = (+X, -X, +Y, -Y, +Z, -Z)
-                
+                !
               DO J = 1, 3
                    DO K = 1, 6
                        LSM_PTS(J,K) = LCOO_T(J)
@@ -586,17 +598,17 @@
                LSM_PTS(3,6) = LCOO_T(3) - LSM_LEN(6)
 
                LSM_VOL = GSM_VOL(I)
-               !
-               ! COMPUTE SMOOTHED AREA OVER VOLUME
-               !
+!                !
+!                ! COMPUTE SMOOTHED AREA OVER VOLUME
+!                !
                DO J = 1, 3
                    LSM_AOV((J-1)*2+1) = GSM_AREA(J,I) / LSM_VOL
                    LSM_AOV((J-1)*2+2) = GSM_AREA(J,I) / LSM_VOL
                END DO
 
-                
-                ! COMPUTE THE SHAPE FUNCTIONS AT GRADIENT SMOOTHING POINTS
-                
+                !
+                !COMPUTE THE SHAPE FUNCTIONS AT GRADIENT SMOOTHING POINTS
+                !
                DO J = 1, 6
 
                    SM_COO(:) = LSM_PTS(:,J)
@@ -612,9 +624,9 @@
 
                END DO !J = 1, 6 (COMPUTE THE SMOOTHED GRADIENTS)
 
-                
+                !
                 ! FILL OUT THE SMOOTHED GRADIENT INFORMATION
-                
+                !
                DO K = 1, LN
 
                    SHPD(1,K) = (SHP6(K,1)*LSM_AOV(1) - SHP6(K,2)*LSM_AOV(2))
@@ -622,63 +634,63 @@
                    SHPD(3,K) = (SHP6(K,5)*LSM_AOV(5) - SHP6(K,6)*LSM_AOV(6))
 
                END DO
-                
+                !
                IF (ITYPE_INT.EQ.2) THEN
 
-                    ! NSNI CALCS
+                    !NSNI CALCS
 
                    DO K = 1, LN
-                        
+                        !
                         ! SMOOTH X Y Z IN X DIRECTION
-                        
-                        ! XX
+                        !
+                        !XX
                        SHPDTEMP(1) = (SHPD6(1,K,1)*LSM_AOV(1) - SHPD6(1,K,2)*LSM_AOV(2)) !SMOOTH IN X DIRECTION
 
-                        ! XY
+                        !XY
                        SHPDTEMP(2) = (SHPD6(2,K,1)*LSM_AOV(1) - SHPD6(2,K,2)*LSM_AOV(2)) !SMOOTH IN X DIRECTION
 
-                        ! XZ
+                        !XZ
                        SHPDTEMP(3) = (SHPD6(3,K,1)*LSM_AOV(1) - SHPD6(3,K,2)*LSM_AOV(2)) !SMOOTH IN X DIRECTION
-                        
+                        !
                         ! SMOOTH X Y Z IN Y DIRECTION
-                        
-                        ! YX
+                        !
+                        !YX
                        SHPDTEMP(4) = (SHPD6(1,K,3)*LSM_AOV(3) - SHPD6(1,K,4)*LSM_AOV(4)) !SMOOTH IN Y DIRECTION
 
-                        ! YY
+                        !YY
                        SHPDTEMP(5) = (SHPD6(2,K,3)*LSM_AOV(3) - SHPD6(2,K,4)*LSM_AOV(4)) !SMOOTH IN Y DIRECTION
 
-                        ! YZ
+                        !YZ
                        SHPDTEMP(6) = (SHPD6(3,K,3)*LSM_AOV(3) - SHPD6(3,K,4)*LSM_AOV(4)) !SMOOTH IN Y DIRECTION
-                        
+                        !
                         ! SMOOTH X Y Z IN Z DIRECTION
-                        
-                        ! ZX
+                        !
+                        !ZX
                        SHPDTEMP(7) = (SHPD6(1,K,5)*LSM_AOV(5) - SHPD6(1,K,6)*LSM_AOV(6)) !SMOOTH IN Z DIRECTION
 
-                        ! ZY
+                        !ZY
                        SHPDTEMP(8) = (SHPD6(2,K,5)*LSM_AOV(5) - SHPD6(2,K,6)*LSM_AOV(6)) !SMOOTH IN Z DIRECTION
 
-                        ! ZZ
+                        !ZZ
                        SHPDTEMP(9) = (SHPD6(3,K,5)*LSM_AOV(5) - SHPD6(3,K,6)*LSM_AOV(6)) !SMOOTH IN Z DIRECTION
 
-                        ! XX
+                        !XX
                        SHPDD_SM(1,K) = SHPDTEMP(1)
-                        ! YY
+                        !YY
                        SHPDD_SM(2,K) = SHPDTEMP(5)
-                        ! ZZ
+                        !ZZ
                        SHPDD_SM(3,K) = SHPDTEMP(9)
-                        ! XY
+                        !XY
                        SHPDD_SM(4,K) = 0.5d0 * (SHPDTEMP(2) + SHPDTEMP(4))
-                        ! YZ
+                        !YZ
                        SHPDD_SM(5,K) = 0.5d0 * (SHPDTEMP(6) + SHPDTEMP(8))
-                        ! XZ
+                        !XZ
                        SHPDD_SM(6,K) = 0.5d0 * (SHPDTEMP(3) + SHPDTEMP(7))
 
                    END DO
 
-                    ! TODO: GET RID OF THESE ARRAYS, WE DONT DO LAGRANGIAN NSNI, SO ITS
-                    ! WASTING A BUNCH OF STORAGE
+                    !TODO: GET RID OF THESE ARRAYS, WE DONT DO LAGRANGIAN NSNI, SO ITS
+                    !WASTING A BUNCH OF STORAGE
 
                    DO J = 1, LN
                        GSTACK_DDSHP(1,LSTART+J-1) = SHPDD_SM(1,J)
@@ -694,9 +706,9 @@
                CALL RK1(LCOO_T, RK_DEGREE, RK_PSIZE, RK_CONT, RK_IMPL,GCOO_CUURENT, GWIN, GNUMP, LSTACK, LN, GMAXN, GEBC_NODES,SELF_EBC, &
                    QL, QL_COEF,QL_LEN, &
                    SHP, SHPD_TRASH, SHSUP)
-                
+                !
                 ! STORE THE SHP FOR PHY DISPLACEMENT/VEL CACULATION FOR SNNI, DNI
-                
+                !
                DO J = 1, LN
                    GSTACK_SHP(LSTART+J-1) = SHP(J)
                END DO
@@ -1049,7 +1061,7 @@
            SHEAR = SHEAR_MOD(YOUNG,POISS)
 
            IF (LMAT_TYPE.GT.1) THEN
-            IF (.TRUE.) THEN
+            !IF (.TRUE.) THEN
                NSNI_FLAG=.TRUE.
                CALL ESTIMATE_MODULI(STRESS_INC, STRAIN_INC, SHEAR_TRIAL, BULK_TRIAL, SHEAR, BULK,NSNI_FLAG)
            END IF
@@ -1078,25 +1090,25 @@
 
 			NSNI_LIMITER = 1.0d0
            IF ((LMAT_TYPE.EQ.3).OR.(LMAT_TYPE.EQ.6)) THEN
-			IF (LMAT_TYPE.EQ.3) THEN
-            
+			!IF (LMAT_TYPE.EQ.3) THEN
+            !
             ! DAMAGE MECHANICS INVOLVED, DO NOT USE A "TOTAL" STRESS
             ! STABILIZATION, INSTEAD, USE THE INCREMENTAL STRESS
             ! FOR STABILIZATION.
-			
+			!
 			! COMMENT #2: STILL INEFFECTIVE, ZERO-OUT THE STRESS
 			! IN CASE THE DAMAGE GETS TOO BIG, THIS SEEMS TO WORK
 			! OK, BUT THE VALUE IS SENSATIVE A BIT.
-            
+            !
 			IF (LSTATE(4).GT.(0.5d0)) THEN
                NSNI_LIMITER = 0.0d0
 			ELSE
               NSNI_LIMITER = (1.0d0-2.0d0*LSTATE(4))
 			END IF
            END IF
-            
+            !
             ! UPDATE THE PSUEDO-STRESSES FOR NSNI
-            
+            !
            DO K = 1, 6
                DO L = 1, 6
                    LDX_STRESS(K) = LDX_STRESS(K) +  CMAT(K,L)*DX_STRAIN(L)
@@ -1104,9 +1116,9 @@
                    LDZ_STRESS(K) = LDZ_STRESS(K) +  CMAT(K,L)*DZ_STRAIN(L)
                END DO
            END DO
-            
+            !
             ! SAVE WORK CONGUGATE STRESS DERIVATIVES FOR NSNI
-            
+            !
            DO J = 1, 6
                 
                LOCAL_DX_STRESS(J,I) = LDX_STRESS(J)*NSNI_LIMITER
@@ -1115,12 +1127,12 @@
                 
            END DO
 			
-			! DOESNT WORK!
-			IF ((LMAT_TYPE.EQ.3).OR.(LMAT_TYPE.EQ.6)) THEN
-			LDX_STRESS = LDX_STRESS*(1.0d0-LSTATE(4))
-			LDY_STRESS = LDY_STRESS*(1.0d0-LSTATE(4))
-			LDX_STRESS = LDX_STRESS*(1.0d0-LSTATE(4))
-			END IF
+			!DOESNT WORK!
+			!IF ((LMAT_TYPE.EQ.3).OR.(LMAT_TYPE.EQ.6)) THEN
+			!LDX_STRESS = LDX_STRESS*(1.0d0-LSTATE(4))
+			!LDY_STRESS = LDY_STRESS*(1.0d0-LSTATE(4))
+			!LDX_STRESS = LDX_STRESS*(1.0d0-LSTATE(4))
+			!END IF
 
 
        END IF !NSNI
@@ -1270,9 +1282,9 @@ XNORM(1:3) =0.D0
 
        IF (ITYPE_INT.EQ.2) THEN !NSNI
 
-            
+            !
            MAG_STAB_FINT = 0.0d0
-            
+            !
            DO J = 1, LN
 
                JJ = LSTACK(J)
@@ -1293,7 +1305,12 @@ XNORM(1:3) =0.D0
 
                XBMAT_T = TRANSPOSE(XBMAT)
 
-              XFINT3(J,1:3) = MATMUL(XBMAT_T,LDX_STRESS)
+              DO K = 1, 3
+                  XFINT3(J,K) = 0.0d0
+                  DO L = 1, 6
+                      XFINT3(J,K) = XFINT3(J,K) + XBMAT_T(K,L) * LDX_STRESS(L)
+                  END DO
+              END DO
 
 
 
@@ -1309,7 +1326,12 @@ XNORM(1:3) =0.D0
 
                YBMAT_T = TRANSPOSE(YBMAT)
 
-               YFINT3(J,1:3) = MATMUL(YBMAT_T,LDY_STRESS)
+               DO K = 1, 3
+                   YFINT3(J,K) = 0.0d0
+                   DO L = 1, 6
+                       YFINT3(J,K) = YFINT3(J,K) + YBMAT_T(K,L) * LDY_STRESS(L)
+                   END DO
+               END DO
 
 
 
@@ -1325,7 +1347,12 @@ XNORM(1:3) =0.D0
 
                ZBMAT_T = TRANSPOSE(ZBMAT)
 
-               ZFINT3(J,1:3) = MATMUL(ZBMAT_T,LDZ_STRESS)
+               DO K = 1, 3
+                   ZFINT3(J,K) = 0.0d0
+                   DO L = 1, 6
+                       ZFINT3(J,K) = ZFINT3(J,K) + ZBMAT_T(K,L) * LDZ_STRESS(L)
+                   END DO
+               END DO
 
                DO K = 1, 3
                    MAG_STAB_FINT = MAG_STAB_FINT + (XFINT3(J,K)**2 + YFINT3(J,K)**2 + ZFINT3(J,K)**2)
@@ -1335,10 +1362,10 @@ XNORM(1:3) =0.D0
 
 
            END DO
-            
+            !
             ! CONTROL THE CONTRIBUTION TO FINT BY NSNI: SOME PARAMETERS ARE ESTIMATED AND
             ! THEY MIGHT NOT BE ACCURATE
-            
+            !
            IF (USE_STAB_CONTROL) THEN
             IF (MAG_STAB_FINT.GT.(1.0d-12)) THEN
                MAG_STAB_FINT=DSQRT(MAG_STAB_FINT)
@@ -1350,22 +1377,28 @@ XNORM(1:3) =0.D0
             END IF
            END IF
             
-            ! DEBUG
-            IF (MAG_STAB_FINT.GT.(1.0e-6)) THEN
-            CONTINUE
-            END IF
+            !DEBUG
+            !IF (MAG_STAB_FINT.GT.(1.0e-6)) THEN
+            !CONTINUE
+            !END IF
 
            DO J = 1, LN
 
                JJ = LSTACK(J)
 
                DO K = 1, 3
-                    ! IT DOESNT LOOK LIKE X_MOM GETS ASSIGNED ANYTHING! FIX NSNI!
-                   ID_RANK = OMP_get_thread_num()
-                   FINT_TEMP(ID_RANK+1,K,JJ) = FINT_TEMP(ID_RANK+1,K,JJ) + XFINT3(J,K) *VOL*DET * G_X_MOM(I)
-                   FINT_TEMP(ID_RANK+1,K,JJ) = FINT_TEMP(ID_RANK+1,K,JJ) + YFINT3(J,K) *VOL*DET * G_Y_MOM(I)
-                   FINT_TEMP(ID_RANK+1,K,JJ) = FINT_TEMP(ID_RANK+1,K,JJ) + ZFINT3(J,K) *VOL*DET * G_Z_MOM(I)
-
+                   ! Use atomic operations for thread-safe updates on GPU
+                   !$ACC ATOMIC UPDATE
+                   FINT_TEMP(1,K,JJ) = FINT_TEMP(1,K,JJ) + XFINT3(J,K) *VOL*DET * G_X_MOM(I)
+                   !$ACC END ATOMIC
+                   
+                   !$ACC ATOMIC UPDATE
+                   FINT_TEMP(1,K,JJ) = FINT_TEMP(1,K,JJ) + YFINT3(J,K) *VOL*DET * G_Y_MOM(I)
+                   !$ACC END ATOMIC
+                   
+                   !$ACC ATOMIC UPDATE
+                   FINT_TEMP(1,K,JJ) = FINT_TEMP(1,K,JJ) + ZFINT3(J,K) *VOL*DET * G_Z_MOM(I)
+                   !$ACC END ATOMIC
                END DO
 
            END DO
