@@ -68,6 +68,7 @@
 	  !
       
       USE CONTROL
+      USE MODEL, ONLY: MODEL_ELCON_MOD => MODEL_ELCON
       !
 	  IMPLICIT NONE
       ! 
@@ -102,6 +103,22 @@
       INTEGER:: IMAT_TYPE
       LOGICAL:: LOTSOFO
       ! 
+ ! Debug output
+ PRINT *, '=== VTK OUTPUT DEBUG ==='
+ PRINT *, 'LFEM_OUTPUT =', LFEM_OUTPUT
+ PRINT *, 'MODEL_NUMEL =', MODEL_NUMEL
+ IF (ALLOCATED(MODEL_ELCON_MOD)) THEN
+     PRINT *, 'MODEL_ELCON is allocated'
+     ! Print sample connectivity data
+     IF (MODEL_NUMEL .GT. 0) THEN
+         PRINT *, 'First element connectivity:', MODEL_ELCON(:,1)
+         PRINT *, 'Min node index:', MINVAL(MODEL_ELCON)
+         PRINT *, 'Max node index:', MAXVAL(MODEL_ELCON)
+         PRINT *, 'Expected range: 1 to', MODEL_NUMP
+     END IF
+ ELSE
+     PRINT *, 'ERROR: MODEL_ELCON is NOT allocated!'
+ END IF
       !exodusStep = CURRENT OUTPUT STEP
       
       
@@ -125,6 +142,13 @@
 	  !
       !NOW OUTPUT THE POINTS
       !
+ ! Debug: Check coordinates being written
+ PRINT *, '=== WRITING COORDINATES TO VTK ==='
+ PRINT *, 'First 3 nodes being written:'
+ DO I = 1, MIN(3, MODEL_NUMP)
+     PRINT '(A,I4,A,3E15.5)', 'Node', I, ':', MODEL_COO_CURRENT(:,I)
+ END DO
+
       DO I=1,MODEL_NUMP
         WRITE(50,'(3E13.5)') MODEL_COO_CURRENT(1,I), MODEL_COO_CURRENT(2,I), MODEL_COO_CURRENT(3,I)
       END DO

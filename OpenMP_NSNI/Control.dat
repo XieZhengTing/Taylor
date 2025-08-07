@@ -1,0 +1,154 @@
+
+####### MODEL #######
+
+
+*MODEL
+# Name
+Taylor_bar.k
+
+####### PARAMETERS #######
+
+
+*TIME PARAMETERS
+#TIME_END
+  5.5E-05    
+#IAUTO_TS (AUTO SELECT TIME STEP = 1)
+  0
+# TIME STEP IF IAUTO_TS = 0 / FACTOR FOR TIME STEP IF IAUTO_TS = 1 
+  0.78363E-07
+	
+	
+*QL PARAMETERS
+# USE, COEFFICIENT
+   1          0.001
+
+*RK PARAMETERS
+# RK_DEGREE, RK_CONT, RK_IMPL
+   1          3        0
+   
+*PERIDYNAMICS
+# SWITCH
+  0
+   
+   
+*HPC PARAMETERS
+#HPC_SCHEME (1=serial)
+1
+
+*GHOSTING PARAMETERS
+#GHOST_BUFFER (not used)
+0
+
+*INTEGRATION PARAMETERS
+#TYPE (0 = DNI, 1 = SNNI, 2 = NSNI)
+2
+
+*FORMULATION PARAMETERS
+# IFINITE_STRAIN, ILAGRANGIAN
+   1                1  
+
+####### SET NAMES #######
+
+*SET NAME
+#SET NO (in Trelis)
+1
+#NAME OF THIS SET
+BAR 
+
+*SET NAME
+#SET NO (in Trelis)
+2
+#NAME OF THIS SET
+WALL
+
+
+####### ASSIGN PARAMETERS TO NODE SETS #######
+
+
+*BODY DEFINITION
+#SET NO. OR BODY NAME
+BAR
+#BODY ID
+1
+#GRAV
+0.0 0.0 0.0
+
+
+
+*BOUNDARY CONDITION
+#SET NO. OR BODY NAME
+WALL
+#FIXITY
+0 0 1
+
+
+*WINDOW DEFINITION
+#SET NO. OR BODY NAME
+BAR
+#WINDOW
+2.75
+
+*INITIAL CONDITION
+#SET NO. OR BODY NAME
+BAR
+#VEL
+0 0 -373
+
+
+
+*MATERIALS
+#SET NO. OR BODY NAME
+BAR
+#TYPE
+2
+#props
+0.3   78.2e9   2700   0.29e9    125.0
+0.1    0     0 0 0
+0    0     0 0 0
+0    0     0 0 0
+0    0     0 0 0
+0    0     0 0 0
+
+
+
+
+####### OUTPUT PARAMETERS #######
+
+*OUTPUT PARAMETERS
+#TIME_OUTPUT 
+  125.0E-08
+  
+*OUTPUT VARIABLES
+all
+
+
+##possible parameters:
+
+##basic 
+##all
+##unformatted
+
+##node_id 
+##displacement 
+##velocity 
+##acceleration 
+##fint 
+##fixity 
+##bodyid 
+##material_type 
+##initial_coordinate 
+##init_velocity 
+##normalized_window 
+##nodal_volume 
+##nodal_mass 
+##Poissons_ratio 
+##Youngs_modulus 
+##density 
+##physical_window
+
+
+
+
+
+
+

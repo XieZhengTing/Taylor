@@ -1,0 +1,128 @@
+
+	  !********************************************************
+	  !*                                                      *
+	  !********************************************************
+	  !************************* MEGA *************************
+	  !********************************************************
+	  !*                                                      *
+	  !********* Meshfree Explicit Galerkin Analysis **********
+	  !*                                                      *
+	  !*                                                      *
+	  !*                                                      *
+	  !*     Copyright 2016 Michael C Hillman                 *
+	  !*                                                      *
+	  !********************************************************
+    
+    
+    SUBROUTINE STATE_FEILD_INIT(TOTAL_LOCAL_SIZE,TOTAL_LOCAL_NUMP, LOCAL_NUMP, MODEL_NUMP, MODEL_VINIT, TOTAL_MODEL_MAP, MODEL_COO,MODEL_MASS,MODEL_EBC, &
+                                MODEL_NONZERO_EBC,LOCAL_STATE,LOCAL_STRESS,LOCAL_STRAIN,LOCAL_H_STRESS,LOCAL_S_STRESS,LOCAL_COO,LOCAL_FEXT,LOCAL_FINT, &
+                                LOCAL_ACL,LOCAL_VEL,LOCAL_DSP,LOCAL_DSP_TOT,LOCAL_DSP_TOT_PHY,LOCAL_MASS,LOCAL_COO_CURRENT, LOCAL_EBC,LOCAL_NONZERO_EBC,LOCAL_EBC_NODES, &
+                                LOCAL_PRFORCE, LOCAL_DX_STRESS, LOCAL_DY_STRESS, LOCAL_DZ_STRESS, LOCAL_DX_STRAIN, LOCAL_DY_STRAIN, LOCAL_DZ_STRAIN, LOCAL_STRAIN_EQ) 
+      !
+	  ! FUNCTION OF THIS SUBROUTINE:
+	  !
+	  ! ASSIGN INITIAL VALUES FOR LOCAL VARIABLES
+	  !
+                                
+      IMPLICIT NONE
+	  INTEGER, INTENT(IN):: TOTAL_LOCAL_SIZE   
+	  INTEGER, INTENT(IN):: TOTAL_LOCAL_NUMP, LOCAL_NUMP, MODEL_NUMP
+	  DOUBLE PRECISION, INTENT(IN):: MODEL_VINIT(3,MODEL_NUMP)
+	  INTEGER, INTENT(IN):: TOTAL_MODEL_MAP(TOTAL_LOCAL_NUMP)
+	  DOUBLE PRECISION, INTENT(IN):: MODEL_COO(3,MODEL_NUMP)
+	  DOUBLE PRECISION, INTENT(IN):: MODEL_MASS(3*MODEL_NUMP)
+	  INTEGER, INTENT(IN):: MODEL_EBC(3,MODEL_NUMP)
+      DOUBLE PRECISION, INTENT(OUT)::LOCAL_NONZERO_EBC(3,MODEL_NUMP)
+	  DOUBLE PRECISION, INTENT(IN):: MODEL_NONZERO_EBC(3,MODEL_NUMP)
+      
+      
+      DOUBLE PRECISION, INTENT(OUT):: LOCAL_S_STRESS(6,TOTAL_LOCAL_SIZE)!GC
+      DOUBLE PRECISION, INTENT(OUT):: LOCAL_H_STRESS(6,TOTAL_LOCAL_SIZE)!GC
+
+      
+      DOUBLE PRECISION, INTENT(OUT):: LOCAL_STATE(20,TOTAL_LOCAL_SIZE)
+      DOUBLE PRECISION, INTENT(OUT):: LOCAL_STRESS(6,TOTAL_LOCAL_SIZE)
+      DOUBLE PRECISION, INTENT(OUT):: LOCAL_STRAIN(6,TOTAL_LOCAL_SIZE)
+      DOUBLE PRECISION, INTENT(OUT):: LOCAL_COO(3,TOTAL_LOCAL_SIZE)
+      DOUBLE PRECISION, INTENT(OUT):: LOCAL_FEXT(3*TOTAL_LOCAL_SIZE)
+      DOUBLE PRECISION, INTENT(OUT):: LOCAL_FINT(3*TOTAL_LOCAL_SIZE)
+      DOUBLE PRECISION, INTENT(OUT):: LOCAL_ACL(3*TOTAL_LOCAL_SIZE)
+      DOUBLE PRECISION, INTENT(OUT):: LOCAL_VEL(3*TOTAL_LOCAL_SIZE)
+      DOUBLE PRECISION, INTENT(OUT):: LOCAL_DSP(3*TOTAL_LOCAL_SIZE)
+      DOUBLE PRECISION, INTENT(OUT):: LOCAL_DSP_TOT(3*TOTAL_LOCAL_SIZE)
+      DOUBLE PRECISION, INTENT(OUT):: LOCAL_DSP_TOT_PHY(3*TOTAL_LOCAL_SIZE)      
+      DOUBLE PRECISION, INTENT(OUT):: LOCAL_MASS(3*TOTAL_LOCAL_SIZE)
+      DOUBLE PRECISION, INTENT(OUT):: LOCAL_COO_CURRENT(3,TOTAL_LOCAL_SIZE)
+      DOUBLE PRECISION, INTENT(OUT):: LOCAL_PRFORCE(3,TOTAL_LOCAL_SIZE)
+	  INTEGER, INTENT(OUT):: LOCAL_EBC(3,MODEL_NUMP)
+	  LOGICAL, INTENT(OUT):: LOCAL_EBC_NODES(MODEL_NUMP)
+      DOUBLE PRECISION, INTENT(OUT):: LOCAL_STRAIN_EQ(TOTAL_LOCAL_SIZE)
+      
+      DOUBLE PRECISION, INTENT(OUT)::  LOCAL_DX_STRESS(6,TOTAL_LOCAL_SIZE)
+      DOUBLE PRECISION, INTENT(OUT)::  LOCAL_DY_STRESS(6,TOTAL_LOCAL_SIZE)
+      DOUBLE PRECISION, INTENT(OUT)::  LOCAL_DZ_STRESS(6,TOTAL_LOCAL_SIZE)
+      
+      DOUBLE PRECISION, INTENT(OUT)::  LOCAL_DX_STRAIN(6,TOTAL_LOCAL_SIZE)
+      DOUBLE PRECISION, INTENT(OUT)::  LOCAL_DY_STRAIN(6,TOTAL_LOCAL_SIZE)
+      DOUBLE PRECISION, INTENT(OUT)::  LOCAL_DZ_STRAIN(6,TOTAL_LOCAL_SIZE)
+      !
+      ! LOCAL
+      !
+      INTEGER:: I, II, J
+      
+      LOCAL_STATE = 0.0d0
+      LOCAL_STRESS = 0.0d0
+      LOCAL_STRAIN = 0.0d0
+      LOCAL_DSP_TOT = 0.0d0
+      LOCAL_DSP_TOT_PHY = 0.0d0      
+      LOCAL_PRFORCE = 0.0d0
+      
+      LOCAL_DX_STRESS = 0.0d0
+      LOCAL_DY_STRESS = 0.0d0
+      LOCAL_DZ_STRESS = 0.0d0
+      
+      LOCAL_DX_STRAIN = 0.0d0
+      LOCAL_DY_STRAIN = 0.0d0
+      LOCAL_DZ_STRAIN = 0.0d0
+      LOCAL_STRAIN_EQ = 0.0d0
+
+      LOCAL_S_STRESS = 0.0d0
+      LOCAL_H_STRESS = 0.0d0
+      
+      DO I=1, TOTAL_LOCAL_NUMP
+      
+	    LOCAL_EBC_NODES(I) = .FALSE.
+      
+        II = TOTAL_MODEL_MAP(I)
+        
+        LOCAL_COO(:,I) = MODEL_COO(:,II)
+        LOCAL_COO_CURRENT(:,I) = MODEL_COO(:,II)
+        LOCAL_EBC(:,I) = MODEL_EBC(:,II)
+        LOCAL_NONZERO_EBC(:,I) = MODEL_NONZERO_EBC(:,II)        
+          DO J=1,3
+	        IF (MODEL_EBC(J,I).EQ.1) THEN
+                LOCAL_VEL((I-1)*3 + J) = 0.0d0
+                LOCAL_EBC_NODES(I) = .TRUE.
+	        ELSE
+                LOCAL_VEL((I-1)*3 + J) = MODEL_VINIT(J,II)
+	        END IF
+          END DO
+          
+        
+          LOCAL_MASS((I-1)*3+1) = MODEL_MASS((I-1)*3+1)
+          LOCAL_MASS((I-1)*3+2) = MODEL_MASS((I-1)*3+2)
+          LOCAL_MASS((I-1)*3+3) = MODEL_MASS((I-1)*3+3)
+          
+      END DO
+      
+      LOCAL_FEXT = 0.0d0
+      LOCAL_FINT = 0.0d0
+      LOCAL_ACL = 0.0d0
+      LOCAL_DSP = 0.0d0
+      
+      RETURN
+      
+      END SUBROUTINE
+      
+      
+                        

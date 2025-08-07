@@ -19,12 +19,14 @@
 	  
 
       SUBROUTINE VON_MISES(STRESS, STRAIN, STRESS_PREDICT, STATE, PROPS)
+          !$ACC ROUTINE SEQ
 	  !
 	  ! FUNCTION OF THIS SUBROUTINE:
 	  !
 	  ! ROTATE A (VOIGT NOTATION) TENSOR USING GIVEN ROTATION MATRIX
 	  !
       USE FINT_FUNCTIONS
+	  USE GPU_ERROR
       !
 	  IMPLICIT NONE
 	  !
@@ -34,6 +36,12 @@
 	  DOUBLE PRECISION, INTENT(IN)::    STRAIN(6)
 	  DOUBLE PRECISION, INTENT(IN)::    STRESS_PREDICT(6)
 	  DOUBLE PRECISION, INTENT(IN)::    PROPS(30)
+
+     ! Diagnostic variables - store in STATE array for later retrieval
+     ! STATE(11) = final iteration count
+     ! STATE(12) = final YLD_FN value
+     ! STATE(13) = final DELTA_GAMMA
+
 	  !
 	  !LOOP INDEX VARIABLES
 	  INTEGER:: I, J, K
@@ -106,6 +114,12 @@
        !XK = SIG23*(1.D0+125.D0*EPS)**(0.1D0)
        XK = SIG23*(1.D0 + B*EPS)**(CE)       
        YLD_FN = TNORM_DEV_STRESS_PRE - XK - (2.D0*MU*DELTA_GAMMA)
+
+      ! Store diagnostic info in STATE array
+      STATE(11) = DBLE(I)
+      STATE(12) = YLD_FN
+      STATE(13) = DELTA_GAMMA
+
       IF(ABS(YLD_FN).GT. SIG23*1.0E-05) THEN
        !XKP = 12.5D0*SIG_NOT*(1.D0+125.D0*EPS)**(-0.9D0)
        XKP = B*CE*SIG_NOT*(1.D0 + B*EPS)**(CE - 1.D0)       
@@ -115,8 +129,15 @@
           IF(I.EQ.20) THEN
              !!WRITE(*,*)"TOO MANY ITERATIONS IN PlASTICITY, EQIT"
              !!PAUSE
-             CALL EXIT_PROGRAM('PLASTICITY MATERIAL MODEL DID NOT CONVERGE',0)
-             STOP
+
+            ! Store failure info for CPU-side diagnostics
+            STATE(14) = TNORM_DEV_STRESS_PRE
+            STATE(15) = XK
+
+         CALL SET_GPU_ERROR('VON_MISES_CONVERGE', 0)
+         ! Set error code 1 for convergence failure
+         GPU_ERROR_FLAG = 1
+         RETURN
           ENDIF
       ELSE  !CONVERGED
             !WRITE(*,*)"CONVERGED"
