@@ -112,24 +112,7 @@
       DOUBLE PRECISION, SAVE:: CNT_SEARCH
       
       IF (DO_INTERP) THEN
-		IF(.NOT. PERIDYNAMICS) THEN  !RKPM
-
-      !  ! CRITICAL: Ensure neighbor data is current on GPU
-      !  ! This is necessary because initial CREATE may leave data uninitialized
-      !  !$ACC UPDATE DEVICE(GN, GSTART, GSTACK, GSTACK_SHP)
-       
-      !  ! Debug: Verify neighbor data before interpolation
-      !  PRINT *, '=== NEIGHBOR DATA CHECK ==='
-      !  PRINT *, 'First 3 nodes neighbor count (GN):', GN(1:3)       
-      !  IF (GN(1) > 0) THEN
-      !      PRINT *, 'Node 1 first neighbor:', GSTACK(GSTART(1))
-      !      PRINT *, 'Node 1 first shape function:', GSTACK_SHP(GSTART(1))
-      !  END IF
-
-        !$ACC PARALLEL LOOP PRESENT(GDINC_PHY, GVEL_PHY, GACL_PHY, &
-        !$ACC&                      GSTACK_SHP, GSTACK, GSTART, GN, &
-        !$ACC&                      GDINC, GVEL, GACL) &
-        !$ACC&              PRIVATE(LSTART, M, MM, SHPT)
+		IF(.NOT. PERIDYNAMICS) THEN  !RKPM  
         DO I=1,GNUMP
 		  LSTART = GSTART(I)
           DO K = 1, 3
@@ -147,19 +130,11 @@
               GACL_PHY(M) = GACL_PHY(M) +  SHPT*GACL(MM)
             END DO 
           END DO
-        END DO	
-        !$ACC END PARALLEL LOOP
-        !$ACC UPDATE HOST(GDINC_PHY, GVEL_PHY, GACL_PHY)
+        END DO		
         ELSE  !PERIDYNAMICS
-            !$ACC PARALLEL LOOP PRESENT(GDINC_PHY, GVEL_PHY, GACL_PHY, &
-            !$ACC&                      GDINC, GVEL, GACL)
-            DO I = 1, 3*GNUMP
-                GDINC_PHY(I) = GDINC(I)
-                GVEL_PHY(I) = GVEL(I)
-                GACL_PHY(I) = GACL(I)
-            END DO
-            !$ACC END PARALLEL LOOP
-            !$ACC UPDATE HOST(GDINC_PHY, GVEL_PHY, GACL_PHY)
+            GDINC_PHY = GDINC
+            GVEL_PHY = GVEL
+            GACL_PHY = GACL
         
         ENDIF
 				
@@ -169,10 +144,8 @@
       !CALL THE NODE SEARCH ROUTINE HERE IF NEEDED
       IF ((LINIT).OR.(.NOT.LLAGRANGIAN)) THEN
       
-        DIM_NN_LIST=GNUMP*1000
-        GMAXN=GNUMP
-
-        !$ACC ENTER DATA COPYIN(DIM_NN_LIST, GMAXN)
+	  DIM_NN_LIST=GNUMP*1000            
+	  GMAXN=GNUMP    
       
       IF (LINIT) THEN
       ALLOCATE(GN(GNUMP)) 
@@ -182,15 +155,6 @@
 	  ALLOCATE(GSTACK_DSHP(3,DIM_NN_LIST))  
 	  ALLOCATE(GSTACK_DDSHP(6,DIM_NN_LIST)) 
       AlLOCATE(GINVK(3,3,GNUMP))
-
-      ! OpenACC: Create GPU data for neighbor lists
-      !
-   ! Initialize to zero to avoid accessing random values
-   GSTACK_SHP = 0.0d0
-   GSTACK_DSHP = 0.0d0
-   GSTACK_DDSHP = 0.0d0
-      !$ACC ENTER DATA CREATE(GN, GSTART, GSTACK, GSTACK_SHP, GSTACK_DSHP, GSTACK_DDSHP, GINVK)
-
 	  CNT_SEARCH = 0.0d0
       SEARCHCOUNT=PDSEARCH
       END IF
@@ -284,7 +248,7 @@
            ALLOCATE(ISPACE(GNUMP),JSPACE(GNUMP),KSPACE(GNUMP))
            ALLOCATE(NODES_IN_BIN(NBINSX*NBINSY*NBINSZ))
            ALLOCATE(NODELIST_IN_BIN(NBINSX*NBINSY*NBINSZ,MAX_NEIGH))
-           !$ACC ENTER DATA CREATE(ISPACE, JSPACE, KSPACE, NODES_IN_BIN, NODELIST_IN_BIN)		   
+		   
          END IF !(LINIT) 
          
 		 
@@ -307,11 +271,7 @@
                             NODES_IN_BIN,MAX_NEIGH,NODELIST_IN_BIN, &
                             NBINS,NBINSX,NBINSY,NBINSZ,ISPACE,JSPACE,KSPACE, &
                             GXDIST_MAX, GYDIST_MAX, GZDIST_MAX,GSM_LEN)
-
-         ! Update neighbor lists on GPU after search
-         !
-         !$ACC UPDATE DEVICE(GN, GSTART, GSTACK, GSTACK_SHP, GSTACK_DSHP, GSTACK_DDSHP)
-         !$ACC UPDATE DEVICE(DIM_NN_LIST, GMAXN)                       
+                            
                             
         !DEALLOCATE(ISPACE,JSPACE,KSPACE,NODES_IN_BIN,NODELIST_IN_BIN)       
           
@@ -333,12 +293,6 @@
                             LOCAL_DX_STRESS, LOCAL_DY_STRESS, LOCAL_DZ_STRESS, &
                             G_X_MOM, G_Y_MOM, G_Z_MOM, MODEL_BODYFORCE, GINT_WORK,DLT)              !OUTPUT
 	  ELSE
-     ! Diagnostic: Verify GDINC_TOT before GPU computation
-     IF (LINIT .OR. ITYPE_INT .EQ. 0) THEN
-         PRINT *, '=== HANDELER: GDINC_TOT CHECK ==='
-         PRINT *, 'First 3 values:', GDINC_TOT(1:3)
-         PRINT *, 'Max value:', MAXVAL(ABS(GDINC_TOT))
-     END IF
       !GET THE INTERNAL FORCE
       CALL CONSTRUCT_FINT(GWIN,    GVOL,        GNUMP,     GCOO, GCOO_CUURENT, &   !FROM MAIN
                           GSM_LEN, GSM_AREA,    GSM_VOL,   GNSNI_FAC,          &   !FROM MAIN
@@ -352,8 +306,6 @@
                           G_X_MOM, G_Y_MOM, G_Z_MOM, MODEL_BODYFORCE, GINT_WORK, MODEL_BODY_ID, GSTRAIN_EQ, DLT)              !OUTPUT
 	  END IF
 	  
-      !$ACC UPDATE DEVICE(GSTACK_SHP, GSTACK_DSHP, GSTACK_DDSHP)
-      
       END IF
       
       !UPDATE THE PHYSICAL DISPLACEMENT VALUES (?)
