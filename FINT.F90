@@ -242,7 +242,7 @@
     DOUBLE PRECISION:: ROT(6,6) !ROTATION MATRIX
     LOGICAL:: LINIT
     DOUBLE PRECISION:: FMAT(3,3), IFMAT(3,3),X_0(3),X_t(3), DX_t(3,1), PKSTRESS(3,3), TEMP_STRESS(3,3)
-    DOUBLE PRECISION, ALLOCATABLE:: FINT_TEMP(:,:,:), FEXT_TEMP(:,:,:)
+    DOUBLE PRECISION, ALLOCATABLE :: FINT_TEMP(:,:), FEXT_TEMP(:,:)
     DOUBLE PRECISION:: DET
     !DOUBLE PRECISION:: FINT_TEMP(20,3,GNUMP)
     INTEGER:: ID_RANK
@@ -1263,7 +1263,7 @@ XNORM(1:3) =0.D0
             END DO
 
              ! 使用 reduction 子句取代 atomic
-             !$ACC PARALLEL LOOP GANG VECTOR reduction(+:FINT_TEMP,FEXT_TEMP)
+             !$ACC LOOP reduction(+:FINT_TEMP,FEXT_TEMP)
              DO K = 1, 3
                  FINT_TEMP(K,JJ) = FINT_TEMP(K,JJ) + FINT3(K)*VOL*DET
                  FEXT_TEMP(K,JJ) = FEXT_TEMP(K,JJ) + FINT3_EXT(K)*VOL*DET
@@ -1382,15 +1382,15 @@ XNORM(1:3) =0.D0
                DO K = 1, 3
                    ! Use atomic operations for thread-safe updates on GPU
                    !$ACC ATOMIC UPDATE
-                   FINT_TEMP(1,K,JJ) = FINT_TEMP(1,K,JJ) + XFINT3(J,K) *VOL*DET * G_X_MOM(I)
+                   FINT_TEMP(K,JJ)   = FINT_TEMP(K,JJ)   + XFINT3(J,K) *VOL*DET * G_X_MOM(I)
                    !$ACC END ATOMIC
                    
                    !$ACC ATOMIC UPDATE
-                   FINT_TEMP(1,K,JJ) = FINT_TEMP(1,K,JJ) + YFINT3(J,K) *VOL*DET * G_Y_MOM(I)
+                   FINT_TEMP(K,JJ)   = FINT_TEMP(K,JJ)   + YFINT3(J,K) *VOL*DET * G_Y_MOM(I)
                    !$ACC END ATOMIC
                    
                    !$ACC ATOMIC UPDATE
-                   FINT_TEMP(1,K,JJ) = FINT_TEMP(1,K,JJ) + ZFINT3(J,K) *VOL*DET * G_Z_MOM(I)
+                   FINT_TEMP(K,JJ)   = FINT_TEMP(K,JJ)   + ZFINT3(J,K) *VOL*DET * G_Z_MOM(I)
                    !$ACC END ATOMIC
                END DO
 
