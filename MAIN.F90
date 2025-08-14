@@ -280,8 +280,9 @@
 
     ! OpenACC: Begin GPU data region for main time integration loop
     !
-!$ACC DATA COPYIN(                                          &!← 把 DLT 及所有初始化陣列搬到 GPU
-!$ACC&     DLT,                                             &
+!$ACC DATA COPYIN(                                          &
+!$ACC&     DLT, TIME,                                       &
+!$ACC&     FIXITY2_STEPS, FIXITY2_TIME, FIXITY2_NONZERO_EBC, &
 !$ACC&     LOCAL_COO, LOCAL_COO_CURRENT, LOCAL_MASS,       &
 !$ACC&     LOCAL_EBC, LOCAL_NONZERO_EBC, LOCAL_EBC_NODES,   &
 !$ACC&     LOCAL_SM_LEN, LOCAL_SM_AREA, LOCAL_SM_VOL,       &
@@ -638,6 +639,16 @@ END IF
         ! Check for GPU errors
         CALL CHECK_GPU_ERROR()
 
+       ! CRITICAL: Sync forces computed on CPU to GPU before boundary conditions
+       !$ACC UPDATE DEVICE(LOCAL_FINT, LOCAL_FEXT)
+       
+       ! Debug: Verify forces are non-zero
+       IF (STEPS .LE. 2) THEN
+           PRINT *, '=== FORCE CHECK after HANDELER ==='
+           PRINT *, 'LOCAL_FINT(1:3):', LOCAL_FINT(1:3)
+           PRINT *, 'Max |FINT|:', MAXVAL(ABS(LOCAL_FINT))
+       END IF
+
         !
         ! GET THE INTERNAL FORCE SUFFICIENT FOR CONTINUEING ONTO TIME INTEGRATION
         !(INTERNAL FORCE FOR LOCALLY OWNED NODES)
@@ -647,6 +658,8 @@ END IF
         !
         CALL ASSEMBLER(LOCAL_NUMP,LOCAL_FINT,HPC_SCHEME)
         !LOCAL_FINT = 0.D0 !TEMP FOR TESTING ROTATION
+
+        
         IF (AUTO_TS) DLT = LOCAL_DLT
         
         IF (PDSTIME.NE.0.0D0) PDSEARCH=CEILING(PDSTIME/DLT) 
@@ -662,10 +675,21 @@ END IF
            END DO
        END IF
 
-        DO I=1,LOCAL_NUMP
+        ! Initialize TOTAL_FORCE on GPU
+        !$ACC PARALLEL LOOP COLLAPSE(2) PRESENT(TOTAL_FORCE) PRIVATE(J,ITEMP)
+        DO J = 1, 3
+            DO ITEMP = 1, 2
+                TOTAL_FORCE(J,ITEMP) = 0.0d0
+            END DO
+        END DO
+        !$ACC END PARALLEL LOOP
 
-            ! Note: This loop contains reductions (TOTAL_FORCE)
-            ! Will be handled in Step 3 with proper reduction clauses
+        ! Apply boundary conditions and compute forces
+        !$ACC PARALLEL LOOP PRESENT(LOCAL_EBC, LOCAL_VEL, LOCAL_ACL, LOCAL_PRFORCE, &
+        !$ACC&                      LOCAL_FINT, LOCAL_FEXT, LOCAL_PROP, LOCAL_MASS, &
+        !$ACC&                      LOCAL_BODY_ID, TOTAL_FORCE, DLT) &
+        !$ACC&              PRIVATE(J, M, MPDC)
+        DO I=1,LOCAL_NUMP
 
             DO J=1,3
 
@@ -682,6 +706,7 @@ END IF
 
                 ELSEIF (LOCAL_EBC(J,I).EQ.2) THEN !NON-ZERO ESSENTIAL BC
 
+                    STEP_NUM = 0
                     ! FIND WHICH TIME_DURATION THE CURRENT TIME FALL INTO
                     DO I_STEP = 1, FIXITY2_STEPS
                         IF (FIXITY2_TIME(I_STEP,1) .LT. TIME .AND. TIME .LT. FIXITY2_TIME(I_STEP,2)) THEN
@@ -697,8 +722,6 @@ END IF
                         LOCAL_VEL(M) = 0.0d0
                     END IF
 
-                    STEP_NUM = 0 ! REINITIALIZE
-
                     LOCAL_ACL(M) = 0.0d0
 
                     LOCAL_PRFORCE(J,I) = - LOCAL_FINT(M)
@@ -707,10 +730,10 @@ END IF
 
                 ELSE   !FREE
 
-				MPDC = LOCAL_PROP(21,I)*LOCAL_MASS(M) !MASS PROPORTIAL DAMPING MATRIX (DIAG)
+                    MPDC = LOCAL_PROP(21,I)*LOCAL_MASS(M) !MASS PROPORTIAL DAMPING MATRIX (DIAG)
 				
                     LOCAL_ACL(M) = (LOCAL_FEXT(M) - LOCAL_FINT(M) - MPDC*LOCAL_VEL(M))/ &
-					(LOCAL_MASS(M)+0.5d0*DLT*MPDC)
+                                  (LOCAL_MASS(M)+0.5d0*DLT*MPDC)
 					
                     LOCAL_VEL(M) = LOCAL_VEL(M) + 0.5d0*DLT*LOCAL_ACL(M)
 
@@ -718,22 +741,26 @@ END IF
 
                 END IF
 
-               ! Debug: Check forces for first few nodes
-               IF (I .LE. 3 .AND. STEPS .LE. 2) THEN
-                   IF (J .EQ. 1) THEN
-                       PRINT '(A,I3,A)', '=== Node ', I, ' forces ==='
-                       PRINT *, '  EBC:', LOCAL_EBC(:,I)
-                       PRINT *, '  FINT:', LOCAL_FINT((I-1)*3+1:I*3)
-                       PRINT *, '  FEXT:', LOCAL_FEXT((I-1)*3+1:I*3)
-                       PRINT *, '  Mass:', LOCAL_MASS((I-1)*3+1:I*3)
-                       PRINT *, '  Accel:', LOCAL_ACL((I-1)*3+1:I*3)
-                   END IF
-               END IF
-
-            TOTAL_FORCE(J,LOCAL_BODY_ID(I))=TOTAL_FORCE(J,LOCAL_BODY_ID(I))+LOCAL_PRFORCE(J,I)
+                ! Use atomic for array reduction with dynamic index
+                !$ACC ATOMIC UPDATE
+                TOTAL_FORCE(J,LOCAL_BODY_ID(I)) = TOTAL_FORCE(J,LOCAL_BODY_ID(I)) + LOCAL_PRFORCE(J,I)
+                !$ACC END ATOMIC
 
             END DO
         END DO
+        !$ACC END PARALLEL LOOP
+       ! Debug: Check forces for first few nodes (moved outside parallel loop)
+       IF (STEPS .LE. 2) THEN
+           !$ACC UPDATE HOST(LOCAL_FINT, LOCAL_FEXT, LOCAL_MASS, LOCAL_ACL)
+           DO I = 1, 3
+               PRINT '(A,I3,A)', '=== Node ', I, ' forces ==='
+               PRINT *, '  EBC:', LOCAL_EBC(:,I)
+               PRINT *, '  FINT:', LOCAL_FINT((I-1)*3+1:I*3)
+               PRINT *, '  FEXT:', LOCAL_FEXT((I-1)*3+1:I*3)
+               PRINT *, '  Mass:', LOCAL_MASS((I-1)*3+1:I*3)
+               PRINT *, '  Accel:', LOCAL_ACL((I-1)*3+1:I*3)
+           END DO
+       END IF
         ! Synchronize CPU updates to GPU for next iteration
         !$ACC UPDATE DEVICE(LOCAL_VEL, LOCAL_ACL)
         WRITE(122,'(E15.5,I8,3(E15.5),I8,3(E15.5))') TIME,LOCAL_BODY_ID(1), TOTAL_FORCE(1,LOCAL_BODY_ID(1)), TOTAL_FORCE(2,LOCAL_BODY_ID(1)),TOTAL_FORCE(3,LOCAL_BODY_ID(1)), LOCAL_BODY_ID(LOCAL_NUMP), TOTAL_FORCE(1,LOCAL_BODY_ID(LOCAL_NUMP)),TOTAL_FORCE(2,LOCAL_BODY_ID(LOCAL_NUMP)),TOTAL_FORCE(3,LOCAL_BODY_ID(LOCAL_NUMP))
