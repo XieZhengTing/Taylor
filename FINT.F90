@@ -235,14 +235,14 @@
     DOUBLE PRECISION:: LCOONE(3,GMAXN)  !ORIGINAL COORDINATES OF THE NEIGBORS
     DOUBLE PRECISION:: B_TEMP(3,3), B_INV_TEMP(3,3) !GC
     DOUBLE PRECISION:: STRAIN(6)       !INCREMENTALLY OBJECTIVE STRAIN
-    DOUBLE PRECISION:: ELAS_MAT(6,6)
+
     DOUBLE PRECISION:: BMAT(6,3)
     DOUBLE PRECISION:: BMAT_T(3,6)
     DOUBLE PRECISION:: FINT3(3),FINT3_EXT(3),INVK(3,3)
     DOUBLE PRECISION:: ROT(6,6) !ROTATION MATRIX
     LOGICAL:: LINIT
     DOUBLE PRECISION:: FMAT(3,3), IFMAT(3,3),X_0(3),X_t(3), DX_t(3,1), PKSTRESS(3,3), TEMP_STRESS(3,3)
-    DOUBLE PRECISION, ALLOCATABLE :: FINT_TEMP(:,:), FEXT_TEMP(:,:)
+    DOUBLE PRECISION, ALLOCATABLE:: FINT_TEMP(:,:,:), FEXT_TEMP(:,:,:)
     DOUBLE PRECISION:: DET
     !DOUBLE PRECISION:: FINT_TEMP(20,3,GNUMP)
     INTEGER:: ID_RANK
@@ -320,9 +320,9 @@
     !REDUCTION(+:FINT)
     !
     ! Simplify to single accumulator per node
- ALLOCATE(FINT_TEMP(3,GNUMP))
+ ALLOCATE(FINT_TEMP(1,3,GNUMP))
  FINT_TEMP = 0.D0
- ALLOCATE(FEXT_TEMP(3,GNUMP))
+ ALLOCATE(FEXT_TEMP(1,3,GNUMP))
  FEXT_TEMP = 0.D0
 
     ALLOCATE(GINT_WORK_TEMP(NCORES_INPUT))
@@ -346,6 +346,10 @@
     !$ACC ENTER DATA COPYIN(RK_DEGREE, RK_PSIZE, RK_CONT, RK_IMPL, &
     !$ACC&                     LLAGRANGIAN, QL, QL_COEF, QL_LEN, SHSUP, &
     !$ACC&                     ITYPE_INT, IGRAVITY)
+
+   ! Create state arrays on GPU before trying to update them
+   !$ACC ENTER DATA COPYIN(GSTATE, GSTRESS, GSTRAIN, GSTRAIN_EQ)
+   !$ACC ENTER DATA COPYIN(LOCAL_DX_STRESS, LOCAL_DY_STRESS, LOCAL_DZ_STRESS)
 
    ! Ensure GDINC_TOT is present on GPU
    !$ACC DATA PRESENT(GDINC_TOT)
@@ -374,7 +378,7 @@
     !$ACC&                LGHOST, LVOL, LPROP, LMAT_TYPE, LOCAL_BODY_ID, SELF_EBC, &
     !$ACC&                LSTRESS, LSTRAIN, LSTATE, LSTACK, LDINC, LDINC_TOT, &
     !$ACC&                LCOO_CUURENT, LCOONE, SHP, SHPD, SHPDTMP, FMAT, IFMAT, &
-    !$ACC&                DET, LMAT, STRAIN, ELAS_MAT, LSTRESS_PREDICTOR, &
+    !$ACC&                DET, LMAT, STRAIN, LSTRESS_PREDICTOR, &
     !$ACC&                ROT, D, STRESS_INC, STRAIN_INC, POISS, YOUNG, BULK, SHEAR, &
     !$ACC&                DENSITY, PMOD, BMAT, BMAT_T, FINT3, FINT3_EXT, &
     !$ACC&                FBOD, FGRAV, LBOD, MAG_FINT, ID_RANK, &
@@ -937,8 +941,7 @@
         !
         ! ELASTIC PREDICTOR
         !
-        ELAS_MAT = FORM_CMAT(LPROP)
-        LSTRESS_PREDICTOR = LSTRESS + MATMUL(ELAS_MAT,STRAIN)
+        LSTRESS_PREDICTOR = LSTRESS + MATMUL(FORM_CMAT(LPROP), STRAIN)
         !
        ! Store stress magnitude for diagnostics (no PRINT in GPU kernel)
        IF (I .LE. 5) THEN
@@ -1262,12 +1265,18 @@ XNORM(1:3) =0.D0
                 MAG_FINT = MAG_FINT + FINT3(K)**2
             END DO
 
-             ! 使用 reduction 子句取代 atomic
-             !$ACC LOOP reduction(+:FINT_TEMP,FEXT_TEMP)
-             DO K = 1, 3
-                 FINT_TEMP(K,JJ) = FINT_TEMP(K,JJ) + FINT3(K)*VOL*DET
-                 FEXT_TEMP(K,JJ) = FEXT_TEMP(K,JJ) + FINT3_EXT(K)*VOL*DET
-             END DO
+            DO K = 1, 3
+
+
+               ! Use atomic operations to avoid race conditions
+ !$ACC ATOMIC UPDATE
+ FINT_TEMP(1,K,JJ) = FINT_TEMP(1,K,JJ) + FINT3(K)*VOL*DET
+ !$ACC END ATOMIC
+ 
+ !$ACC ATOMIC UPDATE
+ FEXT_TEMP(1,K,JJ) = FEXT_TEMP(1,K,JJ) + FINT3_EXT(K)*VOL*DET
+ !$ACC END ATOMIC
+            END DO
 
         END DO !ASSEMBLE FINT FOR STANDARD NODAL INTEGRATION PART
 
@@ -1382,15 +1391,15 @@ XNORM(1:3) =0.D0
                DO K = 1, 3
                    ! Use atomic operations for thread-safe updates on GPU
                    !$ACC ATOMIC UPDATE
-                   FINT_TEMP(K,JJ)   = FINT_TEMP(K,JJ)   + XFINT3(J,K) *VOL*DET * G_X_MOM(I)
+                   FINT_TEMP(1,K,JJ) = FINT_TEMP(1,K,JJ) + XFINT3(J,K) *VOL*DET * G_X_MOM(I)
                    !$ACC END ATOMIC
                    
                    !$ACC ATOMIC UPDATE
-                   FINT_TEMP(K,JJ)   = FINT_TEMP(K,JJ)   + YFINT3(J,K) *VOL*DET * G_Y_MOM(I)
+                   FINT_TEMP(1,K,JJ) = FINT_TEMP(1,K,JJ) + YFINT3(J,K) *VOL*DET * G_Y_MOM(I)
                    !$ACC END ATOMIC
                    
                    !$ACC ATOMIC UPDATE
-                   FINT_TEMP(K,JJ)   = FINT_TEMP(K,JJ)   + ZFINT3(J,K) *VOL*DET * G_Z_MOM(I)
+                   FINT_TEMP(1,K,JJ) = FINT_TEMP(1,K,JJ) + ZFINT3(J,K) *VOL*DET * G_Z_MOM(I)
                    !$ACC END ATOMIC
                END DO
 
@@ -1455,15 +1464,16 @@ XNORM(1:3) =0.D0
     !
     !$OMP PARALLEL PRIVATE(I,K,ID_RANK) SHARED(FINT_TEMP,FEXT_TEMP,NCORES_INPUT,GINT_WORK_TEMP)
     !$OMP DO
-    DO I = 1, GNUMP
-        DO K = 1, 3
-         FINT((I-1)*3+K) = FINT_TEMP(K,I)
-         FEXT((I-1)*3+K) = FEXT_TEMP(K,I)
-        END DO
-    END DO
+ DO I = 1, GNUMP
+     DO K = 1, 3
+         FINT((I-1)*3+K) = FINT_TEMP(1,K,I)
+         FEXT((I-1)*3+K) = FEXT_TEMP(1,K,I)
+     END DO
+ END DO
     !$OMP END DO
     !$OMP END PARALLEL
 
+ !$ACC UPDATE DEVICE(FINT,FEXT)
 
 !    IF (AUTO_TS) THEN
         !DO TIME STEP CALCS
