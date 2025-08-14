@@ -359,7 +359,9 @@
         
     ! CRITICAL: Always sync state variables to GPU before material calculations
     !$ACC UPDATE DEVICE(GSTATE, GSTRESS, GSTRAIN)	
-		
+   ! CRITICAL: Sync material properties and time step to GPU
+   !$ACC UPDATE DEVICE(GPROP, GDINC, GDINC_TOT, GMAT_TYPE, DLT)	
+
     !$ACC PARALLEL LOOP GANG VECTOR COPYIN(LINIT, LFINITE_STRAIN) &
     !$ACC&                          PRESENT(GCOO, GCOO_CUURENT, GWIN, GSM_LEN, GSM_VOL, GSM_AREA, GN, GSTART, &
     !$ACC&                                  DIM_NN_LIST, GSTACK, GSTACK_SHP, GSTACK_DSHP, GSTACK_DDSHP, GINVK, &
@@ -939,7 +941,7 @@
              CALL HYPERELASTIC(LPROP,LSTRESS,FMAT,LSTRAIN)
         ELSE
             CALL CONSTITUTION(LSTRESS_PREDICTOR,LMAT_TYPE, LSTRAIN, STRAIN, LPROP, DLT, FMAT, & !IN
-        LSTATE, LSTRESS, L_H_STRESS, L_S_STRESS) !IN/OUT, OUT
+        LSTATE, LSTRESS, L_S_STRESS, L_H_STRESS) !IN/OUT, OUT
         END IF
         !
         ! ********** SAVE STATE AND FEILD VARIABLES **********
@@ -1384,6 +1386,9 @@ XNORM(1:3) =0.D0
    
    ! Also sync other important arrays computed on GPU
    !$ACC UPDATE HOST(GSTRESS, GSTRAIN, GSTATE, GSTRAIN_EQ)
+
+  ! Sync material properties if modified on GPU
+  !$ACC UPDATE HOST(GPROP)
 
    ! Print diagnostic info from GPU computation
    IF (LINIT) THEN

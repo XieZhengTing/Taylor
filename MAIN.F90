@@ -287,7 +287,8 @@
 !$ACC&     LOCAL_EBC, LOCAL_NONZERO_EBC, LOCAL_EBC_NODES,   &
 !$ACC&     LOCAL_SM_LEN, LOCAL_SM_AREA, LOCAL_SM_VOL,       &
 !$ACC&     LOCAL_WIN, LOCAL_VOL, LOCAL_NSNI_FAC,           &
-!$ACC&     LOCAL_MAT_TYPE, LOCAL_PROP, LOCAL_BODY_ID,       &
+!$ACC&     LOCAL_MAT_TYPE, LOCAL_BODY_ID,                  &
+!$ACC&     LOCAL_PROP,                                     &
 !$ACC&     LOCAL_CHAR_DIST, LOCAL_WAVE_VEL,                &
 !$ACC&     MODEL_BODYFORCE,                                &
 !$ACC&     LINIT,                                         &
@@ -660,9 +661,12 @@ END IF
         !LOCAL_FINT = 0.D0 !TEMP FOR TESTING ROTATION
 
         
-        IF (AUTO_TS) DLT = LOCAL_DLT
+        IF (AUTO_TS) THEN
+            DLT = LOCAL_DLT
+           !$ACC UPDATE DEVICE(DLT)
+        END IF
         
-        IF (PDSTIME.NE.0.0D0) PDSEARCH=CEILING(PDSTIME/DLT) 
+        IF (PDSTIME.NE.0.0D0) PDSEARCH=CEILING(PDSTIME/DLT)
 
        ! Final check before boundary enforcement
        IF (STEPS .LE. 2) THEN
