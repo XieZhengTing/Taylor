@@ -1262,17 +1262,12 @@ XNORM(1:3) =0.D0
                 MAG_FINT = MAG_FINT + FINT3(K)**2
             END DO
 
-            DO K = 1, 3
-
-
-               ! Use atomic operations to avoid race conditions
- ! 使用 reduction 子句取代 atomic
- ! 在 PARALLEL LOOP 開頭加入 reduction
- !$ACC PARALLEL LOOP GANG VECTOR reduction(+:FINT_TEMP,FEXT_TEMP) &
- ! 移除 ATOMIC，直接累加
- FINT_TEMP(K,JJ) = FINT_TEMP(K,JJ) + FINT3(K)*VOL*DET
- FEXT_TEMP(K,JJ) = FEXT_TEMP(K,JJ) + FINT3_EXT(K)*VOL*DET
-            END DO
+             ! 使用 reduction 子句取代 atomic
+             !$ACC PARALLEL LOOP GANG VECTOR reduction(+:FINT_TEMP,FEXT_TEMP)
+             DO K = 1, 3
+                 FINT_TEMP(K,JJ) = FINT_TEMP(K,JJ) + FINT3(K)*VOL*DET
+                 FEXT_TEMP(K,JJ) = FEXT_TEMP(K,JJ) + FINT3_EXT(K)*VOL*DET
+             END DO
 
         END DO !ASSEMBLE FINT FOR STANDARD NODAL INTEGRATION PART
 
