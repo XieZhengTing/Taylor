@@ -320,11 +320,10 @@
     !REDUCTION(+:FINT)
     !
     ! Simplify to single accumulator per node
-    ALLOCATE(FINT_TEMP(1,3,GNUMP))
-    FINT_TEMP = 0.D0
-
-    ALLOCATE(FEXT_TEMP(1,3,GNUMP))
-    FEXT_TEMP = 0.D0
+ ALLOCATE(FINT_TEMP(3,GNUMP))
+ FINT_TEMP = 0.D0
+ ALLOCATE(FEXT_TEMP(3,GNUMP))
+ FEXT_TEMP = 0.D0
 
     ALLOCATE(GINT_WORK_TEMP(NCORES_INPUT))
       GINT_WORK_TEMP = 0.0d0
@@ -1267,13 +1266,12 @@ XNORM(1:3) =0.D0
 
 
                ! Use atomic operations to avoid race conditions
-               !$ACC ATOMIC UPDATE
-               FINT_TEMP(1,K,JJ) = FINT_TEMP(1,K,JJ) + FINT3(K)*VOL*DET
-               !$ACC END ATOMIC
-               
-               !$ACC ATOMIC UPDATE
-               FEXT_TEMP(1,K,JJ) = FEXT_TEMP(1,K,JJ) + FINT3_EXT(K)*VOL*DET
-               !$ACC END ATOMIC
+ ! 使用 reduction 子句取代 atomic
+ ! 在 PARALLEL LOOP 開頭加入 reduction
+ !$ACC PARALLEL LOOP GANG VECTOR reduction(+:FINT_TEMP,FEXT_TEMP) &
+ ! 移除 ATOMIC，直接累加
+ FINT_TEMP(K,JJ) = FINT_TEMP(K,JJ) + FINT3(K)*VOL*DET
+ FEXT_TEMP(K,JJ) = FEXT_TEMP(K,JJ) + FINT3_EXT(K)*VOL*DET
             END DO
 
         END DO !ASSEMBLE FINT FOR STANDARD NODAL INTEGRATION PART
@@ -1464,8 +1462,8 @@ XNORM(1:3) =0.D0
     !$OMP DO
     DO I = 1, GNUMP
         DO K = 1, 3
-            FINT((I-1)*3+K) =  FINT_TEMP(1,K,I)
-            FEXT((I-1)*3+K) =  FEXT_TEMP(1,K,I)
+         FINT((I-1)*3+K) = FINT_TEMP(K,I)
+         FEXT((I-1)*3+K) = FEXT_TEMP(K,I)
         END DO
     END DO
     !$OMP END DO
