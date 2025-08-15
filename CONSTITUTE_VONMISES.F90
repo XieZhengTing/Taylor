@@ -41,10 +41,7 @@
      ! STATE(11) = final iteration count
      ! STATE(12) = final YLD_FN value
      ! STATE(13) = final DELTA_GAMMA
-    ! STATE(14) = TNORM_DEV_STRESS_PRE (for debugging)
-    ! STATE(15) = XK (yield stress for debugging)
-    ! STATE(16) = SIG_NOT (initial yield stress)
-    ! STATE(17) = Material parameters validity flag
+
 	  !
 	  !LOOP INDEX VARIABLES
 	  INTEGER:: I, J, K
@@ -60,12 +57,9 @@
       DOUBLE PRECISION:: EFF_STRESS_PREDICT(6), DEV_STRESS_PRE(6)
 	  DOUBLE PRECISION:: DELTA_GAMMA, SIG_NOT, SIG23, TNORM_DEV_STRESS_PRE, YLD_FN
 	  DOUBLE PRECISION:: DYLD_FN,XK,XKP,EPST,B,CE
-	  DOUBLE PRECISION:: TOL  ! Adaptive tolerance for convergence
 	  !
 	  !
 	  !
-     ! Initialize diagnostic state variables to avoid contamination
-     STATE(11:17) = 0.0D0
 	  ! ASSIGN PROPERTY VARIABLES
 	  !
 	  POISS = PROPS(1)
@@ -77,16 +71,7 @@
       !TESTING: HARDCODE SOME PARAMETERS
       !SIG_NOT=2.70000E+02
       
-     ! Validate material parameters
-     IF (SIG_NOT .LE. 0.0D0 .OR. B .LE. 0.0D0 .OR. CE .LE. 0.0D0) THEN
-         ! Store invalid parameters for debugging
-         STATE(16) = SIG_NOT
-         STATE(17) = -1.0D0  ! Flag for invalid parameters
-         CALL SET_GPU_ERROR('VON_MISES_INVALID_PARAMS', 3)
-         ! Use elastic response as fallback
-         STRESS = STRESS_PREDICT
-         RETURN
-     END IF
+
       
 	  !
 	  ! ASSIGN STATE VARIABLES
@@ -116,14 +101,6 @@
       !XK = SIG23*(1.D0+125.D0*EPS)**(0.1D0)
       XK = SIG23*(1.D0 + B*EPS)**(CE)     
 	  !
-     ! Check for reasonable stress values
-     IF (TNORM_DEV_STRESS_PRE .GT. 1.0D10) THEN
-         ! Unreasonably large stress - likely numerical error
-         STATE(17) = -2.0D0  ! Flag for numerical overflow
-         STRESS = STRESS_PREDICT * 0.5D0  ! Scale down
-         RETURN
-     END IF
-
 	  YLD_FN =  TNORM_DEV_STRESS_PRE - XK
 	  !
 	  ! MAP BACK TO THE YEILD SURFACE (PURFECT PLASTICITY, FOR NOW)
@@ -133,9 +110,6 @@
       !PERFORM NEWTON ITERATION
       DELTA_GAMMA = 0.D0
       EPST = EPS
-     ! Use adaptive tolerance based on stress magnitude
-     TOL = MAX(SIG23*1.0D-05, 1.0D-10*TNORM_DEV_STRESS_PRE)
-
       DO I = 1,20  !MAX ITERATE 20 TIMES
        !XK = SIG23*(1.D0+125.D0*EPS)**(0.1D0)
        XK = SIG23*(1.D0 + B*EPS)**(CE)       
@@ -146,14 +120,9 @@
       STATE(12) = YLD_FN
       STATE(13) = DELTA_GAMMA
 
-      IF(ABS(YLD_FN).GT. TOL) THEN
+      IF(ABS(YLD_FN).GT. SIG23*1.0E-05) THEN
        !XKP = 12.5D0*SIG_NOT*(1.D0+125.D0*EPS)**(-0.9D0)
        XKP = B*CE*SIG_NOT*(1.D0 + B*EPS)**(CE - 1.D0)       
-      ! Check for valid derivative
-      IF (ABS(XKP) .LT. 1.0D-20) THEN
-          XKP = 1.0D-20  ! Prevent division by zero
-      END IF
-
        DYLD_FN = -2.D0*MU*(1.D0 + XKP/3.D0/MU)         
        DELTA_GAMMA = DELTA_GAMMA - YLD_FN/DYLD_FN
        !WRITE(*,*)"ITEGRATION:", I, YLD_FN
@@ -165,18 +134,9 @@
             STATE(14) = TNORM_DEV_STRESS_PRE
             STATE(15) = XK
 
-           STATE(16) = SIG_NOT
-           STATE(17) = DBLE(I)  ! Store actual iteration count
-
          CALL SET_GPU_ERROR('VON_MISES_CONVERGE', 0)
          ! Set error code 1 for convergence failure
          GPU_ERROR_FLAG = 1
-
-        ! Use elastic predictor as fallback instead of unconverged state
-        STRESS = STRESS_PREDICT
-        ! Don't update plastic strain if not converged
-        ! STATE(3) remains unchanged
-
          RETURN
           ENDIF
       ELSE  !CONVERGED
