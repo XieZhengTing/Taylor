@@ -541,6 +541,16 @@
                         QL, QL_COEF,QL_LEN, &
                         SHP, SHPD, SHSUP)
                     
+         ! Semi-Lagrangian: Store shape functions for next interpolation
+         IF (.NOT.LINIT) THEN
+             DO J = 1, LN
+                 GSTACK_SHP(LSTART+J-1) = SHP(J)
+                 GSTACK_DSHP(1,LSTART+J-1) = SHPD(1,J)
+                 GSTACK_DSHP(2,LSTART+J-1) = SHPD(2,J)
+                 GSTACK_DSHP(3,LSTART+J-1) = SHPD(3,J)
+             END DO
+         END IF
+
                     ! CALCULATE THE DEFORMATION GRADIENT
                     B_TEMP = 0.D0
                     DO K = 1, 3
@@ -1379,8 +1389,10 @@ XNORM(1:3) =0.D0
     ! CRITICAL FIX: Copy GPU results back to host for reduction
     !$ACC UPDATE HOST(FINT_TEMP, FEXT_TEMP, GINT_WORK_TEMP)
 
-   ! Synchronize shape functions from GPU to CPU after GPU computation
+ ! Semi-Lagrangian: Sync shape functions for next interpolation
+ IF (.NOT.LLAGRANGIAN) THEN
    !$ACC UPDATE HOST(GSTACK_SHP, GSTACK_DSHP, GSTACK_DDSHP)
+ END IF
    
    ! Also sync other important arrays computed on GPU
    !$ACC UPDATE HOST(GSTRESS, GSTRAIN, GSTATE, GSTRAIN_EQ)

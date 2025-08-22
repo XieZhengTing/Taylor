@@ -113,7 +113,8 @@
       
       IF (DO_INTERP) THEN
 		IF(.NOT. PERIDYNAMICS) THEN  !RKPM
-
+     ! Ensure neighbor data is on GPU before interpolation
+     !$ACC UPDATE DEVICE(GN, GSTART, GSTACK, GSTACK_SHP) IF(.NOT.LINIT)
       !  ! CRITICAL: Ensure neighbor data is current on GPU
       !  ! This is necessary because initial CREATE may leave data uninitialized
       !  !$ACC UPDATE DEVICE(GN, GSTART, GSTACK, GSTACK_SHP)
@@ -149,6 +150,7 @@
           END DO
         END DO	
         !$ACC END PARALLEL LOOP
+     !$ACC WAIT  ! Ensure computation completes before sync
         !$ACC UPDATE HOST(GDINC_PHY, GVEL_PHY, GACL_PHY)
         ELSE  !PERIDYNAMICS
             !$ACC PARALLEL LOOP PRESENT(GDINC_PHY, GVEL_PHY, GACL_PHY, &
@@ -308,10 +310,16 @@
                             NBINS,NBINSX,NBINSY,NBINSZ,ISPACE,JSPACE,KSPACE, &
                             GXDIST_MAX, GYDIST_MAX, GZDIST_MAX,GSM_LEN)
 
-         ! Update neighbor lists on GPU after search
-         !
-         !$ACC UPDATE DEVICE(GN, GSTART, GSTACK, GSTACK_SHP, GSTACK_DSHP, GSTACK_DDSHP)
-         !$ACC UPDATE DEVICE(DIM_NN_LIST, GMAXN)                       
+ ! Semi-Lagrangian: Always update neighbor data after search
+ IF (.NOT.LLAGRANGIAN) THEN
+   !$ACC UPDATE DEVICE(GN, GSTART, GSTACK)
+   ! Shape functions will be computed in CONSTRUCT_FINT
+   !$ACC UPDATE DEVICE(GSTACK_SHP, GSTACK_DSHP, GSTACK_DDSHP) IF(.FALSE.)
+ ELSE
+   ! Lagrangian: Update all neighbor data once
+   !$ACC UPDATE DEVICE(GN, GSTART, GSTACK, GSTACK_SHP, GSTACK_DSHP, GSTACK_DDSHP)
+ END IF
+ !$ACC UPDATE DEVICE(DIM_NN_LIST, GMAXN)                    
                             
         !DEALLOCATE(ISPACE,JSPACE,KSPACE,NODES_IN_BIN,NODELIST_IN_BIN)       
           
