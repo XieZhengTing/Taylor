@@ -390,6 +390,11 @@
     !
     ! START TIME INTEGRATION
     !
+     PRINT *, 'GN(1:5)=', GN(1:5)
+     PRINT *, 'GSTACK_SHP(1:10)=', GSTACK_SHP(1:10)
+     PRINT *, 'First node stress=', GSTRESS(:,1)
+     PRINT *, 'LMAT(1)=', LMAT(1,1)
+
     CALL WRITE_OUT('STARTING TIME INTEGRATION')
     !
 
@@ -464,6 +469,12 @@
 				LOCAL_IJKSPC)
         ! Check for GPU errors
         CALL CHECK_GPU_ERROR()
+        ! Debug: Verify shape functions are stored
+        IF (LINIT) THEN
+            PRINT *, '=== AFTER INITIAL HANDELER ==='
+            PRINT *, 'LINIT is still:', LINIT
+            PRINT *, 'LLAGRANGIAN:', LLAGRANGIAN
+        END IF
            LINIT = .FALSE.  !SET IT TO FALSE AFTER THE SHP/DSHP COMPUTATION
            !$ACC UPDATE DEVICE(LINIT)
         ENDIF

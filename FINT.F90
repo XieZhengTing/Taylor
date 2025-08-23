@@ -359,7 +359,7 @@
         
     ! CRITICAL: Always sync state variables to GPU before material calculations
     !$ACC UPDATE DEVICE(GSTATE, GSTRESS, GSTRAIN)	
-		
+
     !$ACC PARALLEL LOOP GANG VECTOR COPYIN(LINIT, LFINITE_STRAIN) &
     !$ACC&                          PRESENT(GCOO, GCOO_CUURENT, GWIN, GSM_LEN, GSM_VOL, GSM_AREA, GN, GSTART, &
     !$ACC&                                  DIM_NN_LIST, GSTACK, GSTACK_SHP, GSTACK_DSHP, GSTACK_DDSHP, GINVK, &
@@ -534,6 +534,15 @@
                     CALL RK1(LCOO, RK_DEGREE, RK_PSIZE, RK_CONT, RK_IMPL,GCOO, GWIN, GNUMP, LSTACK, LN, GMAXN, GEBC_NODES,SELF_EBC, &
                         QL, QL_COEF,QL_LEN, &
                         SHP, SHPD,SHSUP)
+
+                    ! Store shape functions for Lagrangian mode
+                    DO J = 1, LN
+                        GSTACK_SHP(LSTART+J-1) = SHP(J)
+                        GSTACK_DSHP(1,LSTART+J-1) = SHPD(1,J)
+                        GSTACK_DSHP(2,LSTART+J-1) = SHPD(2,J)
+                        GSTACK_DSHP(3,LSTART+J-1) = SHPD(3,J)
+                    END DO
+
 
 
                 ELSE !GCOO_CUURENT
@@ -1384,6 +1393,7 @@ XNORM(1:3) =0.D0
    
    ! Also sync other important arrays computed on GPU
    !$ACC UPDATE HOST(GSTRESS, GSTRAIN, GSTATE, GSTRAIN_EQ)
+
 
    ! Print diagnostic info from GPU computation
    IF (LINIT) THEN
