@@ -41,11 +41,11 @@ Taylor_bar.k
 
 *INTEGRATION PARAMETERS
 #TYPE (0 = DNI, 1 = SNNI, 2 = NSNI)
-0
+1
 
 *FORMULATION PARAMETERS
 # IFINITE_STRAIN, ILAGRANGIAN
-   1                0  
+   1                1  
 
 ####### SET NAMES #######
 

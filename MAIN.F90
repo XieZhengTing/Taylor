@@ -280,16 +280,16 @@
 
     ! OpenACC: Begin GPU data region for main time integration loop
     !
-!$ACC DATA COPYIN(                                         &!← 把 DLT 及所有初始化陣列搬到 GPU
-!$ACC&     DLT,                                            &
+!$ACC DATA COPYIN(                                          &!← 把 DLT 及所有初始化陣列搬到 GPU
+!$ACC&     DLT,                                             &
 !$ACC&     LOCAL_COO, LOCAL_COO_CURRENT, LOCAL_MASS,       &
-!$ACC&     LOCAL_EBC, LOCAL_NONZERO_EBC, LOCAL_EBC_NODES,  &
-!$ACC&     LOCAL_SM_LEN, LOCAL_SM_AREA, LOCAL_SM_VOL,      &
+!$ACC&     LOCAL_EBC, LOCAL_NONZERO_EBC, LOCAL_EBC_NODES,   &
+!$ACC&     LOCAL_SM_LEN, LOCAL_SM_AREA, LOCAL_SM_VOL,       &
 !$ACC&     LOCAL_WIN, LOCAL_VOL, LOCAL_NSNI_FAC,           &
-!$ACC&     LOCAL_MAT_TYPE, LOCAL_PROP, LOCAL_BODY_ID,      &
+!$ACC&     LOCAL_MAT_TYPE, LOCAL_PROP, LOCAL_BODY_ID,       &
 !$ACC&     LOCAL_CHAR_DIST, LOCAL_WAVE_VEL,                &
 !$ACC&     MODEL_BODYFORCE,                                &
-!$ACC&     LINIT, LLAGRANGIAN,                             &
+!$ACC&     LINIT,                                         &
 !$ACC&     LOCAL_X_MOM, LOCAL_Y_MOM, LOCAL_Z_MOM,          &
 !$ACC&     LFINITE_STRAIN, LLAGRANGIAN,                    &
 !$ACC&     MODEL_ELCON, MODEL_NUMEL,                       &
@@ -511,6 +511,7 @@
  GVEL = LOCAL_VEL  
  GACL = LOCAL_ACL
  
+ ! Ensure these arrays are synchronized to GPU before interpolation
  !$ACC UPDATE DEVICE(GDINC, GVEL, GACL, LOCAL_DSP_TOT)
 
 ! Diagnostic: Verify displacement data
@@ -576,18 +577,8 @@ END IF
         END DO
         !$ACC END PARALLEL LOOP
 
- ! Semi-Lagrangian: Coordinates stay on GPU for shape function calculation
- ! Since LOCAL_COO_CURRENT is in COPY clause, it will be synced automatically
- ! Only force sync when needed for output or debugging
- IF (.NOT.LLAGRANGIAN) THEN
-   ! For Semi-Lagrangian, minimize host updates
-   IF (MOD(STEPS, INT(TIME_OUTPUT/DLT)).EQ.0 .OR. TIME.GE.TIME_END) THEN
-     !$ACC UPDATE HOST(LOCAL_COO_CURRENT)
-   END IF
- ELSE
-   ! For Lagrangian, sync normally
-   !$ACC UPDATE HOST(LOCAL_COO_CURRENT)
- END IF
+        ! Sync updated coordinates back to host
+        !$ACC UPDATE HOST(LOCAL_COO_CURRENT)
 
  ! Debug: Verify coordinate update
  IF (MOD(STEPS, 16) .EQ. 0) THEN
