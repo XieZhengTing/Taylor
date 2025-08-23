@@ -542,7 +542,7 @@
                         GSTACK_DSHP(2,LSTART+J-1) = SHPD(2,J)
                         GSTACK_DSHP(3,LSTART+J-1) = SHPD(3,J)
                     END DO
-
+                   !$ACC UPDATE DEVICE(GSTACK_SHP, GSTACK_DSHP)
 
 
                 ELSE !GCOO_CUURENT
