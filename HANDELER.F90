@@ -116,8 +116,14 @@
 
        ! CRITICAL: Ensure neighbor data is current on GPU
        ! This is necessary because initial CREATE may leave data uninitialized
-       !$ACC UPDATE DEVICE(GN, GSTART, GSTACK, GSTACK_SHP, GSTACK_DSHP, GSTACK_DDSHP)
-       
+        ! Only update neighbor structure, NOT shape functions (they come from GPU)
+        !$ACC UPDATE DEVICE(GN, GSTART, GSTACK)
+        
+        ! Check if shape functions are valid before interpolation
+        IF (GSTACK_SHP(GSTART(1)) .EQ. 0.0d0) THEN
+            PRINT *, 'WARNING: Shape functions are zero before interpolation!'
+            PRINT *, 'This may indicate GPU sync issue'
+        END IF       
        ! Debug: Verify neighbor data before interpolation
        PRINT *, '=== NEIGHBOR DATA CHECK ==='
        PRINT *, 'First 3 nodes neighbor count (GN):', GN(1:3)       
@@ -352,7 +358,17 @@
                           G_X_MOM, G_Y_MOM, G_Z_MOM, MODEL_BODYFORCE, GINT_WORK, MODEL_BODY_ID, GSTRAIN_EQ, DLT)              !OUTPUT
 	  END IF
 	  
-      !$ACC UPDATE DEVICE(GSTACK_SHP, GSTACK_DSHP, GSTACK_DDSHP)
+      ! Shape functions are already synced in CONSTRUCT_FINT
+      ! Do NOT update device here as it would overwrite GPU-computed values
+      
+      ! Debug: Verify shape functions after FINT computation
+      IF (LINIT) THEN
+          PRINT *, '=== POST-FINT SHAPE FUNCTION CHECK ==='
+          PRINT *, 'GSTACK_SHP(first 5):', GSTACK_SHP(1:MIN(5, DIM_NN_LIST))
+          IF (MAXVAL(ABS(GSTACK_SHP(1:MIN(100, DIM_NN_LIST)))) .EQ. 0.0d0) THEN
+              PRINT *, 'ERROR: Shape functions are still zero after FINT!'
+          END IF
+      END IF
       
       END IF
       

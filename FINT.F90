@@ -1385,11 +1385,13 @@ XNORM(1:3) =0.D0
     END DO !INTEGRATION POINT (NODE) LOOP
     !$ACC END PARALLEL LOOP
 
+    ! CRITICAL: Immediately sync shape functions from GPU to host
+    !$ACC UPDATE HOST(GSTACK_SHP, GSTACK_DSHP, GSTACK_DDSHP)
+
     ! CRITICAL FIX: Copy GPU results back to host for reduction
     !$ACC UPDATE HOST(FINT_TEMP, FEXT_TEMP, GINT_WORK_TEMP)
 
-   ! Synchronize shape functions from GPU to CPU after GPU computation
-   !$ACC UPDATE HOST(GSTACK_SHP, GSTACK_DSHP, GSTACK_DDSHP)
+
    
    ! Also sync other important arrays computed on GPU
    !$ACC UPDATE HOST(GSTRESS, GSTRAIN, GSTATE, GSTRAIN_EQ)

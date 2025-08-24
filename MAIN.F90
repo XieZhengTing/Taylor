@@ -466,6 +466,14 @@
 				LOCAL_IJKSPC)
         ! Check for GPU errors
         CALL CHECK_GPU_ERROR()
+
+        ! Verify internal force computation
+        PRINT *, '=== FINT VERIFICATION ==='
+        PRINT *, 'Max |FINT|:', MAXVAL(ABS(LOCAL_FINT))
+        IF (MAXVAL(ABS(LOCAL_FINT)) .EQ. 0.0d0 .AND. .NOT. LINIT) THEN
+            PRINT *, 'ERROR: Internal forces are zero!'
+        END IF
+
         ! Debug: Verify shape functions are stored
         IF (LINIT) THEN
             PRINT *, '=== AFTER INITIAL HANDELER ==='
