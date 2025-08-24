@@ -390,10 +390,7 @@
     !
     ! START TIME INTEGRATION
     !
-     PRINT *, 'GN(1:5)=', GN(1:5)
-     PRINT *, 'GSTACK_SHP(1:10)=', GSTACK_SHP(1:10)
-     PRINT *, 'First node stress=', GSTRESS(:,1)
-     PRINT *, 'LMAT(1)=', LMAT(1,1)
+
 
     CALL WRITE_OUT('STARTING TIME INTEGRATION')
     !
