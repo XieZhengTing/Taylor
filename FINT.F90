@@ -229,8 +229,7 @@
     DOUBLE PRECISION:: SHPDD_SM(6,GMAXN)       !SHAPE FUNCTION SMOOTHED SMOOTHED GRADIENTS
     DOUBLE PRECISION:: SHPDTEMP(9) !TEMPORARY VARIABLE FOR SHAPES FOR STABILZIATION
     DOUBLE PRECISION:: SHP6(GMAXN,6), SHPD6(3,GMAXN,6) !SHAPE FUNCTION AND SM. GRAD. AT SMOOTHING POINTS
-    DOUBLE PRECISION:: LMAT(3,3) !INCREMENTAL DEFORMATION GRADIENT WITH RESPECT TO THE CURRENT TIME STEP
-    DOUBLE PRECISION:: LDINC(3,GMAXN),LDINC_TOT(3,GMAXN)       !DISPLACEMENT INCREMENT (PREDICTOR) OF A NODESTRAIN
+    DOUBLE PRECISION:: LMAT(3,3) !INCREMENTAL DEFORMATION GRADIENT WITH RESPECT TO THE CURRENT TIME STEP    DOUBLE PRECISION:: LDINC(3,GMAXN),LDINC_TOT(3,GMAXN)       !DISPLACEMENT INCREMENT (PREDICTOR) OF A NODESTRAIN
     DOUBLE PRECISION:: LCOO_CUURENT(3,GMAXN)  !CURRENT COORDINATES OF THE NEIGBORS
     DOUBLE PRECISION:: LCOONE(3,GMAXN)  !ORIGINAL COORDINATES OF THE NEIGBORS
     DOUBLE PRECISION:: B_TEMP(3,3), B_INV_TEMP(3,3) !GC
@@ -372,12 +371,16 @@
     !$ACC&                                  QL, QL_COEF, QL_LEN, SHSUP, ITYPE_INT, IGRAVITY) &
     !$ACC&        PRIVATE(I, J, K, L, JJ, LCOO, LCOO_T, VOL, LWIN, LSM_LEN, LN, LSTART, &
     !$ACC&                LGHOST, LVOL, LPROP, LMAT_TYPE, LOCAL_BODY_ID, SELF_EBC, &
-    !$ACC&                LSTRESS, LSTRAIN, LSTATE, LSTACK, LDINC, LDINC_TOT, &
-    !$ACC&                LCOO_CUURENT, LCOONE, SHP, SHPD, SHPDTMP, FMAT, IFMAT, &
-    !$ACC&                DET, LMAT, STRAIN, ELAS_MAT, LSTRESS_PREDICTOR, &
+    !$ACC&                LSTRESS, LSTRAIN, LSTATE, LSTACK, &
+    !$ACC&                LCOO_CUURENT, LCOONE, SHP, SHPD, SHPDTMP, LDINC, LDINC_TOT, FMAT, IFMAT, &
+
+    !$ACC&                LSM_PTS, SM_COO, LSM_VOL, LSM_AOV, SHP6, SHPD6, SHPD_SM, SHPD_TRASH, &
+    !$ACC&                DET, LMAT, STRAIN, ELAS_MAT, LSTRESS_PREDICTOR, SHPDD_SM, SHPDTEMP, &
+    !$ACC&                XLMAT, YLMAT, ZLMAT, XMAP, YMAP, ZMAP, DX_STRAIN, DY_STRAIN, DZ_STRAIN, &
+    !$ACC&                L_H_STRESS, L_S_STRESS, B_TEMP, B_INV_TEMP, &
     !$ACC&                ROT, D, STRESS_INC, STRAIN_INC, POISS, YOUNG, BULK, SHEAR, &
     !$ACC&                DENSITY, PMOD, BMAT, BMAT_T, FINT3, FINT3_EXT, &
-    !$ACC&                FBOD, FGRAV, LBOD, MAG_FINT, ID_RANK)
+    !$ACC&                FBOD, FGRAV, LBOD, MAG_FINT, ID_RANK, XNORM, KK)
      DO I = 1, GNUMP
     ! For GPU, use gang/vector index instead of OpenMP thread ID
     ID_RANK = MOD(I-1, NCORES_INPUT) + 1
@@ -566,140 +569,141 @@
 
                 CONTINUE
 
-!            ELSEIF ((ITYPE_INT.EQ.2).OR.(ITYPE_INT.EQ.1)) THEN
+           ELSEIF ((ITYPE_INT.EQ.2).OR.(ITYPE_INT.EQ.1)) THEN
                 !
                 ! NSNI
                 !
                 ! GET THE SMOOTHING INFORMATION
                 ! (1-6) = (+X, -X, +Y, -Y, +Z, -Z)
                 !
-!               DO J = 1, 3
-!                    DO K = 1, 6
-!                        LSM_PTS(J,K) = LCOO_T(J)
-!                    END DO
-!                END DO
-!                LSM_PTS(1,1) = LCOO_T(1) + LSM_LEN(1)
-!                LSM_PTS(1,2) = LCOO_T(1) - LSM_LEN(2)
-!                LSM_PTS(2,3) = LCOO_T(2) + LSM_LEN(3)
-!                LSM_PTS(2,4) = LCOO_T(2) - LSM_LEN(4)
-!                LSM_PTS(3,5) = LCOO_T(3) + LSM_LEN(5)
-!                LSM_PTS(3,6) = LCOO_T(3) - LSM_LEN(6)
-!
-!                LSM_VOL = GSM_VOL(I)
+              DO J = 1, 3
+                   DO K = 1, 6
+                       LSM_PTS(J,K) = LCOO_T(J)
+                   END DO
+               END DO
+               LSM_PTS(1,1) = LCOO_T(1) + LSM_LEN(1)
+               LSM_PTS(1,2) = LCOO_T(1) - LSM_LEN(2)
+               LSM_PTS(2,3) = LCOO_T(2) + LSM_LEN(3)
+               LSM_PTS(2,4) = LCOO_T(2) - LSM_LEN(4)
+               LSM_PTS(3,5) = LCOO_T(3) + LSM_LEN(5)
+               LSM_PTS(3,6) = LCOO_T(3) - LSM_LEN(6)
+
+               LSM_VOL = GSM_VOL(I)
 !                !
 !                ! COMPUTE SMOOTHED AREA OVER VOLUME
 !                !
-!                DO J = 1, 3
-!                    LSM_AOV((J-1)*2+1) = GSM_AREA(J,I) / LSM_VOL
-!                    LSM_AOV((J-1)*2+2) = GSM_AREA(J,I) / LSM_VOL
-!                END DO
+               DO J = 1, 3
+                   LSM_AOV((J-1)*2+1) = GSM_AREA(J,I) / LSM_VOL
+                   LSM_AOV((J-1)*2+2) = GSM_AREA(J,I) / LSM_VOL
+               END DO
 
                 !
                 !COMPUTE THE SHAPE FUNCTIONS AT GRADIENT SMOOTHING POINTS
                 !
-!                DO J = 1, 6
+               DO J = 1, 6
 
-!                    SM_COO(:) = LSM_PTS(:,J)
-!                    CALL RK1(SM_COO, RK_DEGREE, RK_PSIZE, RK_CONT, RK_IMPL, GCOO_CUURENT, GWIN, GNUMP, LSTACK, LN, GMAXN, GEBC_NODES,SELF_EBC, &
-!                        QL, QL_COEF,QL_LEN, &
-!                        SHP, SHPD, SHSUP)
+                   SM_COO(:) = LSM_PTS(:,J)
+                   CALL RK1(SM_COO, RK_DEGREE, RK_PSIZE, RK_CONT, RK_IMPL, GCOO_CUURENT, GWIN, GNUMP, LSTACK, LN, GMAXN, GEBC_NODES,SELF_EBC, &
+                       QL, QL_COEF,QL_LEN, &
+                       SHP, SHPD, SHSUP)
 
-!                    DO K = 1, LN
+                   DO K = 1, LN
                     
-!                        SHP6(K,J) = SHP(K)
-!                        SHPD6(:,K,J) = SHPD(:,K)
-!                    END DO
+                       SHP6(K,J) = SHP(K)
+                       SHPD6(:,K,J) = SHPD(:,K)
+                   END DO
 
-!                END DO !J = 1, 6 (COMPUTE THE SMOOTHED GRADIENTS)
+               END DO !J = 1, 6 (COMPUTE THE SMOOTHED GRADIENTS)
 
                 !
                 ! FILL OUT THE SMOOTHED GRADIENT INFORMATION
                 !
-!                DO K = 1, LN
+               DO K = 1, LN
 
-!                    SHPD(1,K) = (SHP6(K,1)*LSM_AOV(1) - SHP6(K,2)*LSM_AOV(2))
-!                    SHPD(2,K) = (SHP6(K,3)*LSM_AOV(3) - SHP6(K,4)*LSM_AOV(4))
-!                    SHPD(3,K) = (SHP6(K,5)*LSM_AOV(5) - SHP6(K,6)*LSM_AOV(6))
+                   SHPD(1,K) = (SHP6(K,1)*LSM_AOV(1) - SHP6(K,2)*LSM_AOV(2))
+                   SHPD(2,K) = (SHP6(K,3)*LSM_AOV(3) - SHP6(K,4)*LSM_AOV(4))
+                   SHPD(3,K) = (SHP6(K,5)*LSM_AOV(5) - SHP6(K,6)*LSM_AOV(6))
 
-!                END DO
+               END DO
                 !
-!                IF (ITYPE_INT.EQ.2) THEN
+               IF (ITYPE_INT.EQ.2) THEN
 
                     !NSNI CALCS
 
-!                    DO K = 1, LN
+                   DO K = 1, LN
                         !
                         ! SMOOTH X Y Z IN X DIRECTION
                         !
                         !XX
-!                        SHPDTEMP(1) = (SHPD6(1,K,1)*LSM_AOV(1) - SHPD6(1,K,2)*LSM_AOV(2)) !SMOOTH IN X DIRECTION
+                       SHPDTEMP(1) = (SHPD6(1,K,1)*LSM_AOV(1) - SHPD6(1,K,2)*LSM_AOV(2)) !SMOOTH IN X DIRECTION
 
                         !XY
-!                        SHPDTEMP(2) = (SHPD6(2,K,1)*LSM_AOV(1) - SHPD6(2,K,2)*LSM_AOV(2)) !SMOOTH IN X DIRECTION
+                       SHPDTEMP(2) = (SHPD6(2,K,1)*LSM_AOV(1) - SHPD6(2,K,2)*LSM_AOV(2)) !SMOOTH IN X DIRECTION
 
                         !XZ
-!                        SHPDTEMP(3) = (SHPD6(3,K,1)*LSM_AOV(1) - SHPD6(3,K,2)*LSM_AOV(2)) !SMOOTH IN X DIRECTION
+                       SHPDTEMP(3) = (SHPD6(3,K,1)*LSM_AOV(1) - SHPD6(3,K,2)*LSM_AOV(2)) !SMOOTH IN X DIRECTION
                         !
                         ! SMOOTH X Y Z IN Y DIRECTION
                         !
                         !YX
-!                        SHPDTEMP(4) = (SHPD6(1,K,3)*LSM_AOV(3) - SHPD6(1,K,4)*LSM_AOV(4)) !SMOOTH IN Y DIRECTION
+                       SHPDTEMP(4) = (SHPD6(1,K,3)*LSM_AOV(3) - SHPD6(1,K,4)*LSM_AOV(4)) !SMOOTH IN Y DIRECTION
 
                         !YY
-!                        SHPDTEMP(5) = (SHPD6(2,K,3)*LSM_AOV(3) - SHPD6(2,K,4)*LSM_AOV(4)) !SMOOTH IN Y DIRECTION
+                       SHPDTEMP(5) = (SHPD6(2,K,3)*LSM_AOV(3) - SHPD6(2,K,4)*LSM_AOV(4)) !SMOOTH IN Y DIRECTION
 
                         !YZ
-!                        SHPDTEMP(6) = (SHPD6(3,K,3)*LSM_AOV(3) - SHPD6(3,K,4)*LSM_AOV(4)) !SMOOTH IN Y DIRECTION
+                       SHPDTEMP(6) = (SHPD6(3,K,3)*LSM_AOV(3) - SHPD6(3,K,4)*LSM_AOV(4)) !SMOOTH IN Y DIRECTION
                         !
                         ! SMOOTH X Y Z IN Z DIRECTION
                         !
                         !ZX
-!                        SHPDTEMP(7) = (SHPD6(1,K,5)*LSM_AOV(5) - SHPD6(1,K,6)*LSM_AOV(6)) !SMOOTH IN Z DIRECTION
+                       SHPDTEMP(7) = (SHPD6(1,K,5)*LSM_AOV(5) - SHPD6(1,K,6)*LSM_AOV(6)) !SMOOTH IN Z DIRECTION
 
                         !ZY
-!                        SHPDTEMP(8) = (SHPD6(2,K,5)*LSM_AOV(5) - SHPD6(2,K,6)*LSM_AOV(6)) !SMOOTH IN Z DIRECTION
+                       SHPDTEMP(8) = (SHPD6(2,K,5)*LSM_AOV(5) - SHPD6(2,K,6)*LSM_AOV(6)) !SMOOTH IN Z DIRECTION
 
                         !ZZ
-!                        SHPDTEMP(9) = (SHPD6(3,K,5)*LSM_AOV(5) - SHPD6(3,K,6)*LSM_AOV(6)) !SMOOTH IN Z DIRECTION
+                       SHPDTEMP(9) = (SHPD6(3,K,5)*LSM_AOV(5) - SHPD6(3,K,6)*LSM_AOV(6)) !SMOOTH IN Z DIRECTION
 
                         !XX
-!                        SHPDD_SM(1,K) = SHPDTEMP(1)
+                       SHPDD_SM(1,K) = SHPDTEMP(1)
                         !YY
-!                        SHPDD_SM(2,K) = SHPDTEMP(5)
+                       SHPDD_SM(2,K) = SHPDTEMP(5)
                         !ZZ
-!                        SHPDD_SM(3,K) = SHPDTEMP(9)
+                       SHPDD_SM(3,K) = SHPDTEMP(9)
                         !XY
-!                        SHPDD_SM(4,K) = 0.5d0 * (SHPDTEMP(2) + SHPDTEMP(4))
+                       SHPDD_SM(4,K) = 0.5d0 * (SHPDTEMP(2) + SHPDTEMP(4))
                         !YZ
-!                        SHPDD_SM(5,K) = 0.5d0 * (SHPDTEMP(6) + SHPDTEMP(8))
+                       SHPDD_SM(5,K) = 0.5d0 * (SHPDTEMP(6) + SHPDTEMP(8))
                         !XZ
-!                        SHPDD_SM(6,K) = 0.5d0 * (SHPDTEMP(3) + SHPDTEMP(7))
+                       SHPDD_SM(6,K) = 0.5d0 * (SHPDTEMP(3) + SHPDTEMP(7))
 
-!                    END DO
+                   END DO
 
                     !TODO: GET RID OF THESE ARRAYS, WE DONT DO LAGRANGIAN NSNI, SO ITS
                     !WASTING A BUNCH OF STORAGE
 
-!                    DO J = 1, LN
-!                        GSTACK_DDSHP(1,LSTART+J-1) = SHPDD_SM(1,J)
-!                        GSTACK_DDSHP(2,LSTART+J-1) = SHPDD_SM(2,J)
-!                        GSTACK_DDSHP(3,LSTART+J-1) = SHPDD_SM(3,J)
-!                        GSTACK_DDSHP(4,LSTART+J-1) = SHPDD_SM(4,J)
-!                        GSTACK_DDSHP(5,LSTART+J-1) = SHPDD_SM(5,J)
-!                        GSTACK_DDSHP(6,LSTART+J-1) = SHPDD_SM(6,J)
-!                    END DO
+                   DO J = 1, LN
+                       GSTACK_DDSHP(1,LSTART+J-1) = SHPDD_SM(1,J)
+                       GSTACK_DDSHP(2,LSTART+J-1) = SHPDD_SM(2,J)
+                       GSTACK_DDSHP(3,LSTART+J-1) = SHPDD_SM(3,J)
+                       GSTACK_DDSHP(4,LSTART+J-1) = SHPDD_SM(4,J)
+                       GSTACK_DDSHP(5,LSTART+J-1) = SHPDD_SM(5,J)
+                       GSTACK_DDSHP(6,LSTART+J-1) = SHPDD_SM(6,J)
+                   END DO
 
-!                END IF
+               END IF
 
-!                CALL RK1(LCOO_T, RK_DEGREE, RK_PSIZE, RK_CONT, RK_IMPL,GCOO_CUURENT, GWIN, GNUMP, LSTACK, LN, GMAXN, GEBC_NODES,SELF_EBC, &
-!                    QL, QL_COEF,QL_LEN, &
-!                    SHP, SHPD_TRASH, SHSUP)
+               CALL RK1(LCOO_T, RK_DEGREE, RK_PSIZE, RK_CONT, RK_IMPL,GCOO_CUURENT, GWIN, GNUMP, LSTACK, LN, GMAXN, GEBC_NODES,SELF_EBC, &
+                   QL, QL_COEF,QL_LEN, &
+                   SHP, SHPD_TRASH, SHSUP)
                 !
                 ! STORE THE SHP FOR PHY DISPLACEMENT/VEL CACULATION FOR SNNI, DNI
                 !
-!                DO J = 1, LN
-!                    GSTACK_SHP(LSTART+J-1) = SHP(J)
-!                END DO
+               DO J = 1, LN
+                   GSTACK_SHP(LSTART+J-1) = SHP(J)
+               END DO
+
 
             END IF
 

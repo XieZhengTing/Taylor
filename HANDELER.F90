@@ -310,8 +310,11 @@
 
          ! Update neighbor lists on GPU after search
          !
-         !$ACC UPDATE DEVICE(GN, GSTART, GSTACK, GSTACK_SHP, GSTACK_DSHP, GSTACK_DDSHP)
-         !$ACC UPDATE DEVICE(DIM_NN_LIST, GMAXN)                       
+         !$ACC UPDATE DEVICE(GN, GSTART, GSTACK)
+         ! Shape functions will be computed in FINT for SNNI
+         IF (ITYPE_INT .EQ. 0) THEN
+             !$ACC UPDATE DEVICE(GSTACK_SHP, GSTACK_DSHP, GSTACK_DDSHP)
+         END IF         !$ACC UPDATE DEVICE(DIM_NN_LIST, GMAXN)                       
                             
         !DEALLOCATE(ISPACE,JSPACE,KSPACE,NODES_IN_BIN,NODELIST_IN_BIN)       
           
