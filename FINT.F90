@@ -379,6 +379,7 @@
     !$ACC&                DENSITY, PMOD, BMAT, BMAT_T, FINT3, FINT3_EXT, &
     !$ACC&                FBOD, FGRAV, LBOD, MAG_FINT, ID_RANK)
      DO I = 1, GNUMP
+
     ! For GPU, use gang/vector index instead of OpenMP thread ID
     ID_RANK = MOD(I-1, NCORES_INPUT) + 1
         !
@@ -534,6 +535,7 @@
                     CALL RK1(LCOO, RK_DEGREE, RK_PSIZE, RK_CONT, RK_IMPL,GCOO, GWIN, GNUMP, LSTACK, LN, GMAXN, GEBC_NODES,SELF_EBC, &
                         QL, QL_COEF,QL_LEN, &
                         SHP, SHPD,SHSUP)
+
 
                     ! Store shape functions for Lagrangian mode
                     DO J = 1, LN
@@ -1387,6 +1389,7 @@ XNORM(1:3) =0.D0
 
     ! CRITICAL: Immediately sync shape functions from GPU to host
     !$ACC UPDATE HOST(GSTACK_SHP, GSTACK_DSHP, GSTACK_DDSHP)
+
 
     ! CRITICAL FIX: Copy GPU results back to host for reduction
     !$ACC UPDATE HOST(FINT_TEMP, FEXT_TEMP, GINT_WORK_TEMP)

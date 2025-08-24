@@ -117,7 +117,9 @@
        ! CRITICAL: Ensure neighbor data is current on GPU
        ! This is necessary because initial CREATE may leave data uninitialized
         ! Only update neighbor structure, NOT shape functions (they come from GPU)
+        ! ONLY update neighbor connectivity, never shape functions
         !$ACC UPDATE DEVICE(GN, GSTART, GSTACK)
+        ! DO NOT include GSTACK_SHP, GSTACK_DSHP, GSTACK_DDSHP here!
         
         ! Check if shape functions are valid before interpolation
         IF (GSTACK_SHP(GSTART(1)) .EQ. 0.0d0) THEN
@@ -195,8 +197,8 @@
    GSTACK_SHP = 0.0d0
    GSTACK_DSHP = 0.0d0
    GSTACK_DDSHP = 0.0d0
-      !$ACC ENTER DATA CREATE(GN, GSTART, GSTACK, GSTACK_SHP, GSTACK_DSHP, GSTACK_DDSHP, GINVK)
-
+      ! Use COPYIN to ensure GPU gets initialized values
+      !$ACC ENTER DATA COPYIN(GN, GSTART, GSTACK, GSTACK_SHP, GSTACK_DSHP, GSTACK_DDSHP, GINVK)
 	  CNT_SEARCH = 0.0d0
       SEARCHCOUNT=PDSEARCH
       END IF
