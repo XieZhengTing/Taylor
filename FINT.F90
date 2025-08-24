@@ -359,7 +359,7 @@
         
     ! CRITICAL: Always sync state variables to GPU before material calculations
     !$ACC UPDATE DEVICE(GSTATE, GSTRESS, GSTRAIN)	
-
+		
     !$ACC PARALLEL LOOP GANG VECTOR COPYIN(LINIT, LFINITE_STRAIN) &
     !$ACC&                          PRESENT(GCOO, GCOO_CUURENT, GWIN, GSM_LEN, GSM_VOL, GSM_AREA, GN, GSTART, &
     !$ACC&                                  DIM_NN_LIST, GSTACK, GSTACK_SHP, GSTACK_DSHP, GSTACK_DDSHP, GINVK, &
@@ -379,7 +379,6 @@
     !$ACC&                DENSITY, PMOD, BMAT, BMAT_T, FINT3, FINT3_EXT, &
     !$ACC&                FBOD, FGRAV, LBOD, MAG_FINT, ID_RANK)
      DO I = 1, GNUMP
-
     ! For GPU, use gang/vector index instead of OpenMP thread ID
     ID_RANK = MOD(I-1, NCORES_INPUT) + 1
         !
@@ -535,16 +534,6 @@
                     CALL RK1(LCOO, RK_DEGREE, RK_PSIZE, RK_CONT, RK_IMPL,GCOO, GWIN, GNUMP, LSTACK, LN, GMAXN, GEBC_NODES,SELF_EBC, &
                         QL, QL_COEF,QL_LEN, &
                         SHP, SHPD,SHSUP)
-
-
-                    ! Store shape functions for Lagrangian mode
-                    DO J = 1, LN
-                        GSTACK_SHP(LSTART+J-1) = SHP(J)
-                        GSTACK_DSHP(1,LSTART+J-1) = SHPD(1,J)
-                        GSTACK_DSHP(2,LSTART+J-1) = SHPD(2,J)
-                        GSTACK_DSHP(3,LSTART+J-1) = SHPD(3,J)
-                    END DO
-
 
 
                 ELSE !GCOO_CUURENT
@@ -1387,18 +1376,14 @@ XNORM(1:3) =0.D0
     END DO !INTEGRATION POINT (NODE) LOOP
     !$ACC END PARALLEL LOOP
 
-    ! CRITICAL: Immediately sync shape functions from GPU to host
-    !$ACC UPDATE HOST(GSTACK_SHP, GSTACK_DSHP, GSTACK_DDSHP)
-
-
     ! CRITICAL FIX: Copy GPU results back to host for reduction
     !$ACC UPDATE HOST(FINT_TEMP, FEXT_TEMP, GINT_WORK_TEMP)
 
-
+   ! Synchronize shape functions from GPU to CPU after GPU computation
+   !$ACC UPDATE HOST(GSTACK_SHP, GSTACK_DSHP, GSTACK_DDSHP)
    
    ! Also sync other important arrays computed on GPU
    !$ACC UPDATE HOST(GSTRESS, GSTRAIN, GSTATE, GSTRAIN_EQ)
-
 
    ! Print diagnostic info from GPU computation
    IF (LINIT) THEN

@@ -114,29 +114,21 @@
       IF (DO_INTERP) THEN
 		IF(.NOT. PERIDYNAMICS) THEN  !RKPM
 
-       ! CRITICAL: Ensure neighbor data is current on GPU
-       ! This is necessary because initial CREATE may leave data uninitialized
-        ! Only update neighbor structure, NOT shape functions (they come from GPU)
-        ! ONLY update neighbor connectivity, never shape functions
-        !$ACC UPDATE DEVICE(GN, GSTART, GSTACK)
-        ! DO NOT include GSTACK_SHP, GSTACK_DSHP, GSTACK_DDSHP here!
-        
-        ! Check if shape functions are valid before interpolation
-        IF (GSTACK_SHP(GSTART(1)) .EQ. 0.0d0) THEN
-            PRINT *, 'WARNING: Shape functions are zero before interpolation!'
-            PRINT *, 'This may indicate GPU sync issue'
-        END IF       
-       ! Debug: Verify neighbor data before interpolation
-       PRINT *, '=== NEIGHBOR DATA CHECK ==='
-       PRINT *, 'First 3 nodes neighbor count (GN):', GN(1:3)       
-       IF (GN(1) > 0) THEN
-           PRINT *, 'Node 1 first neighbor:', GSTACK(GSTART(1))
-           PRINT *, 'Node 1 first shape function:', GSTACK_SHP(GSTART(1))
-       END IF
+      !  ! CRITICAL: Ensure neighbor data is current on GPU
+      !  ! This is necessary because initial CREATE may leave data uninitialized
+      !  !$ACC UPDATE DEVICE(GN, GSTART, GSTACK, GSTACK_SHP)
+       
+      !  ! Debug: Verify neighbor data before interpolation
+      !  PRINT *, '=== NEIGHBOR DATA CHECK ==='
+      !  PRINT *, 'First 3 nodes neighbor count (GN):', GN(1:3)       
+      !  IF (GN(1) > 0) THEN
+      !      PRINT *, 'Node 1 first neighbor:', GSTACK(GSTART(1))
+      !      PRINT *, 'Node 1 first shape function:', GSTACK_SHP(GSTART(1))
+      !  END IF
 
-          !$ACC PARALLEL LOOP PRESENT(GDINC_PHY, GVEL_PHY, GACL_PHY, &
-          !$ACC&                      GSTACK_SHP, GSTACK_DSHP, GSTACK_DDSHP, GSTACK, GSTART, GN, &
-          !$ACC&                      GDINC, GVEL, GACL) &
+        !$ACC PARALLEL LOOP PRESENT(GDINC_PHY, GVEL_PHY, GACL_PHY, &
+        !$ACC&                      GSTACK_SHP, GSTACK, GSTART, GN, &
+        !$ACC&                      GDINC, GVEL, GACL) &
         !$ACC&              PRIVATE(LSTART, M, MM, SHPT)
         DO I=1,GNUMP
 		  LSTART = GSTART(I)
@@ -197,8 +189,8 @@
    GSTACK_SHP = 0.0d0
    GSTACK_DSHP = 0.0d0
    GSTACK_DDSHP = 0.0d0
-      ! Use COPYIN to ensure GPU gets initialized values
-      !$ACC ENTER DATA COPYIN(GN, GSTART, GSTACK, GSTACK_SHP, GSTACK_DSHP, GSTACK_DDSHP, GINVK)
+      !$ACC ENTER DATA CREATE(GN, GSTART, GSTACK, GSTACK_SHP, GSTACK_DSHP, GSTACK_DDSHP, GINVK)
+
 	  CNT_SEARCH = 0.0d0
       SEARCHCOUNT=PDSEARCH
       END IF
@@ -360,17 +352,7 @@
                           G_X_MOM, G_Y_MOM, G_Z_MOM, MODEL_BODYFORCE, GINT_WORK, MODEL_BODY_ID, GSTRAIN_EQ, DLT)              !OUTPUT
 	  END IF
 	  
-      ! Shape functions are already synced in CONSTRUCT_FINT
-      ! Do NOT update device here as it would overwrite GPU-computed values
-      
-      ! Debug: Verify shape functions after FINT computation
-      IF (LINIT) THEN
-          PRINT *, '=== POST-FINT SHAPE FUNCTION CHECK ==='
-          PRINT *, 'GSTACK_SHP(first 5):', GSTACK_SHP(1:MIN(5, DIM_NN_LIST))
-          IF (MAXVAL(ABS(GSTACK_SHP(1:MIN(100, DIM_NN_LIST)))) .EQ. 0.0d0) THEN
-              PRINT *, 'ERROR: Shape functions are still zero after FINT!'
-          END IF
-      END IF
+      !$ACC UPDATE DEVICE(GSTACK_SHP, GSTACK_DSHP, GSTACK_DDSHP)
       
       END IF
       
