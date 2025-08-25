@@ -541,10 +541,12 @@
 
 
                 ELSE !GCOO_CUURENT
+            ! Ensure current coordinates are available on GPU
+            !$ACC DATA PRESENT(GCOO_CUURENT, GWIN)
                     CALL RK1(LCOO_T, RK_DEGREE, RK_PSIZE, RK_CONT, RK_IMPL,GCOO_CUURENT, GWIN, GNUMP, LSTACK, LN, GMAXN, GEBC_NODES,SELF_EBC, &
                         QL, QL_COEF,QL_LEN, &
                         SHP, SHPD, SHSUP)
-                    
+            !$ACC END DATA
                     ! CALCULATE THE DEFORMATION GRADIENT
                     B_TEMP = 0.D0
                     DO K = 1, 3
@@ -559,12 +561,14 @@
                     !
                     ! STORE THE SHP FOR PHY DISPLACEMENT/VEL CACULATION FOR DNI
                     !
+                    !$ACC LOOP SEQ
                     DO J = 1, LN
                         GSTACK_SHP(LSTART+J-1) = SHP(J)
                         GSTACK_DSHP(1,LSTART+J-1) = SHPD(1,J)
                         GSTACK_DSHP(2,LSTART+J-1) = SHPD(2,J)
                         GSTACK_DSHP(3,LSTART+J-1) = SHPD(3,J)
                     END DO
+                    !$ACC END LOOP
 
                 END IF
 

@@ -113,6 +113,8 @@
       
       IF (DO_INTERP) THEN
 		IF(.NOT. PERIDYNAMICS) THEN  !RKPM
+        ! Ensure GDINC is synchronized before interpolation
+        !$ACC UPDATE DEVICE(GDINC, GVEL, GACL)
 
       !  ! CRITICAL: Ensure neighbor data is current on GPU
       !  ! This is necessary because initial CREATE may leave data uninitialized
@@ -149,7 +151,9 @@
           END DO
         END DO	
         !$ACC END PARALLEL LOOP
-        !$ACC UPDATE HOST(GDINC_PHY, GVEL_PHY, GACL_PHY)
+        ! Ensure interpolation results are synchronized
+        !$ACC UPDATE HOST(GDINC_PHY, GVEL_PHY, GACL_PHY) ASYNC(5)
+        !$ACC WAIT(5)
         ELSE  !PERIDYNAMICS
             !$ACC PARALLEL LOOP PRESENT(GDINC_PHY, GVEL_PHY, GACL_PHY, &
             !$ACC&                      GDINC, GVEL, GACL)
@@ -303,6 +307,8 @@
          SEARCHCOUNT=1
          ENDIF
                 
+        ! Sync current coordinates to host for node search
+        !$ACC UPDATE HOST(GCOO_CUURENT)
          CALL SOFT_SEARCH(GNUMP,GCOO_CUURENT,GN,GSTART,DIM_NN_LIST,GSTACK,GMAXN,GWIN, &
                             NODES_IN_BIN,MAX_NEIGH,NODELIST_IN_BIN, &
                             NBINS,NBINSX,NBINSY,NBINSZ,ISPACE,JSPACE,KSPACE, &
@@ -310,7 +316,8 @@
 
          ! Update neighbor lists on GPU after search
          !
-         !$ACC UPDATE DEVICE(GN, GSTART, GSTACK)
+        !$ACC UPDATE DEVICE(GN, GSTART, GSTACK) ASYNC(3)
+        !$ACC WAIT(3)
          ! Shape functions will be computed in FINT for SNNI
          IF (ITYPE_INT .EQ. 0) THEN
              !$ACC UPDATE DEVICE(GSTACK_SHP, GSTACK_DSHP, GSTACK_DDSHP)

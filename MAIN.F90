@@ -512,7 +512,11 @@
  GACL = LOCAL_ACL
  
  ! Ensure these arrays are synchronized to GPU before interpolation
- !$ACC UPDATE DEVICE(GDINC, GVEL, GACL, LOCAL_DSP_TOT)
+ !$ACC UPDATE DEVICE(GDINC, GVEL, GACL, LOCAL_DSP_TOT) ASYNC(4)
+ !$ACC WAIT(4)
+ 
+ ! Also ensure current coordinates are up-to-date for Semi-Lagrangian
+ !$ACC UPDATE DEVICE(LOCAL_COO_CURRENT)
 
 ! Diagnostic: Verify displacement data
 IF (STEPS .LE. 2) THEN
@@ -569,14 +573,15 @@ END IF
         ! LIKELY HAVE TO UPDATE GHOSTS HERE FOR GHOST SCHEMES, THESE ARRAYS
         ! SHOULD BE DIFFERENT SIZES THEN #TODO
         !
-        !$ACC PARALLEL LOOP PRESENT(LOCAL_COO_CURRENT, LOCAL_COO, LOCAL_DSP_TOT_PHY)
+        !$ACC PARALLEL LOOP PRESENT(LOCAL_COO_CURRENT, LOCAL_COO, LOCAL_DSP_TOT_PHY) ASYNC(2)
+
         DO I=1,LOCAL_NUMP
             DO J=1,3
                 LOCAL_COO_CURRENT(J,I) = LOCAL_COO(J,I) + LOCAL_DSP_TOT_PHY((I-1)*3+J)
             END DO
         END DO
         !$ACC END PARALLEL LOOP
-
+        !$ACC WAIT(2)
         ! Sync updated coordinates back to host
         !$ACC UPDATE HOST(LOCAL_COO_CURRENT)
 
