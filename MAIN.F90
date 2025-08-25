@@ -539,6 +539,12 @@ END IF
 
         DO_INTERP = .TRUE.
         LINIT_TEMP = .FALSE.
+
+        ! For Semi-Lagrangian, ensure we have valid shape functions
+        IF (.NOT. LLAGRANGIAN .AND. .NOT. LINIT) THEN
+            !$ACC UPDATE DEVICE(GSTACK_SHP)
+        END IF
+
         CALL HANDELER(      LOCAL_WIN,       LOCAL_VOL,      LOCAL_NUMP,        LOCAL_COO,      LOCAL_COO_CURRENT,     &
             LOCAL_SM_LEN,    LOCAL_SM_AREA,  LOCAL_SM_VOL,      LOCAL_NSNI_FAC, LOCAL_GHOST,       &
             LOCAL_PROP,      LOCAL_STATE,    LOCAL_STRESS,      LOCAL_STRAIN,   LOCAL_H_STRESS, LOCAL_S_STRESS,   LOCAL_DSP,  LOCAL_DSP_TOT,      &

@@ -359,7 +359,13 @@
         
     ! CRITICAL: Always sync state variables to GPU before material calculations
     !$ACC UPDATE DEVICE(GSTATE, GSTRESS, GSTRAIN)	
-		
+
+    ! Initialize shape functions to avoid undefined values
+    IF (LINIT .AND. (.NOT. LLAGRANGIAN)) THEN
+        GSTACK_SHP = 0.0d0
+        !$ACC UPDATE DEVICE(GSTACK_SHP)
+    END IF
+
     !$ACC PARALLEL LOOP GANG VECTOR COPYIN(LINIT, LFINITE_STRAIN) &
     !$ACC&                          PRESENT(GCOO, GCOO_CUURENT, GWIN, GSM_LEN, GSM_VOL, GSM_AREA, GN, GSTART, &
     !$ACC&                                  DIM_NN_LIST, GSTACK, GSTACK_SHP, GSTACK_DSHP, GSTACK_DDSHP, GINVK, &
@@ -541,12 +547,11 @@
 
 
                 ELSE !GCOO_CUURENT
-            ! Ensure current coordinates are available on GPU
-            !$ACC DATA PRESENT(GCOO_CUURENT, GWIN)
+
                     CALL RK1(LCOO_T, RK_DEGREE, RK_PSIZE, RK_CONT, RK_IMPL,GCOO_CUURENT, GWIN, GNUMP, LSTACK, LN, GMAXN, GEBC_NODES,SELF_EBC, &
                         QL, QL_COEF,QL_LEN, &
                         SHP, SHPD, SHSUP)
-            !$ACC END DATA
+
                     ! CALCULATE THE DEFORMATION GRADIENT
                     B_TEMP = 0.D0
                     DO K = 1, 3
@@ -568,6 +573,14 @@
                         GSTACK_DSHP(2,LSTART+J-1) = SHPD(2,J)
                         GSTACK_DSHP(3,LSTART+J-1) = SHPD(3,J)
                     END DO
+
+                ! For Semi-Lagrangian, ensure shape functions are stored correctly
+                !$ACC LOOP SEQ
+                DO J = 1, LN
+                    !$ACC ATOMIC WRITE
+                    GSTACK_SHP(LSTART+J-1) = SHP(J)
+                END DO
+
                     !$ACC END LOOP
 
                 END IF
@@ -1263,10 +1276,12 @@ XNORM(1:3) =0.D0
             DO K = 1, 3
 
 
-               ! Use atomic operations to avoid race conditions
-               !$ACC ATOMIC UPDATE
-               FINT_TEMP(1,K,JJ) = FINT_TEMP(1,K,JJ) + FINT3(K)*VOL*DET
-               !$ACC END ATOMIC
+               ! Check for valid values before accumulation
+               IF (ABS(FINT3(K)*VOL*DET) .LT. 1.0E10) THEN
+                   !$ACC ATOMIC UPDATE
+                   FINT_TEMP(1,K,JJ) = FINT_TEMP(1,K,JJ) + FINT3(K)*VOL*DET
+                   !$ACC END ATOMIC
+               END IF
                
                !$ACC ATOMIC UPDATE
                FEXT_TEMP(1,K,JJ) = FEXT_TEMP(1,K,JJ) + FINT3_EXT(K)*VOL*DET
@@ -1384,6 +1399,12 @@ XNORM(1:3) =0.D0
 
     END DO !INTEGRATION POINT (NODE) LOOP
     !$ACC END PARALLEL LOOP
+
+    ! For Semi-Lagrangian, ensure shape functions are synchronized
+    IF (.NOT. LLAGRANGIAN) THEN
+        !$ACC UPDATE HOST(GSTACK_SHP) ASYNC(10)
+        !$ACC WAIT(10)
+    END IF
 
     ! CRITICAL FIX: Copy GPU results back to host for reduction
     !$ACC UPDATE HOST(FINT_TEMP, FEXT_TEMP, GINT_WORK_TEMP)

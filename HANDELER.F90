@@ -113,8 +113,16 @@
       
       IF (DO_INTERP) THEN
 		IF(.NOT. PERIDYNAMICS) THEN  !RKPM
+
+        ! For Semi-Lagrangian, ensure shape functions are current
+        IF (.NOT. LLAGRANGIAN) THEN
+            ! Wait for shape function computation from FINT to complete
+            !$ACC UPDATE HOST(GSTACK_SHP)
+        END IF
+
         ! Ensure GDINC is synchronized before interpolation
         !$ACC UPDATE DEVICE(GDINC, GVEL, GACL)
+        !$ACC UPDATE DEVICE(GSTACK_SHP)
 
       !  ! CRITICAL: Ensure neighbor data is current on GPU
       !  ! This is necessary because initial CREATE may leave data uninitialized
